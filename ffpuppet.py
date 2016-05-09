@@ -234,7 +234,7 @@ class FFPuppet(object):
         env['XPCOM_DEBUG_BREAK'] = 'warn'
 
         # setup Address Sanitizer options if not set manually
-        if not env.has_key('ASAN_OPTIONS'):
+        if 'ASAN_OPTIONS' not in env:
             env['ASAN_OPTIONS'] = ' '.join((
                 'alloc_dealloc_mismatch=0',
                 'allocator_may_return_null=0',
@@ -251,7 +251,7 @@ class FFPuppet(object):
         if os.path.isfile(os.path.join(os.path.dirname(bin_path), 'llvm-symbolizer')):
             env['ASAN_SYMBOLIZER_PATH'] = os.path.join(os.path.dirname(bin_path), 'llvm-symbolizer')
             env['MSAN_SYMBOLIZER_PATH'] = os.path.join(os.path.dirname(bin_path), 'llvm-symbolizer')
-        if os.environ.has_key('ASAN_SYMBOLIZER_PATH'):
+        if 'ASAN_SYMBOLIZER_PATH' in os.environ:
             env['ASAN_SYMBOLIZER_PATH'] = os.environ['ASAN_SYMBOLIZER_PATH']
             env['MSAN_SYMBOLIZER_PATH'] = os.environ['ASAN_SYMBOLIZER_PATH']
             if not os.path.isfile(env['ASAN_SYMBOLIZER_PATH']):
@@ -266,8 +266,7 @@ class FFPuppet(object):
             suffix='_log.txt',
             prefix=time.strftime('ffp_%Y-%m-%d_%H-%M-%S_')
         )
-        os.close(fd)
-        self._log_fp = open(self._log, 'wb')
+        self._log_fp = os.fdopen(fd, 'wb')
 
         init_soc = self._bootstrap_start(timeout=launch_timeout)
         # build Firefox launch command
