@@ -339,7 +339,10 @@ class FFPuppet(object):
                 if soc_e.errno == 98: # Address already in use
                     continue
                 raise soc_e
-
+        with open(os.path.join(self._profile_dir, 'prefs.js'), 'a') as fp:
+            fp.write('user_pref("capability.policy.policynames", "localfilelinks");\n')
+            fp.write('user_pref("capability.policy.localfilelinks.sites", "http://127.0.0.1:%d");\n' % init_soc.getsockname()[1])
+            fp.write('user_pref("capability.policy.localfilelinks.checkloaduri.enabled", "allAccess");\n')
         return init_soc
 
 
