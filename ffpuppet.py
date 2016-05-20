@@ -53,7 +53,7 @@ class LaunchException(Exception):
 
 class FFPuppet(object):
     def __init__(self, use_profile=None, use_valgrind=False, use_xvfb=False):
-        self._display = ':0'
+        self._display = ":0"
         self._exit_code = None
         self._log = None
         self._log_fp = None
@@ -68,13 +68,13 @@ class FFPuppet(object):
 
         if self._profile_dir is not None:
             if not os.path.isdir(self._profile_dir):
-                raise IOError('Cannot find profile %s' % self._profile_dir)
+                raise IOError("Cannot find profile %s" % self._profile_dir)
             self._profile_dir = os.path.abspath(self._profile_dir)
 
         if use_valgrind:
             with open(os.devnull, "w") as fp:
                 subprocess.call(
-                    ['valgrind', '--version'],
+                    ["valgrind", "--version"],
                     stdout=fp,
                     stderr=fp) # TODO: improve this check
 
@@ -87,7 +87,7 @@ class FFPuppet(object):
                 self._display = ":%d" % random.randint(1, 255)
                 try:
                     self._xvfb = subprocess.Popen(
-                        ['/usr/bin/Xvfb', self._display, '-screen', '0', '1280x1024x24'],
+                        ["/usr/bin/Xvfb", self._display, "-screen", "0", "1280x1024x24"],
                         shell=False,
                         stdout=self._nul,
                         stderr=self._nul
@@ -97,11 +97,11 @@ class FFPuppet(object):
                         break # xvfb is running
                 except OSError:
                     self._nul.close()
-                    raise LaunchException('Could not find Xvfb!')
+                    raise LaunchException("Could not find Xvfb!")
 
             if self._xvfb.poll() is not None:
                 self._nul.close()
-                raise LaunchException('Could not launch Xvfb!')
+                raise LaunchException("Could not launch Xvfb!")
 
 
     def close(self, save_log=None):
@@ -146,85 +146,85 @@ class FFPuppet(object):
 
         bin_path = os.path.abspath(bin_path)
         if not os.path.isfile(bin_path):
-            raise IOError('%s does not exist' % bin_path)
+            raise IOError("%s does not exist" % bin_path)
 
         env = os.environ
-        env['DISPLAY'] = self._display
+        env["DISPLAY"] = self._display
         if self._use_valgrind:
             # https://developer.gimp.org/api/2.0/glib/glib-running.html#G_DEBUG
-            env['G_DEBUG'] = 'gc-friendly'
+            env["G_DEBUG"] = "gc-friendly"
         # https://developer.gimp.org/api/2.0/glib/glib-running.html#G_SLICE
-        env['G_SLICE'] = 'always-malloc'
-        env['MOZ_CC_RUN_DURING_SHUTDOWN'] = '1'
-        env['MOZ_CRASHREPORTER_DISABLE'] = '1'
-        env['MOZ_GDB_SLEEP'] = '0'
-        env['XRE_NO_WINDOWS_CRASH_DIALOG'] = '1'
-        env['XPCOM_DEBUG_BREAK'] = 'warn'
+        env["G_SLICE"] = "always-malloc"
+        env["MOZ_CC_RUN_DURING_SHUTDOWN"] = "1"
+        env["MOZ_CRASHREPORTER_DISABLE"] = "1"
+        env["MOZ_GDB_SLEEP"] = "0"
+        env["XRE_NO_WINDOWS_CRASH_DIALOG"] = "1"
+        env["XPCOM_DEBUG_BREAK"] = "warn"
 
         # setup Address Sanitizer options if not set manually
-        if not env.has_key('ASAN_OPTIONS'):
-            env['ASAN_OPTIONS'] = ' '.join((
-                'alloc_dealloc_mismatch=0',
-                'allocator_may_return_null=0',
-                'check_initialization_order=1',
-                'check_malloc_usable_size=0',
-                #'detect_leaks=1',
-                'detect_stack_use_after_return=0',
-                'disable_core=1',
-                'strict_init_order=1',
-                'strict_memcmp=0',
-                'symbolize=1'
+        if not env.has_key("ASAN_OPTIONS"):
+            env["ASAN_OPTIONS"] = " ".join((
+                "alloc_dealloc_mismatch=0",
+                "allocator_may_return_null=0",
+                "check_initialization_order=1",
+                "check_malloc_usable_size=0",
+                #"detect_leaks=1",
+                "detect_stack_use_after_return=0",
+                "disable_core=1",
+                "strict_init_order=1",
+                "strict_memcmp=0",
+                "symbolize=1"
             ))
 
-        if os.path.isfile(os.path.join(os.path.dirname(bin_path), 'llvm-symbolizer')):
-            env['ASAN_SYMBOLIZER_PATH'] = os.path.join(os.path.dirname(bin_path), 'llvm-symbolizer')
-            env['MSAN_SYMBOLIZER_PATH'] = os.path.join(os.path.dirname(bin_path), 'llvm-symbolizer')
-        if os.environ.has_key('ASAN_SYMBOLIZER_PATH'):
-            env['ASAN_SYMBOLIZER_PATH'] = os.environ['ASAN_SYMBOLIZER_PATH']
-            env['MSAN_SYMBOLIZER_PATH'] = os.environ['ASAN_SYMBOLIZER_PATH']
-            if not os.path.isfile(env['ASAN_SYMBOLIZER_PATH']):
-                print('WARNING: Invalid ASAN_SYMBOLIZER_PATH (%s)' % (
-                    env['ASAN_SYMBOLIZER_PATH']
+        if os.path.isfile(os.path.join(os.path.dirname(bin_path), "llvm-symbolizer")):
+            env["ASAN_SYMBOLIZER_PATH"] = os.path.join(os.path.dirname(bin_path), "llvm-symbolizer")
+            env["MSAN_SYMBOLIZER_PATH"] = os.path.join(os.path.dirname(bin_path), "llvm-symbolizer")
+        if os.environ.has_key("ASAN_SYMBOLIZER_PATH"):
+            env["ASAN_SYMBOLIZER_PATH"] = os.environ["ASAN_SYMBOLIZER_PATH"]
+            env["MSAN_SYMBOLIZER_PATH"] = os.environ["ASAN_SYMBOLIZER_PATH"]
+            if not os.path.isfile(env["ASAN_SYMBOLIZER_PATH"]):
+                print("WARNING: Invalid ASAN_SYMBOLIZER_PATH (%s)" % (
+                    env["ASAN_SYMBOLIZER_PATH"]
                 ))
 
         if self._profile_dir is None:
-            self._profile_dir = tempfile.mkdtemp(prefix='ffprof_')
+            self._profile_dir = tempfile.mkdtemp(prefix="ffprof_")
             if prefs_js:
-                shutil.copyfile(prefs_js, os.path.join(self._profile_dir, 'prefs.js'))
+                shutil.copyfile(prefs_js, os.path.join(self._profile_dir, "prefs.js"))
 
         fd, self._log = tempfile.mkstemp(
-            suffix='_log.txt',
-            prefix=time.strftime('ffp_%Y-%m-%d_%H-%M-%S_')
+            suffix="_log.txt",
+            prefix=time.strftime("ffp_%Y-%m-%d_%H-%M-%S_")
         )
         os.close(fd)
-        self._log_fp = open(self._log, 'wb')
+        self._log_fp = open(self._log, "wb")
 
         init_soc = self._bootstrap_start(timeout=launch_timeout)
         # build Firefox launch command
         cmd = [
             bin_path,
-            '-no-remote',
-            '-profile',
+            "-no-remote",
+            "-profile",
             self._profile_dir,
-            'http://127.0.0.1:%d' % init_soc.getsockname()[1]
+            "http://127.0.0.1:%d" % init_soc.getsockname()[1]
         ]
 
         if self._use_valgrind:
             cmd = [
-                'valgrind',
-                '-q',
-                #'---error-limit=no',
-                '--smc-check=all-non-file',
-                '--show-mismatched-frees=no',
-                '--show-possibly-lost=no',
-                '--read-inline-info=yes',
-                #'--leak-check=full',
-                '--trace-children=yes',
-                #'--track-origins=yes',
-                '--vex-iropt-register-updates=allregs-at-mem-access'
+                "valgrind",
+                "-q",
+                #"---error-limit=no",
+                "--smc-check=all-non-file",
+                "--show-mismatched-frees=no",
+                "--show-possibly-lost=no",
+                "--read-inline-info=yes",
+                #"--leak-check=full",
+                "--trace-children=yes",
+                #"--track-origins=yes",
+                "--vex-iropt-register-updates=allregs-at-mem-access"
             ] + cmd # enable valgrind
 
-        if self._platform == 'windows':
+        if self._platform == "windows":
             self._proc = subprocess.Popen(
                 cmd,
                 creationflags=subprocess.CREATE_NEW_PROCESS_GROUP,
@@ -263,8 +263,8 @@ class FFPuppet(object):
             try:
                 init_soc = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
                 init_soc.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-                init_soc.settimeout(timeout) # don't catch socket.timeout
-                init_soc.bind(('127.0.0.1', random.randint(1024, 0xFFFF)))
+                init_soc.settimeout(timeout) # don"t catch socket.timeout
+                init_soc.bind(("127.0.0.1", random.randint(1024, 0xFFFF)))
                 init_soc.listen(0)
                 break
             except socket.error as soc_e:
@@ -325,11 +325,11 @@ class FFPuppet(object):
 
 
     def read_log(self, offset=None, from_what=os.SEEK_SET, count=None):
-        '''
+        """
         read the contents of the log file
 
         returns a string containing the contents for the log file
-        '''
+        """
 
         with open(self._log, "r") as fp:
             if offset is not None:
@@ -341,11 +341,11 @@ class FFPuppet(object):
 
 
     def wait(self, timeout=0):
-        '''
+        """
         wait for process to terminate
 
         returns return code if process exits and None if timeout expired
-        '''
+        """
 
         if timeout <= 0:
             return self._proc.wait() # blocks until process exits
@@ -359,35 +359,35 @@ class FFPuppet(object):
         return None
 
 
-if __name__ == '__main__':
-    parser = argparse.ArgumentParser(description='Firefox launcher/wrapper')
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="Firefox launcher/wrapper")
     parser.add_argument(
-        'binary',
-        help='Binary to run')
+        "binary",
+        help="Binary to run")
     parser.add_argument(
-        '-l', '--log',
-        help='log file name')
+        "-l", "--log",
+        help="log file name")
     parser.add_argument(
-        '-m', '--memory', type=int,
-        help='Process memory limit in MBs')
+        "-m", "--memory", type=int,
+        help="Process memory limit in MBs")
     parser.add_argument(
-        '-p', '--prefs',
-        help='prefs.js file to use')
+        "-p", "--prefs",
+        help="prefs.js file to use")
     parser.add_argument(
-        '-P', '--profile',
-        help='profile to use')
+        "-P", "--profile",
+        help="profile to use")
     parser.add_argument(
-        '-t', '--timeout', type=int, default=60,
-        help='launch timeout')
+        "-t", "--timeout", type=int, default=60,
+        help="launch timeout")
     parser.add_argument(
-        '-u', '--url',
-        help='URL to load')
+        "-u", "--url",
+        help="URL to load")
     parser.add_argument(
-        '--valgrind', default=False, action='store_true',
-        help='Use valgrind')
+        "--valgrind", default=False, action="store_true",
+        help="Use valgrind")
     parser.add_argument(
-        '--xvfb', default=False, action='store_true',
-        help='Use xvfb')
+        "--xvfb", default=False, action="store_true",
+        help="Use xvfb")
 
     args = parser.parse_args()
 
