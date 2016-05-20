@@ -14,8 +14,42 @@ try:
 except ImportError:
     pass
 
+
+def proc_memory_monitor(proc, limit):
+    try:
+        # this try is nested because 'except psutil.NoSuchProcess' could NameError
+        try:
+            ps_proc = psutil.Process(proc.pid)
+        except psutil.NoSuchProcess:
+            # process is dead?
+            return
+    except NameError:
+        # psutil not installed
+        return
+
+    while proc.poll() is None:
+        try:
+            proc_mem = ps_proc.memory_info().rss
+            for child in ps_proc.children(recursive=True):
+                try:
+                    proc_mem += child.memory_info().rss
+                except psutil.NoSuchProcess:
+                    pass
+        except psutil.NoSuchProcess:
+            # process is dead?
+            break
+
+        # did we hit the memory limit?
+        if proc_mem >= limit:
+            proc.terminate()
+            break
+
+        time.sleep(0.1) # check 10x a second
+
+
 class LaunchException(Exception):
     pass
+
 
 class FFPuppet(object):
     def __init__(self, use_profile=None, use_valgrind=False, use_xvfb=False):
@@ -213,7 +247,7 @@ class FFPuppet(object):
         if memory_limit is not None:
             # launch memory monitor thread
             self._mem_mon_thread = threading.Thread(
-                target=self._memory_monitor,
+                target=proc_memory_monitor,
                 args=(self._proc, memory_limit)
             )
             self._mem_mon_thread.start()
@@ -223,7 +257,8 @@ class FFPuppet(object):
         return self._proc is not None and self._proc.poll() is None
 
 
-    def _bootstrap_start(self, timeout=60):
+    @staticmethod
+    def _bootstrap_start(timeout=60):
         while True:
             try:
                 init_soc = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -303,40 +338,6 @@ class FFPuppet(object):
             if count:
                 return fp.read(count)
             return fp.read()
-
-
-    @staticmethod
-    def _memory_monitor(proc, limit):
-        try:
-            try:
-                ps_proc = psutil.Process(proc.pid)
-            except psutil.NoSuchProcess:
-                # process is dead?
-                return
-        except NameError:
-            # psutil not installed
-            return
-
-        while proc.poll() is None:
-            try:
-                proc_mem = ps_proc.memory_info().rss
-                for child in ps_proc.children(recursive=True):
-                    try:
-                        proc_mem += child.memory_info().rss
-                    except psutil.NoSuchProcess:
-                        pass
-            except psutil.NoSuchProcess:
-                # process is dead?
-                break
-
-            # did we hit the memory limit?
-            if proc_mem >= limit:
-                proc.terminate()
-                break
-
-            time.sleep(0.1) # check 10x a second
-
-        return
 
 
     def wait(self, timeout=0):
