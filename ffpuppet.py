@@ -365,22 +365,22 @@ if __name__ == '__main__':
         'binary',
         help='Binary to run')
     parser.add_argument(
-        '-l', '--log', default=None,
+        '-l', '--log',
         help='log file name')
     parser.add_argument(
-        '-m', '--memory', type=int, default=None,
+        '-m', '--memory', type=int,
         help='Process memory limit in MBs')
     parser.add_argument(
         '-p', '--prefs',
         help='prefs.js file to use')
     parser.add_argument(
-        '-P', '--profile', default=None,
+        '-P', '--profile',
         help='profile to use')
     parser.add_argument(
         '-t', '--timeout', type=int, default=60,
         help='launch timeout')
     parser.add_argument(
-        '-u', '--url', default=None,
+        '-u', '--url',
         help='URL to load')
     parser.add_argument(
         '--valgrind', default=False, action='store_true',
