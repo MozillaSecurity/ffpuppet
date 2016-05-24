@@ -112,6 +112,7 @@ class FFPuppet(object):
             self._exit_code = self._proc.wait()
 
         if self._log_fp is not None:
+            self._log_fp.write('[Exit code: %r]\n' % self._exit_code)
             self._log_fp.close()
 
             if save_log and os.path.isfile(self._log):
