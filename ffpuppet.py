@@ -112,7 +112,7 @@ class FFPuppet(object):
             self._exit_code = self._proc.wait()
 
         if self._log_fp is not None:
-            self._log_fp.write('[Exit code: %r]\n' % self._exit_code)
+            self._log_fp.write("[Exit code: %r]\n" % self._exit_code)
             self._log_fp.close()
 
             if save_log and os.path.isfile(self._log):
@@ -198,7 +198,7 @@ class FFPuppet(object):
             suffix="_log.txt",
             prefix=time.strftime("ffp_%Y-%m-%d_%H-%M-%S_")
         )
-        self._log_fp = os.fdopen(fd, 'wb')
+        self._log_fp = os.fdopen(fd, "wb")
 
         init_soc = self._bootstrap_start(timeout=launch_timeout)
         # build Firefox launch command
@@ -271,10 +271,10 @@ class FFPuppet(object):
                 if soc_e.errno == 98: # Address already in use
                     continue
                 raise soc_e
-        with open(os.path.join(self._profile_dir, 'prefs.js'), 'a') as fp:
-            fp.write('user_pref("capability.policy.policynames", "localfilelinks");\n')
-            fp.write('user_pref("capability.policy.localfilelinks.sites", "http://127.0.0.1:%d");\n' % init_soc.getsockname()[1])
-            fp.write('user_pref("capability.policy.localfilelinks.checkloaduri.enabled", "allAccess");\n')
+        with open(os.path.join(self._profile_dir, "prefs.js"), "a") as fp:
+            fp.write("user_pref('capability.policy.policynames', 'localfilelinks');\n")
+            fp.write("user_pref('capability.policy.localfilelinks.sites', 'http://127.0.0.1:%d');\n" % init_soc.getsockname()[1])
+            fp.write("user_pref('capability.policy.localfilelinks.checkloaduri.enabled', 'allAccess');\n")
         return init_soc
 
 
