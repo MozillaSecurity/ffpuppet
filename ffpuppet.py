@@ -258,8 +258,7 @@ class FFPuppet(object):
         return self._proc is not None and self._proc.poll() is None
 
 
-    @staticmethod
-    def _bootstrap_start(timeout=60):
+    def _bootstrap_start(self, timeout=60):
         while True:
             try:
                 init_soc = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
