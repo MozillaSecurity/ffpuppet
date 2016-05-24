@@ -17,6 +17,13 @@ except ImportError:
 
 
 def proc_memory_monitor(proc, limit):
+    """
+    proc_memory_monitor(proc, limit)
+    If installed use psutil to actively monitor the amount of memory in use by proc. If the that
+    amount exceeds limit the process will be terminated.
+
+    returns None
+    """
     try:
         # this try is nested because 'except psutil.NoSuchProcess' could NameError
         try:
@@ -106,6 +113,13 @@ class FFPuppet(object):
 
 
     def close(self, save_log=None):
+        """
+        close([save_log])
+        Terminate the browser process and clean up all other open files and processes. The log will
+        be saved to save_log if a file name is given.
+
+        returns None
+        """
         if self._proc is not None:
             if self._proc.poll() is None:
                 self._proc.terminate()
@@ -139,10 +153,25 @@ class FFPuppet(object):
 
 
     def get_pid(self):
+        """
+        get_pid() -> int
+
+        returns the process ID of the browser process
+        """
         return None if self._proc is None else self._proc.pid
 
 
     def launch(self, bin_path, launch_timeout=300, location=None, memory_limit=None, prefs_js=None):
+        """
+        launch(bin_path[, launch_timout, location, memory_limit, pref_js])
+        Launch a new browser process using the binary specified with bin_path. Optional limits
+        can be set for time to launch the browser by setting launch_timeout (default: 300 seconds)
+        or the maximum amount of memory the browser can use by setting memory_limit (default: None).
+        The URL loaded by default can be set with location. A custom prefs.js file can also be
+        specified.
+
+        returns None
+        """
         if launch_timeout is None or launch_timeout < 1:
             raise LaunchException("Launch timeout must be >= 1")
 
@@ -255,6 +284,12 @@ class FFPuppet(object):
 
 
     def is_running(self):
+        """
+        is_running() -> bool
+        Check if the browser process is running.
+
+        returns True if the process is running otherwise False
+        """
         return self._proc is not None and self._proc.poll() is None
 
 
@@ -329,7 +364,9 @@ class FFPuppet(object):
 
     def read_log(self, offset=None, from_what=os.SEEK_SET, count=None):
         """
-        read the contents of the log file
+        read_log([offset, from_what, count]) -> string
+        Read the contents of the log file. offset specifies where to move to before reading,
+        from_what specified where to move from and count is the number of bytes to read.
 
         returns a string containing the contents for the log file
         """
@@ -345,7 +382,10 @@ class FFPuppet(object):
 
     def wait(self, timeout=0):
         """
-        wait for process to terminate
+        wait([timeout]) -> int
+        Wait for process to terminate. This call will block until the process exits unless
+        a timeout is specified. If a timeout is specified the call will only block until the
+        timeout expires.
 
         returns return code if process exits and None if timeout expired
         """
