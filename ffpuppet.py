@@ -10,25 +10,25 @@ import tempfile
 import threading
 import time
 
+try:
+    import psutil
+except ImportError:
+    pass
+
 
 def proc_memory_monitor(proc, limit):
     """
     proc_memory_monitor(proc, limit)
-    Use psutil to actively monitor the amount of memory in use by proc. If that
-    amount exceeds limit the process will be terminated.
+    Use psutil to actively monitor the amount of memory in use by proc (psutil.Process).
+    If that amount exceeds limit the process will be terminated.
 
     returns None
     """
-    try:
-        ps_proc = psutil.Process(proc.pid)
-    except psutil.NoSuchProcess:
-        # process is dead?
-        return
 
-    while proc.poll() is None:
+    while proc.is_running():
         try:
-            proc_mem = ps_proc.memory_info().rss
-            for child in ps_proc.children(recursive=True):
+            proc_mem = proc.memory_info().rss
+            for child in proc.children(recursive=True):
                 try:
                     proc_mem += child.memory_info().rss
                 except psutil.NoSuchProcess:
@@ -265,11 +265,10 @@ class FFPuppet(object):
         self._bootstrap_finish(init_soc, timeout=launch_timeout, url=location)
 
         if memory_limit is not None:
-            import psutil
             # launch memory monitor thread
             self._mem_mon_thread = threading.Thread(
                 target=proc_memory_monitor,
-                args=(self._proc, memory_limit)
+                args=(psutil.Process(self._proc.pid), memory_limit)
             )
             self._mem_mon_thread.start()
 
