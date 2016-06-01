@@ -19,20 +19,15 @@ except ImportError:
 def proc_memory_monitor(proc, limit):
     """
     proc_memory_monitor(proc, limit)
-    If installed use psutil to actively monitor the amount of memory in use by proc. If the that
+    Use psutil to actively monitor the amount of memory in use by proc. If that
     amount exceeds limit the process will be terminated.
 
     returns None
     """
     try:
-        # this try is nested because 'except psutil.NoSuchProcess' could NameError
-        try:
-            ps_proc = psutil.Process(proc.pid)
-        except psutil.NoSuchProcess:
-            # process is dead?
-            return
-    except NameError:
-        # psutil not installed
+        ps_proc = psutil.Process(proc.pid)
+    except psutil.NoSuchProcess:
+        # process is dead?
         return
 
     while proc.poll() is None:
