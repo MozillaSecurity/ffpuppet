@@ -10,11 +10,6 @@ import tempfile
 import threading
 import time
 
-try:
-    import psutil
-except ImportError:
-    pass
-
 
 def proc_memory_monitor(proc, limit):
     """
@@ -270,6 +265,7 @@ class FFPuppet(object):
         self._bootstrap_finish(init_soc, timeout=launch_timeout, url=location)
 
         if memory_limit is not None:
+            import psutil
             # launch memory monitor thread
             self._mem_mon_thread = threading.Thread(
                 target=proc_memory_monitor,
