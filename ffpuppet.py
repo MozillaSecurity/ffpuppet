@@ -151,14 +151,17 @@ class FFPuppet(object):
         return None if self._proc is None else self._proc.pid
 
 
-    def launch(self, bin_path, launch_timeout=300, location=None, memory_limit=None, prefs_js=None):
+    def launch(self, bin_path, launch_timeout=300, location=None, memory_limit=None,
+               prefs_js=None, safe_mode=False):
         """
-        launch(bin_path[, launch_timout, location, memory_limit, pref_js])
+        launch(bin_path[, launch_timout, location, memory_limit, pref_js, safe_mode])
         Launch a new browser process using the binary specified with bin_path. Optional limits
         can be set for time to launch the browser by setting launch_timeout (default: 300 seconds)
         or the maximum amount of memory the browser can use by setting memory_limit (default: None).
-        The URL loaded by default can be set with location. A custom prefs.js file can also be
-        specified.
+        The URL loaded by default can be set with location. prefs_js allows a custom prefs.js
+        file to be specified. safe_mode is a boolean indicating whether or not to launch the
+        browser in "safe mode". WARNING: Launching in safe mode blocks with a dialog that must be
+        dismissed manually.
 
         returns None
         """
@@ -228,6 +231,9 @@ class FFPuppet(object):
             self._profile_dir,
             "http://127.0.0.1:%d" % init_soc.getsockname()[1]
         ]
+
+        if safe_mode:
+            cmd.append("-safe-mode")
 
         if self._use_valgrind:
             cmd = [
@@ -410,6 +416,10 @@ if __name__ == "__main__":
         "-P", "--profile",
         help="profile to use")
     parser.add_argument(
+        "--safe-mode", default=False, action="store_true",
+        help="Launch browser in 'safe-mode'. WARNING: Launching in safe mode blocks with a" \
+             "dialog that must be dismissed manually.")
+    parser.add_argument(
         "-t", "--timeout", type=int, default=60,
         help="launch timeout")
     parser.add_argument(
@@ -434,7 +444,8 @@ if __name__ == "__main__":
             location=args.url,
             launch_timeout=args.timeout,
             memory_limit=args.memory * 1024 * 1024 if args.memory else None,
-            prefs_js=args.prefs)
+            prefs_js=args.prefs,
+            safe_mode=args.safe_mode)
         ffp.wait()
     except KeyboardInterrupt:
         print("Ctrl+C detected. Shutting down...")
