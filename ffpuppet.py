@@ -294,8 +294,8 @@ class FFPuppet(object):
             try:
                 init_soc = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
                 init_soc.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-                init_soc.settimeout(timeout) # don"t catch socket.timeout
-                init_soc.bind(("127.0.0.1", random.randint(1024, 0xFFFF)))
+                init_soc.settimeout(timeout) # don't catch socket.timeout
+                init_soc.bind(("127.0.0.1", random.randint(0x2000, 0xFFFF)))
                 init_soc.listen(0)
                 break
             except socket.error as soc_e:
