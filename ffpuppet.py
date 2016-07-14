@@ -296,7 +296,7 @@ class FFPuppet(object):
                 init_soc.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
                 init_soc.settimeout(timeout) # don't catch socket.timeout
                 init_soc.bind(("127.0.0.1", random.randint(0x2000, 0xFFFF)))
-                init_soc.listen(0)
+                init_soc.listen(1)
                 break
             except socket.error as soc_e:
                 if soc_e.errno == 98: # Address already in use
