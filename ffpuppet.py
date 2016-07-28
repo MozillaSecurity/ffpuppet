@@ -185,20 +185,19 @@ class FFPuppet(object):
         env["XPCOM_DEBUG_BREAK"] = "warn"
 
         # setup Address Sanitizer options if not set manually
+        # https://github.com/google/sanitizers/wiki/AddressSanitizerFlags
         if "ASAN_OPTIONS" not in env:
-            env["ASAN_OPTIONS"] = " ".join((
-                "alloc_dealloc_mismatch=0",
-                "allocator_may_return_null=0",
-                "check_initialization_order=1",
-                "check_malloc_usable_size=0",
-                #"detect_leaks=1",
-                "detect_stack_use_after_return=0",
-                "disable_core=1",
-                "strict_init_order=1",
-                "strict_memcmp=0",
-                "symbolize=1"
-            ))
-
+            env["ASAN_OPTIONS"] = ":".join((
+                #"alloc_dealloc_mismatch=false", # different defaults per OS
+                "allocator_may_return_null=false",
+                "check_initialization_order=true",
+                #"check_malloc_usable_size=false", # defaults True
+                #"detect_stack_use_after_return=true", # can't launch firefox with this enabled
+                "disable_coredump=true",
+                "sleep_before_dying=0",
+                "strict_init_order=true",
+                #"strict_memcmp=false", # defaults True
+                "symbolize=true"))
 
         if os.path.isfile(os.path.join(os.path.dirname(bin_path), "llvm-symbolizer")):
             env["ASAN_SYMBOLIZER_PATH"] = os.path.join(os.path.dirname(bin_path), "llvm-symbolizer")
