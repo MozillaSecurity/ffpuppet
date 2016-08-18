@@ -169,8 +169,8 @@ class FFPuppet(object):
             raise LaunchException("Launch timeout must be >= 1")
 
         bin_path = os.path.abspath(bin_path)
-        if not os.path.isfile(bin_path):
-            raise IOError("%s does not exist" % bin_path)
+        if not os.path.isfile(bin_path) or not os.access(bin_path, os.X_OK):
+            raise IOError("%s is not an executable" % bin_path)
 
         env = os.environ
         env["DISPLAY"] = self._display
