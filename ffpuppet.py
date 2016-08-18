@@ -9,6 +9,7 @@ import subprocess
 import tempfile
 import threading
 import time
+import urllib
 
 try:
     import psutil
@@ -168,8 +169,8 @@ class FFPuppet(object):
             raise LaunchException("Launch timeout must be >= 1")
 
         bin_path = os.path.abspath(bin_path)
-        if not os.path.isfile(bin_path) or not os.access(bin_path, os.X_OK):
-            raise IOError("%s is not an executable" % bin_path)
+        if not os.path.isfile(bin_path):
+            raise IOError("%s does not exist" % bin_path)
 
         env = os.environ
         env["DISPLAY"] = self._display
@@ -338,6 +339,9 @@ class FFPuppet(object):
             while len(conn.recv(4096)) == 4096:
                 pass
 
+            if url is not None and os.path.isfile(url):
+                url = 'file:%s' % urllib.pathname2url(os.path.abspath(url))
+
             # redirect to about:blank
             body = "<script>window.onload=function(){window.location='%s'}</script>" % (
                 "about:blank" if url is None else url)
@@ -430,7 +434,7 @@ if __name__ == "__main__":
              "responsive after launching.")
     parser.add_argument(
         "-u", "--url",
-        help="URL to load. Use 'file://' for local files.")
+        help="Server URL or local file to load.")
     parser.add_argument(
         "--valgrind", default=False, action="store_true",
         help="Use valgrind")
