@@ -14,7 +14,7 @@ __credits__ = ["Tyson Smith"]
 
 import pykd
 
-COMPLETE_TOKEN = "Debugger detached.\n"
+COMPLETE_TOKEN = "Debugger session complete.\n"
 
 def debug(process_id, output_log):
     """
@@ -25,16 +25,18 @@ def debug(process_id, output_log):
     returns None
     """
     with open(output_log, "w") as out_fp:
-        out_fp.write("Attaching WinDBG debugger...\n")
+        out_fp.write("\nAttaching WinDBG debugger...\n")
         try:
             session_id = pykd.attachProcess(process_id)
             while True:
                 pykd.go()
                 if not pykd.getLastException().firstChance:
                     break
-            out_fp.write(pykd.dbgCommand(".lastevent;r;k"))
-            out_fp.write("\n")
+            dbg_info = pykd.dbgCommand(".lastevent;r;k")
+            if dbg_info is not None:
+                out_fp.write("%s\n" % dbg_info)
             pykd.detachProcess(session_id)
+            out_fp.write("Debugger detached.\n")
         except pykd.DbgException as dbg_e:
             out_fp.write("DbgException: %s\n" % dbg_e)
         except KeyboardInterrupt:
