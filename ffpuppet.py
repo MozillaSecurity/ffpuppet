@@ -1,5 +1,6 @@
 #!/usr/bin/env python2
 import argparse
+import multiprocessing
 import os
 import platform
 import random
@@ -16,6 +17,10 @@ try:
 except ImportError:
     pass
 
+try:
+    import debugger_windbg
+except ImportError:
+    pass
 
 def proc_memory_monitor(proc, limit):
     """
@@ -51,18 +56,20 @@ class LaunchException(Exception):
 
 
 class FFPuppet(object):
-    def __init__(self, use_profile=None, use_valgrind=False, use_xvfb=False):
+    def __init__(self, use_profile=None, use_valgrind=False, use_windbg=False, use_xvfb=False):
+        self._debugger_log = None # debugger log file
         self._display = ":0"
         self._exit_code = None
         self._log = None
         self._log_fp = None
         self._nul = None
-        self._mem_mon_thread = None
         self._platform = platform.system().lower()
         self._proc = None
         self._profile_dir = use_profile
         self._tmp_prof = use_profile is None # remove temp profile
         self._use_valgrind = use_valgrind
+        self._windbg = use_windbg
+        self._workers = list() # collection of threads and processes
         self._xvfb = None
 
         if self._profile_dir is not None:
@@ -76,6 +83,14 @@ class FFPuppet(object):
                     ["valgrind", "--version"],
                     stdout=fp,
                     stderr=fp) # TODO: improve this check
+
+        if use_windbg:
+            if self._platform != "windows":
+                raise LaunchException("WinDBG only available on Windows")
+            try:
+                debugger_windbg.pykd
+            except NameError:
+                raise LaunchException("Please install PyKD")
 
         if use_xvfb:
             if self._platform != "linux":
@@ -108,27 +123,56 @@ class FFPuppet(object):
                 raise LaunchException("Could not launch Xvfb!")
 
 
-    def close(self, save_log=None):
+    def close(self, log_file=None):
         """
-        close([save_log])
+        close([log_file])
         Terminate the browser process and clean up all other open files and processes. The log will
-        be saved to save_log if a file name is given.
+        be saved to log_file if a file name is given.
 
         returns None
         """
+
+        # terminate the browser process
         if self._proc is not None:
             if self._proc.poll() is None:
                 self._proc.terminate()
             self._exit_code = self._proc.wait()
 
+        # copy debugger log data to main log
+        if self._debugger_log is not None:
+            # wait 10 seconds max for debug log
+            dbg_timeout = time.time() + 10
+            while True:
+                # look for debug log
+                if not os.path.isfile(self._debugger_log):
+                    self._log_fp.write("WARNING: Missing debugger log file.\n")
+                    break
+                # check timeout
+                if not time.time() < dbg_timeout:
+                    self._log_fp.write("WARNING: Could not collect debugger log. Timed out!\n")
+                    break
+                with open(self._debugger_log, "r") as dbg_fp:
+                    dbg_log = dbg_fp.read()
+                # Look for sync msg 'Debugger detached.'
+                if dbg_log.rfind(debugger_windbg.COMPLETE_TOKEN):
+                    self._log_fp.write("\n")
+                    self._log_fp.write("[Debugger output]\n")
+                    self._log_fp.write(dbg_log)
+                    self._log_fp.write("\n")
+                    break
+                time.sleep(0.1) # don't be a CPU hog
+            if os.path.isfile(self._debugger_log):
+                os.remove(self._debugger_log)
+
+        # close log file
         if self._log_fp is not None:
             self._log_fp.write("[Exit code: %r]\n" % self._exit_code)
             self._log_fp.close()
 
-            if save_log and os.path.isfile(self._log):
-                if not os.path.dirname(save_log):
-                    save_log = os.path.join(os.getcwd(), save_log)
-                shutil.move(self._log, save_log)
+            if log_file and os.path.isfile(self._log):
+                if not os.path.dirname(log_file):
+                    log_file = os.path.join(os.getcwd(), log_file)
+                shutil.move(self._log, log_file)
             elif os.path.isfile(self._log):
                 os.remove(self._log)
 
@@ -144,8 +188,9 @@ class FFPuppet(object):
         if self._nul is not None:
             self._nul.close()
 
-        if self._mem_mon_thread is not None:
-            self._mem_mon_thread.join()
+        # join worker threads and processes
+        for worker in self._workers:
+            worker.join()
 
 
     def get_pid(self):
@@ -206,9 +251,7 @@ class FFPuppet(object):
                 #"strict_memcmp=false", # defaults True
                 "symbolize=true"))
 
-        if os.path.isfile(os.path.join(os.path.dirname(bin_path), "llvm-symbolizer")):
-            env["ASAN_SYMBOLIZER_PATH"] = os.path.join(os.path.dirname(bin_path), "llvm-symbolizer")
-            env["MSAN_SYMBOLIZER_PATH"] = os.path.join(os.path.dirname(bin_path), "llvm-symbolizer")
+        # default to environment definition
         if "ASAN_SYMBOLIZER_PATH" in os.environ:
             env["ASAN_SYMBOLIZER_PATH"] = os.environ["ASAN_SYMBOLIZER_PATH"]
             env["MSAN_SYMBOLIZER_PATH"] = os.environ["ASAN_SYMBOLIZER_PATH"]
@@ -216,6 +259,10 @@ class FFPuppet(object):
                 print("WARNING: Invalid ASAN_SYMBOLIZER_PATH (%s)" % (
                     env["ASAN_SYMBOLIZER_PATH"]
                 ))
+        # look for llvm-symbolizer bundled with firefox build
+        elif os.path.isfile(os.path.join(os.path.dirname(bin_path), "llvm-symbolizer")):
+            env["ASAN_SYMBOLIZER_PATH"] = os.path.join(os.path.dirname(bin_path), "llvm-symbolizer")
+            env["MSAN_SYMBOLIZER_PATH"] = os.path.join(os.path.dirname(bin_path), "llvm-symbolizer")
 
         # create temp profile directory if needed
         if self._profile_dir is None:
@@ -284,11 +331,26 @@ class FFPuppet(object):
 
         if memory_limit is not None:
             # launch memory monitor thread
-            self._mem_mon_thread = threading.Thread(
+            memory_monitor = threading.Thread(
                 target=proc_memory_monitor,
                 args=(psutil.Process(self._proc.pid), memory_limit)
             )
-            self._mem_mon_thread.start()
+            memory_monitor.start()
+            self._workers.append(memory_monitor)
+
+        if self._windbg:
+            fd, self._debugger_log = tempfile.mkstemp(
+                suffix="_log.txt",
+                prefix=time.strftime("ffp_windbg_%Y-%m-%d_%H-%M-%S_")
+            )
+            os.close(fd)
+
+            debug_monitor = multiprocessing.Process(
+                target=debugger_windbg.debug,
+                args=(self._proc.pid, self._debugger_log)
+            )
+            debug_monitor.start()
+            self._workers.append(debug_monitor)
 
 
     def is_running(self):
@@ -323,7 +385,7 @@ class FFPuppet(object):
 
     def _bootstrap_finish(self, init_soc, timeout=60, url=None):
         conn = None
-        max_wait_time = time.time() + timeout
+        timer_exp = time.time() + timeout
         try:
             # wait for browser test connection
             while True:
@@ -332,7 +394,7 @@ class FFPuppet(object):
                     conn, _ = init_soc.accept()
                     conn.settimeout(timeout)
                 except socket.timeout:
-                    if max_wait_time <= time.time():
+                    if timer_exp <= time.time():
                         # timeout waiting browser connection
                         raise LaunchException("Launching browser timed out")
                     elif not self.is_running():
@@ -395,17 +457,15 @@ class FFPuppet(object):
         """
         wait([timeout]) -> int
         Wait for process to terminate. This call will block until the process exits unless
-        a timeout is specified. If a timeout is specified the call will only block until the
-        timeout expires.
+        a timeout is specified. If a timeout greater than zero is specified the call will
+        only block until the timeout expires.
 
-        returns return code if process exits and None if timeout expired
+        returns exit code if process exits and None if timeout expired
         """
-
-        if timeout <= 0:
-            return self._proc.wait() # blocks until process exits
-
-        end = time.time() + timeout
-        while time.time() < end:
+        timer_exp = time.time() + timeout
+        while True:
+            if timeout > 0 and timer_exp <= time.time():
+                break
             if self._proc.poll() is not None:
                 return self._proc.poll()
             time.sleep(0.1)
@@ -445,6 +505,9 @@ if __name__ == "__main__":
         "--valgrind", default=False, action="store_true",
         help="Use valgrind")
     parser.add_argument(
+        "--windbg", default=False, action="store_true",
+        help="Collect crash log with WinDBG (Windows only)")
+    parser.add_argument(
         "--xvfb", default=False, action="store_true",
         help="Use xvfb (Linux only)")
 
@@ -453,6 +516,7 @@ if __name__ == "__main__":
     ffp = FFPuppet(
         use_profile=args.profile,
         use_valgrind=args.valgrind,
+        use_windbg=args.windbg,
         use_xvfb=args.xvfb)
     try:
         ffp.launch(
@@ -467,5 +531,5 @@ if __name__ == "__main__":
     except KeyboardInterrupt:
         print("Ctrl+C detected. Shutting down...")
     finally:
-        ffp.close(args.log)
+        ffp.close(log_file=args.log)
 
