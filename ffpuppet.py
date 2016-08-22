@@ -78,24 +78,30 @@ class FFPuppet(object):
                     stderr=fp) # TODO: improve this check
 
         if use_xvfb:
+            if self._platform != "linux":
+                raise LaunchException("Xvfb is only supported on Linux")
+            # find xvfb
+            try:
+                xvfb_bin = subprocess.check_output(["which", "Xvfb"]).strip()
+            except subprocess.CalledProcessError:
+                raise LaunchException("Make sure Xvfb is installed")
+            if not os.path.isfile(xvfb_bin) or not os.access(xvfb_bin, os.X_OK):
+                raise LaunchException("Make sure Xvfb is installed")
+
             self._nul = open(os.devnull, "w")
             # launch Xvfb
             for _ in range(10):
                 # Find a screen value not in use.
                 # NOTE: this limits number of possible Xvfb instances but 255 is lots
                 self._display = ":%d" % random.randint(1, 255)
-                try:
-                    self._xvfb = subprocess.Popen(
-                        ["/usr/bin/Xvfb", self._display, "-screen", "0", "1280x1024x24"],
-                        shell=False,
-                        stdout=self._nul,
-                        stderr=self._nul)
-                    time.sleep(0.5) # wait to be sure Xvfb is running and doesn't just exit
-                    if self._xvfb.poll() is None:
-                        break # xvfb is running
-                except OSError:
-                    self._nul.close()
-                    raise LaunchException("Could not find Xvfb!")
+                self._xvfb = subprocess.Popen(
+                    [xvfb_bin, self._display, "-screen", "0", "1280x1024x24"],
+                    shell=False,
+                    stdout=self._nul,
+                    stderr=self._nul)
+                time.sleep(0.5) # wait to be sure Xvfb is running and doesn't just exit
+                if self._xvfb.poll() is None:
+                    break # xvfb is running
 
             if self._xvfb.poll() is not None:
                 self._nul.close()
@@ -440,7 +446,7 @@ if __name__ == "__main__":
         help="Use valgrind")
     parser.add_argument(
         "--xvfb", default=False, action="store_true",
-        help="Use xvfb")
+        help="Use xvfb (Linux only)")
 
     args = parser.parse_args()
 
