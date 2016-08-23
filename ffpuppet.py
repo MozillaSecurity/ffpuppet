@@ -138,43 +138,50 @@ class FFPuppet(object):
                 self._proc.terminate()
             self._exit_code = self._proc.wait()
 
-        # copy debugger log data to main log
-        if self._debugger_log is not None:
-            # wait 10 seconds max for debug log
-            dbg_timeout = time.time() + 10
-            while True:
-                # look for debug log
-                if not os.path.isfile(self._debugger_log):
-                    self._log_fp.write("WARNING: Missing debugger log file.\n")
-                    break
-                # check timeout
-                if not time.time() < dbg_timeout:
-                    self._log_fp.write("WARNING: Could not collect debugger log. Timed out!\n")
-                    break
-                with open(self._debugger_log, "r") as dbg_fp:
-                    dbg_log = dbg_fp.read()
-                # Look for sync msg 'Debugger detached.'
-                if dbg_log.rfind(debugger_windbg.COMPLETE_TOKEN):
-                    self._log_fp.write("\n")
-                    self._log_fp.write("[Debugger output]\n")
-                    self._log_fp.write(dbg_log)
-                    self._log_fp.write("\n")
-                    break
-                time.sleep(0.1) # don't be a CPU hog
-            if os.path.isfile(self._debugger_log):
-                os.remove(self._debugger_log)
+        # discard log file
+        if log_file is None and self._log_fp is not None:
+            self._log_fp.close()
+            if self._log is not None and os.path.isfile(self._log):
+                os.remove(self._log)
 
-        # close log file
-        if self._log_fp is not None:
+        # merge logs and close main log file
+        elif log_file is not None and self._log_fp is not None:
+            # copy debugger log data to main log
+            if self._debugger_log is not None:
+                # wait 10 seconds max for debug log
+                dbg_timeout = time.time() + 10
+                while True:
+                    # look for debug log
+                    if not os.path.isfile(self._debugger_log):
+                        self._log_fp.write("WARNING: Missing debugger log file.\n")
+                        break
+                    # check timeout
+                    if not time.time() < dbg_timeout:
+                        self._log_fp.write("WARNING: Could not collect debugger log. Timed out!\n")
+                        break
+                    with open(self._debugger_log, "r") as dbg_fp:
+                        dbg_log = dbg_fp.read()
+                    # Look for sync msg 'Debugger detached.'
+                    if dbg_log.rfind(debugger_windbg.COMPLETE_TOKEN):
+                        self._log_fp.write("\n")
+                        self._log_fp.write("[Debugger output]\n")
+                        self._log_fp.write(dbg_log)
+                        self._log_fp.write("\n")
+                        break
+                    time.sleep(0.1) # don't be a CPU hog
+
             self._log_fp.write("[Exit code: %r]\n" % self._exit_code)
             self._log_fp.close()
 
-            if log_file and os.path.isfile(self._log):
+            # move log to location specified by log_file
+            if self._log is not None and os.path.isfile(self._log):
                 if not os.path.dirname(log_file):
                     log_file = os.path.join(os.getcwd(), log_file)
                 shutil.move(self._log, log_file)
-            elif os.path.isfile(self._log):
-                os.remove(self._log)
+
+        # remove temporary debugger log
+        if self._debugger_log is not None and os.path.isfile(self._debugger_log):
+            os.remove(self._debugger_log)
 
         # remove temporary profile directory
         if self._tmp_prof and self._profile_dir is not None and os.path.isdir(self._profile_dir):
