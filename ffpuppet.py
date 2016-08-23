@@ -223,6 +223,9 @@ class FFPuppet(object):
 
         returns None
         """
+        if self._proc is not None:
+            raise LaunchException("Launch has already been called")
+
         if launch_timeout is None or launch_timeout < 1:
             raise LaunchException("Launch timeout must be >= 1")
 
