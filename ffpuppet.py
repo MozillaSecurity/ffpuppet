@@ -22,6 +22,25 @@ try:
 except ImportError:
     pass
 
+
+def open_unique():
+    """
+    open_unique()
+    Create a unique file.
+
+    returns a File Object
+    """
+
+    fd, log_file = tempfile.mkstemp(
+        suffix="_log.txt",
+        prefix=time.strftime("ffp_%Y-%m-%d_%H-%M-%S_")
+    )
+    os.close(fd)
+
+    # open with 'open' so the file object 'name' attribute is correct
+    return open(log_file, "wb")
+
+
 def proc_memory_monitor(proc, limit):
     """
     proc_memory_monitor(proc, limit)
@@ -60,8 +79,7 @@ class FFPuppet(object):
         self._debugger_log = None # debugger log file
         self._display = ":0"
         self._exit_code = None
-        self._log = None
-        self._log_fp = None
+        self._log = open_unique()
         self._nul = None
         self._platform = platform.system().lower()
         self._proc = None
@@ -138,46 +156,46 @@ class FFPuppet(object):
                 self._proc.terminate()
             self._exit_code = self._proc.wait()
 
-        # discard log file
-        if log_file is None and self._log_fp is not None:
-            self._log_fp.close()
-            if self._log is not None and os.path.isfile(self._log):
-                os.remove(self._log)
-
         # merge logs and close main log file
-        elif log_file is not None and self._log_fp is not None:
+        if log_file is not None:
             # copy debugger log data to main log
             if self._debugger_log is not None:
                 # wait 10 seconds max for debug log
                 dbg_timeout = time.time() + 10
-                while True:
-                    # look for debug log
+                while not self._log.closed:
+                    # look for debugger log
                     if not os.path.isfile(self._debugger_log):
-                        self._log_fp.write("WARNING: Missing debugger log file.\n")
+                        self._log.write("WARNING: Missing debugger log file.\n")
                         break
                     # check timeout
                     if not time.time() < dbg_timeout:
-                        self._log_fp.write("WARNING: Could not collect debugger log. Timed out!\n")
+                        self._log.write("WARNING: Could not collect debugger log. Timed out!\n")
                         break
                     with open(self._debugger_log, "r") as dbg_fp:
                         dbg_log = dbg_fp.read()
                     # Look for sync msg 'Debugger detached.'
                     if dbg_log.rfind(debugger_windbg.COMPLETE_TOKEN):
-                        self._log_fp.write("\n")
-                        self._log_fp.write("[Debugger output]\n")
-                        self._log_fp.write(dbg_log)
-                        self._log_fp.write("\n")
+                        self._log.write("\n")
+                        self._log.write("[Debugger output]\n")
+                        self._log.write(dbg_log)
+                        self._log.write("\n")
                         break
                     time.sleep(0.1) # don't be a CPU hog
 
-            self._log_fp.write("[Exit code: %r]\n" % self._exit_code)
-            self._log_fp.close()
+            if not self._log.closed:
+                self._log.write("[Exit code: %r]\n" % self._exit_code)
+                self._log.close()
 
             # move log to location specified by log_file
-            if self._log is not None and os.path.isfile(self._log):
+            if os.path.isfile(self._log.name):
                 if not os.path.dirname(log_file):
                     log_file = os.path.join(os.getcwd(), log_file)
-                shutil.move(self._log, log_file)
+                shutil.move(self._log.name, log_file)
+
+        else: # discard log file
+            self._log.close()
+            if os.path.isfile(self._log.name):
+                os.remove(self._log.name)
 
         # remove temporary debugger log
         if self._debugger_log is not None and os.path.isfile(self._debugger_log):
@@ -280,13 +298,6 @@ class FFPuppet(object):
             if prefs_js:
                 shutil.copyfile(prefs_js, os.path.join(self._profile_dir, "prefs.js"))
 
-        # create temp log file
-        fd, self._log = tempfile.mkstemp(
-            suffix="_log.txt",
-            prefix=time.strftime("ffp_%Y-%m-%d_%H-%M-%S_")
-        )
-        self._log_fp = os.fdopen(fd, "wb")
-
         # Performing the bootstrap helps guarantee that the browser
         # will be loaded and ready to accept input when launch() returns
         init_soc = self._bootstrap_start(timeout=launch_timeout)
@@ -325,16 +336,16 @@ class FFPuppet(object):
                 creationflags=subprocess.CREATE_NEW_PROCESS_GROUP,
                 env=env,
                 shell=False,
-                stderr=self._log_fp,
-                stdout=self._log_fp
+                stderr=self._log,
+                stdout=self._log
             )
         else: # not windows
             self._proc = subprocess.Popen(
                 cmd,
                 env=env,
                 shell=False,
-                stderr=self._log_fp,
-                stdout=self._log_fp
+                stderr=self._log,
+                stdout=self._log
             )
 
         self._bootstrap_finish(init_soc, timeout=launch_timeout, url=location)
@@ -454,7 +465,7 @@ class FFPuppet(object):
         returns a string containing the contents for the log file
         """
 
-        with open(self._log, "r") as fp:
+        with open(self._log.name, "r") as fp:
             if offset is not None:
                 fp.seek(offset, from_what)
 
