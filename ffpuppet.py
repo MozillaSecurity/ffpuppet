@@ -22,6 +22,11 @@ try:
 except ImportError:
     pass
 
+try:
+    import xvfbwrapper
+except ImportError:
+    pass
+
 
 def open_unique():
     """
@@ -77,10 +82,8 @@ class LaunchException(Exception):
 class FFPuppet(object):
     def __init__(self, use_profile=None, use_valgrind=False, use_windbg=False, use_xvfb=False):
         self._debugger_log = None # debugger log file
-        self._display = ":0"
         self._exit_code = None
         self._log = open_unique()
-        self._nul = None
         self._platform = platform.system().lower()
         self._proc = None
         self._profile_dir = use_profile
@@ -113,32 +116,11 @@ class FFPuppet(object):
         if use_xvfb:
             if self._platform != "linux":
                 raise LaunchException("Xvfb is only supported on Linux")
-            # find xvfb
             try:
-                xvfb_bin = subprocess.check_output(["which", "Xvfb"]).strip()
-            except subprocess.CalledProcessError:
-                raise LaunchException("Make sure Xvfb is installed")
-            if not os.path.isfile(xvfb_bin) or not os.access(xvfb_bin, os.X_OK):
-                raise LaunchException("Make sure Xvfb is installed")
-
-            self._nul = open(os.devnull, "w")
-            # launch Xvfb
-            for _ in range(10):
-                # Find a screen value not in use.
-                # NOTE: this limits number of possible Xvfb instances but 255 is lots
-                self._display = ":%d" % random.randint(1, 255)
-                self._xvfb = subprocess.Popen(
-                    [xvfb_bin, self._display, "-screen", "0", "1280x1024x24"],
-                    shell=False,
-                    stdout=self._nul,
-                    stderr=self._nul)
-                time.sleep(0.5) # wait to be sure Xvfb is running and doesn't just exit
-                if self._xvfb.poll() is None:
-                    break # xvfb is running
-
-            if self._xvfb.poll() is not None:
-                self._nul.close()
-                raise LaunchException("Could not launch Xvfb!")
+                self._xvfb = xvfbwrapper.Xvfb(width=1280, height=1024, colordepth=16)
+            except NameError:
+                raise LaunchException("Please install xvfbwrapper")
+            self._xvfb.start()
 
 
     def close(self, log_file=None):
@@ -206,12 +188,8 @@ class FFPuppet(object):
             shutil.rmtree(self._profile_dir)
 
         # close Xfvb
-        if self._xvfb is not None and self._xvfb.poll() is None:
-            self._xvfb.terminate()
-            self._xvfb.wait()
-
-        if self._nul is not None:
-            self._nul.close()
+        if self._xvfb is not None:
+            self._xvfb.stop()
 
         # join worker threads and processes
         for worker in self._workers:
@@ -252,7 +230,6 @@ class FFPuppet(object):
             raise IOError("%s is not an executable" % bin_path)
 
         env = os.environ
-        env["DISPLAY"] = self._display
         if self._use_valgrind:
             # https://developer.gimp.org/api/2.0/glib/glib-running.html#G_DEBUG
             env["G_DEBUG"] = "gc-friendly"
