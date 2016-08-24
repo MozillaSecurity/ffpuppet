@@ -497,11 +497,11 @@ if __name__ == "__main__":
     parser.add_argument(
         "--safe-mode", default=False, action="store_true",
         help="Launch browser in 'safe-mode'. WARNING: Launching in safe mode blocks with a" \
-             "dialog that must be dismissed manually.")
+             " dialog that must be dismissed manually.")
     parser.add_argument(
         "-t", "--timeout", type=int, default=300,
         help="Launch timeout. This is the amount of time to wait for the browser to become" \
-             "responsive after launching.")
+             " responsive after launching.")
     parser.add_argument(
         "-u", "--url",
         help="Server URL or local file to load.")
