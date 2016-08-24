@@ -75,7 +75,7 @@ def proc_memory_monitor(proc, limit):
         time.sleep(0.1) # check 10x a second
 
 
-class LaunchException(Exception):
+class LaunchError(Exception):
     pass
 
 
@@ -107,19 +107,19 @@ class FFPuppet(object):
 
         if use_windbg:
             if self._platform != "windows":
-                raise LaunchException("WinDBG only available on Windows")
+                raise EnvironmentError("WinDBG only available on Windows")
             try:
                 debugger_windbg.pykd
             except NameError:
-                raise LaunchException("Please install PyKD")
+                raise EnvironmentError("Please install PyKD")
 
         if use_xvfb:
             if self._platform != "linux":
-                raise LaunchException("Xvfb is only supported on Linux")
+                raise EnvironmentError("Xvfb is only supported on Linux")
             try:
                 self._xvfb = xvfbwrapper.Xvfb(width=1280, height=1024, colordepth=16)
             except NameError:
-                raise LaunchException("Please install xvfbwrapper")
+                raise EnvironmentError("Please install xvfbwrapper")
             self._xvfb.start()
 
 
@@ -220,10 +220,10 @@ class FFPuppet(object):
         returns None
         """
         if self._proc is not None:
-            raise LaunchException("Launch has already been called")
+            raise LaunchError("Launch has already been called")
 
         if launch_timeout is None or launch_timeout < 1:
-            raise LaunchException("Launch timeout must be >= 1")
+            raise LaunchError("Launch timeout must be >= 1")
 
         bin_path = os.path.abspath(bin_path)
         if not os.path.isfile(bin_path) or not os.access(bin_path, os.X_OK):
@@ -394,10 +394,10 @@ class FFPuppet(object):
                 except socket.timeout:
                     if timer_exp <= time.time():
                         # timeout waiting browser connection
-                        raise LaunchException("Launching browser timed out")
+                        raise LaunchError("Launching browser timed out")
                     elif not self.is_running():
                         # browser must have died
-                        raise LaunchException("Failure during browser startup")
+                        raise LaunchError("Failure during browser startup")
                     continue # have not received connection
                 break # received connection
 
@@ -422,10 +422,10 @@ class FFPuppet(object):
             )
 
         except socket.error:
-            raise LaunchException("Failed to launch browser")
+            raise LaunchError("Failed to launch browser")
 
         except socket.timeout:
-            raise LaunchException("Test connection timed out")
+            raise LaunchError("Test connection timed out")
 
         finally:
             if conn is not None:
