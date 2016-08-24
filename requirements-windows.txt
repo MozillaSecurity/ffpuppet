@@ -1,3 +1,2 @@
 psutil>=4.2.0
 pykd>=0.3.1.5
-xvfbwrapper>=0.2.8
