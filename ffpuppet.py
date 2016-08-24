@@ -229,6 +229,12 @@ class FFPuppet(object):
         if not os.path.isfile(bin_path) or not os.access(bin_path, os.X_OK):
             raise IOError("%s is not an executable" % bin_path)
 
+        if memory_limit is not None:
+            try:
+                psutil.cpu_count()
+            except NameError:
+                raise EnvironmentError("Please install psutil")
+
         env = os.environ
         if self._use_valgrind:
             # https://developer.gimp.org/api/2.0/glib/glib-running.html#G_DEBUG
@@ -481,7 +487,7 @@ if __name__ == "__main__":
         help="log file name")
     parser.add_argument(
         "-m", "--memory", type=int,
-        help="Process memory limit in MBs")
+        help="Process memory limit in MBs (Requires psutil)")
     parser.add_argument(
         "-p", "--prefs",
         help="prefs.js file to use")
