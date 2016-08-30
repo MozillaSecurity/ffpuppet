@@ -118,6 +118,9 @@ class FFPuppet(object):
         if use_xvfb:
             if self._platform != "linux":
                 raise EnvironmentError("Xvfb is only supported on Linux")
+
+            # This loop is a hack and is here because xvfbwrapper doesn't
+            # do a good job ensuring the process is running
             for tries_left in range(10, -1, -1):
                 try:
                     try:
@@ -126,6 +129,8 @@ class FFPuppet(object):
                         raise EnvironmentError("Please install xvfbwrapper")
                     self._xvfb.start()
                     time.sleep(1)
+                    if self._xvfb.proc.poll() is not None:
+                        raise RuntimeError("Xvfb isn't running after start() is called")
                 except RuntimeError:
                     if tries_left:
                         continue
