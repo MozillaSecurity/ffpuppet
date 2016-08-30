@@ -37,11 +37,11 @@ def open_unique():
     returns a File Object
     """
 
-    fd, log_file = tempfile.mkstemp(
+    tmp_fd, log_file = tempfile.mkstemp(
         suffix="_log.txt",
         prefix=time.strftime("ffp_%Y-%m-%d_%H-%M-%S_")
     )
-    os.close(fd)
+    os.close(tmp_fd)
 
     # open with 'open' so the file object 'name' attribute is correct
     return open(log_file, "wb")
@@ -100,11 +100,11 @@ class FFPuppet(object):
             self._profile = os.path.abspath(self._profile)
 
         if use_valgrind:
-            with open(os.devnull, "w") as fp:
+            with open(os.devnull, "w") as null_fp:
                 subprocess.call(
                     ["valgrind", "--version"],
-                    stdout=fp,
-                    stderr=fp) # TODO: improve this check
+                    stdout=null_fp,
+                    stderr=null_fp) # TODO: improve this check
 
         if use_windbg:
             if self._platform != "windows":
@@ -152,14 +152,14 @@ class FFPuppet(object):
             # copy debugger log data to main log
             if self._debugger_log is not None:
                 # wait 10 seconds max for debug log
-                dbg_timeout = time.time() + 10
+                start_time = time.time()
                 while not self._log.closed:
                     # look for debugger log
                     if not os.path.isfile(self._debugger_log):
                         self._log.write("WARNING: Missing debugger log file.\n")
                         break
                     # check timeout
-                    if not time.time() < dbg_timeout:
+                    if (time.time() - start_time) >= 10:
                         self._log.write("WARNING: Could not collect debugger log. Timed out!\n")
                         break
                     with open(self._debugger_log, "r") as dbg_fp:
@@ -350,11 +350,11 @@ class FFPuppet(object):
             self._workers.append(memory_monitor)
 
         if self._windbg:
-            fd, self._debugger_log = tempfile.mkstemp(
+            tmp_fd, self._debugger_log = tempfile.mkstemp(
                 suffix="_log.txt",
                 prefix=time.strftime("ffp_windbg_%Y-%m-%d_%H-%M-%S_")
             )
-            os.close(fd)
+            os.close(tmp_fd)
 
             debug_monitor = multiprocessing.Process(
                 target=debugger_windbg.debug,
@@ -387,10 +387,11 @@ class FFPuppet(object):
                 if soc_e.errno == 98: # Address already in use
                     continue
                 raise soc_e
-        with open(os.path.join(self._profile, "prefs.js"), "a") as fp:
-            fp.write("user_pref('capability.policy.policynames', 'localfilelinks');\n")
-            fp.write("user_pref('capability.policy.localfilelinks.sites', 'http://127.0.0.1:%d');\n" % init_soc.getsockname()[1])
-            fp.write("user_pref('capability.policy.localfilelinks.checkloaduri.enabled', 'allAccess');\n")
+        with open(os.path.join(self._profile, "prefs.js"), "a") as prefs_fp:
+            prefs_fp.write("user_pref('capability.policy.policynames', 'localfilelinks');\n")
+            prefs_fp.write("user_pref('capability.policy.localfilelinks.sites', "
+                           "'http://127.0.0.1:%d');\n" % init_soc.getsockname()[1])
+            prefs_fp.write("user_pref('capability.policy.localfilelinks.checkloaduri.enabled', 'allAccess');\n")
         return init_soc
 
 
@@ -455,13 +456,13 @@ class FFPuppet(object):
         returns a string containing the contents for the log file
         """
 
-        with open(self._log.name, "r") as fp:
+        with open(self._log.name, "r") as log_fp:
             if offset is not None:
-                fp.seek(offset, from_what)
+                log_fp.seek(offset, from_what)
 
             if count:
-                return fp.read(count)
-            return fp.read()
+                return log_fp.read(count)
+            return log_fp.read()
 
 
     def wait(self, timeout=0):
@@ -484,7 +485,7 @@ class FFPuppet(object):
         return None
 
 
-if __name__ == "__main__":
+def main():
     parser = argparse.ArgumentParser(description="Firefox launcher/wrapper")
     parser.add_argument(
         "binary",
@@ -543,4 +544,8 @@ if __name__ == "__main__":
         log.info("Ctrl+C detected. Shutting down...")
     finally:
         ffp.close(log_file=args.log)
+
+
+if __name__ == "__main__":
+    main()
 
