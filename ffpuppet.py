@@ -1,5 +1,6 @@
 #!/usr/bin/env python2
 import argparse
+import logging as log
 import multiprocessing
 import os
 import platform
@@ -275,9 +276,7 @@ class FFPuppet(object):
             env["ASAN_SYMBOLIZER_PATH"] = os.environ["ASAN_SYMBOLIZER_PATH"]
             env["MSAN_SYMBOLIZER_PATH"] = os.environ["ASAN_SYMBOLIZER_PATH"]
             if not os.path.isfile(env["ASAN_SYMBOLIZER_PATH"]):
-                print("WARNING: Invalid ASAN_SYMBOLIZER_PATH (%s)" % (
-                    env["ASAN_SYMBOLIZER_PATH"]
-                ))
+                log.warning("Invalid ASAN_SYMBOLIZER_PATH (%s)", env["ASAN_SYMBOLIZER_PATH"])
         # look for llvm-symbolizer bundled with firefox build
         elif os.path.isfile(os.path.join(os.path.dirname(bin_path), "llvm-symbolizer")):
             env["ASAN_SYMBOLIZER_PATH"] = os.path.join(os.path.dirname(bin_path), "llvm-symbolizer")
@@ -538,10 +537,10 @@ if __name__ == "__main__":
             memory_limit=args.memory * 1024 * 1024 if args.memory else None,
             prefs_js=args.prefs,
             safe_mode=args.safe_mode)
-        print("Running firefox (pid: %d)..." % ffp.get_pid())
+        log.info("Running firefox (pid: %d)...", ffp.get_pid())
         ffp.wait()
     except KeyboardInterrupt:
-        print("Ctrl+C detected. Shutting down...")
+        log.info("Ctrl+C detected. Shutting down...")
     finally:
         ffp.close(log_file=args.log)
 
