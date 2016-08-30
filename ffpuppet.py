@@ -1,5 +1,6 @@
 #!/usr/bin/env python2
 import argparse
+import errno
 import logging as log
 import multiprocessing
 import os
@@ -381,10 +382,10 @@ class FFPuppet(object):
                 init_soc.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
                 init_soc.settimeout(timeout) # don't catch socket.timeout
                 init_soc.bind(("127.0.0.1", random.randint(0x2000, 0xFFFF)))
-                init_soc.listen(1)
+                init_soc.listen(5)
                 break
             except socket.error as soc_e:
-                if soc_e.errno == 98: # Address already in use
+                if soc_e.errno == errno.EADDRINUSE: # Address already in use
                     continue
                 raise soc_e
         with open(os.path.join(self._profile, "prefs.js"), "a") as prefs_fp:
@@ -397,7 +398,7 @@ class FFPuppet(object):
 
     def _bootstrap_finish(self, init_soc, timeout=60, url=None):
         conn = None
-        timer_exp = time.time() + timeout
+        timer_start = time.time()
         try:
             # wait for browser test connection
             while True:
@@ -406,7 +407,7 @@ class FFPuppet(object):
                     conn, _ = init_soc.accept()
                     conn.settimeout(timeout)
                 except socket.timeout:
-                    if timer_exp <= time.time():
+                    if (time.time() - timer_start) >= timeout:
                         # timeout waiting browser connection
                         raise LaunchError("Launching browser timed out")
                     elif not self.is_running():
