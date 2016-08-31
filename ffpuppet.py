@@ -101,11 +101,11 @@ class FFPuppet(object):
             self._profile = os.path.abspath(self._profile)
 
         if use_valgrind:
-            with open(os.devnull, "w") as null_fp:
-                subprocess.call(
-                    ["valgrind", "--version"],
-                    stdout=null_fp,
-                    stderr=null_fp) # TODO: improve this check
+            try:
+                with open(os.devnull, "w") as null_fp:
+                    subprocess.call(["valgrind", "--version"], stdout=null_fp, stderr=null_fp)
+            except OSError:
+                raise EnvironmentError("Please install Valgrind")
 
         if use_windbg:
             if self._platform != "windows":
@@ -421,7 +421,7 @@ class FFPuppet(object):
                     continue # have not received connection
                 break # received connection
 
-            # handle browser test connection in coming data
+            # handle browser test connection incoming data
             while len(conn.recv(4096)) == 4096:
                 pass
 
