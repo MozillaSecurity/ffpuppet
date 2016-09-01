@@ -5,6 +5,7 @@ import logging as log
 import os
 import platform
 import random
+import re
 import shutil
 import socket
 import subprocess
@@ -18,6 +19,7 @@ except ImportError:
     pass
 
 import debugger_windbg
+import log_scanner
 import memory_limiter
 
 def open_unique():
@@ -44,6 +46,7 @@ class LaunchError(Exception):
 
 class FFPuppet(object):
     def __init__(self, use_profile=None, use_valgrind=False, use_windbg=False, use_xvfb=False):
+        self._abort_tokens = [] # tokens used to notify log_scanner to kill the browser process
         self._log = None
         self._platform = platform.system().lower()
         self._proc = None
@@ -141,6 +144,11 @@ class FFPuppet(object):
         return env
 
 
+    def add_abort_token(self, token):
+        if token not in self._abort_tokens:
+            self._abort_tokens.append(token)
+
+
     def save_log(self, log_file):
         """
         save_log(log_file) -> None
@@ -167,6 +175,7 @@ class FFPuppet(object):
         returns None
         """
 
+        self._abort_tokens = []
         self._proc = None
         if os.path.isfile(self._log.name):
             os.remove(self._log.name)
@@ -316,6 +325,14 @@ class FFPuppet(object):
             self._workers.append(debugger_windbg.DebuggerPyKDWorker())
             self._workers[-1].start(self._proc.pid)
 
+        if self._use_valgrind:
+            self._abort_tokens.append(re.compile(r"==\d+==\s"))
+
+        if self._abort_tokens:
+            # launch log scanner thread
+            self._workers.append(log_scanner.LogScannerWorker())
+            self._workers[-1].start(self)
+
 
     def is_running(self):
         """
@@ -398,24 +415,6 @@ class FFPuppet(object):
             if conn is not None:
                 conn.close()
             init_soc.close()
-
-
-    def read_log(self, offset=None, from_what=os.SEEK_SET, count=None):
-        """
-        read_log([offset, from_what, count]) -> string
-        Read the contents of the log file. offset specifies where to move to before reading,
-        from_what specified where to move from and count is the number of bytes to read.
-
-        returns a string containing the contents for the log file
-        """
-
-        with open(self._log.name, "r") as log_fp:
-            if offset is not None:
-                log_fp.seek(offset, from_what)
-
-            if count:
-                return log_fp.read(count)
-            return log_fp.read()
 
 
     def wait(self, timeout=0):
