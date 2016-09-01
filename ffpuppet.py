@@ -2,7 +2,6 @@
 import argparse
 import errno
 import logging as log
-import multiprocessing
 import os
 import platform
 import random
@@ -10,25 +9,16 @@ import shutil
 import socket
 import subprocess
 import tempfile
-import threading
 import time
 import urllib
-
-try:
-    import psutil
-except ImportError:
-    pass
-
-try:
-    import debugger_windbg
-except ImportError:
-    pass
 
 try:
     import xvfbwrapper
 except ImportError:
     pass
 
+import debugger_windbg
+import memory_limiter
 
 def open_unique():
     """
@@ -48,48 +38,17 @@ def open_unique():
     return open(log_file, "wb")
 
 
-def proc_memory_monitor(proc, limit):
-    """
-    proc_memory_monitor(proc, limit)
-    Use psutil to actively monitor the amount of memory in use by proc (psutil.Process).
-    If that amount exceeds limit the process will be terminated.
-
-    returns None
-    """
-
-    while proc.is_running():
-        try:
-            proc_mem = proc.memory_info().rss
-            for child in proc.children(recursive=True):
-                try:
-                    proc_mem += child.memory_info().rss
-                except psutil.NoSuchProcess:
-                    pass
-        except psutil.NoSuchProcess:
-            # process is dead?
-            break
-
-        # did we hit the memory limit?
-        if proc_mem >= limit:
-            proc.terminate()
-            break
-
-        time.sleep(0.1) # check 10x a second
-
-
 class LaunchError(Exception):
     pass
 
 
 class FFPuppet(object):
     def __init__(self, use_profile=None, use_valgrind=False, use_windbg=False, use_xvfb=False):
-        self._debugger_log = None # debugger log file
-        self._exit_code = None
-        self._log = open_unique()
+        self._log = None
         self._platform = platform.system().lower()
         self._proc = None
         self._profile = use_profile
-        self._remove_profile = use_profile is None # remove profile when complete
+        self._remove_profile = None # profile that needs to be removed when complete
         self._use_valgrind = use_valgrind
         self._windbg = use_windbg
         self._workers = list() # collection of threads and processes
@@ -110,16 +69,14 @@ class FFPuppet(object):
         if use_windbg:
             if self._platform != "windows":
                 raise EnvironmentError("WinDBG only available on Windows")
-            try:
-                debugger_windbg.pykd
-            except NameError:
+            if debugger_windbg.IMPORT_ERR:
                 raise EnvironmentError("Please install PyKD")
 
         if use_xvfb:
             if self._platform != "linux":
                 raise EnvironmentError("Xvfb is only supported on Linux")
 
-            # This loop is a hack and is here because xvfbwrapper doesn't
+            # This loop is a hack and is here because xvfbwrapper 0.2.8 doesn't
             # do a good job ensuring the process is running
             for tries_left in range(10, -1, -1):
                 try:
@@ -138,122 +95,12 @@ class FFPuppet(object):
                 break
 
 
-    def close(self, log_file=None):
-        """
-        close([log_file])
-        Terminate the browser process and clean up all other open files and processes. The log will
-        be saved to log_file if a file name is given.
-
-        returns None
-        """
-
-        # terminate the browser process
-        if self._proc is not None:
-            if self._proc.poll() is None:
-                self._proc.terminate()
-            self._exit_code = self._proc.wait()
-
-        # merge logs and close main log file
-        if log_file is not None:
-            # copy debugger log data to main log
-            if self._debugger_log is not None:
-                # wait 10 seconds max for debug log
-                start_time = time.time()
-                while not self._log.closed:
-                    # look for debugger log
-                    if not os.path.isfile(self._debugger_log):
-                        self._log.write("WARNING: Missing debugger log file.\n")
-                        break
-                    # check timeout
-                    if (time.time() - start_time) >= 10:
-                        self._log.write("WARNING: Could not collect debugger log. Timed out!\n")
-                        break
-                    with open(self._debugger_log, "r") as dbg_fp:
-                        dbg_log = dbg_fp.read()
-                    # Look for sync msg 'Debugger detached.'
-                    if dbg_log.rfind(debugger_windbg.COMPLETE_TOKEN):
-                        self._log.write("\n")
-                        self._log.write("[Debugger output]\n")
-                        self._log.write(dbg_log)
-                        self._log.write("\n")
-                        break
-                    time.sleep(0.1) # don't be a CPU hog
-
-            if not self._log.closed:
-                self._log.write("[Exit code: %r]\n" % self._exit_code)
-                self._log.close()
-
-            # move log to location specified by log_file
-            if os.path.isfile(self._log.name):
-                if not os.path.dirname(log_file):
-                    log_file = os.path.join(os.getcwd(), log_file)
-                shutil.move(self._log.name, log_file)
-
-        else: # discard log file
-            self._log.close()
-            if os.path.isfile(self._log.name):
-                os.remove(self._log.name)
-
-        # remove temporary debugger log
-        if self._debugger_log is not None and os.path.isfile(self._debugger_log):
-            os.remove(self._debugger_log)
-
-        # remove temporary profile directory
-        if self._remove_profile and self._profile is not None and os.path.isdir(self._profile):
-            shutil.rmtree(self._profile)
-
-        # close Xfvb
-        if self._xvfb is not None:
-            self._xvfb.stop()
-
-        # join worker threads and processes
-        for worker in self._workers:
-            worker.join()
-
-
-    def get_pid(self):
-        """
-        get_pid() -> int
-
-        returns the process ID of the browser process
-        """
-        return None if self._proc is None else self._proc.pid
-
-
-    def launch(self, bin_path, launch_timeout=300, location=None, memory_limit=None,
-               prefs_js=None, safe_mode=False):
-        """
-        launch(bin_path[, launch_timout, location, memory_limit, pref_js, safe_mode])
-        Launch a new browser process using the binary specified with bin_path. Optional limits
-        can be set for time to launch the browser by setting launch_timeout (default: 300 seconds)
-        or the maximum amount of memory the browser can use by setting memory_limit (default: None).
-        The URL loaded by default can be set with location. prefs_js allows a custom prefs.js
-        file to be specified. safe_mode is a boolean indicating whether or not to launch the
-        browser in "safe mode". WARNING: Launching in safe mode blocks with a dialog that must be
-        dismissed manually.
-
-        returns None
-        """
-        if self._proc is not None:
-            raise LaunchError("Launch has already been called")
-
-        if launch_timeout is None or launch_timeout < 1:
-            raise LaunchError("Launch timeout must be >= 1")
-
-        bin_path = os.path.abspath(bin_path)
-        if not os.path.isfile(bin_path) or not os.access(bin_path, os.X_OK):
-            raise IOError("%s is not an executable" % bin_path)
-
-        if memory_limit is not None:
-            try:
-                psutil.cpu_count()
-            except NameError:
-                raise EnvironmentError("Please install psutil")
-
+    def _create_environ(self, target_bin):
         env = os.environ
         if self._use_valgrind:
             # https://developer.gimp.org/api/2.0/glib/glib-running.html#G_DEBUG
             env["G_DEBUG"] = "gc-friendly"
+
         # https://developer.gimp.org/api/2.0/glib/glib-running.html#G_SLICE
         env["G_SLICE"] = "always-malloc"
         env["MOZ_CC_RUN_DURING_SHUTDOWN"] = "1"
@@ -283,16 +130,137 @@ class FFPuppet(object):
             env["MSAN_SYMBOLIZER_PATH"] = os.environ["ASAN_SYMBOLIZER_PATH"]
             if not os.path.isfile(env["ASAN_SYMBOLIZER_PATH"]):
                 log.warning("Invalid ASAN_SYMBOLIZER_PATH (%s)", env["ASAN_SYMBOLIZER_PATH"])
+
         # look for llvm-symbolizer bundled with firefox build
-        elif os.path.isfile(os.path.join(os.path.dirname(bin_path), "llvm-symbolizer")):
-            env["ASAN_SYMBOLIZER_PATH"] = os.path.join(os.path.dirname(bin_path), "llvm-symbolizer")
-            env["MSAN_SYMBOLIZER_PATH"] = os.path.join(os.path.dirname(bin_path), "llvm-symbolizer")
+        if "ASAN_SYMBOLIZER_PATH" not in env:
+            symbolizer_bin = os.path.join(os.path.dirname(target_bin), "llvm-symbolizer")
+            if os.path.isfile(symbolizer_bin):
+                env["ASAN_SYMBOLIZER_PATH"] = symbolizer_bin
+                env["MSAN_SYMBOLIZER_PATH"] = symbolizer_bin
+
+        return env
+
+
+    def save_log(self, log_file):
+        """
+        save_log(log_file) -> None
+        The log will be saved to log_file. Should only be called after close().
+
+        Return None
+        """
+
+        if self.is_running():
+            raise RuntimeError("Log is still in use. Call close() first!")
+
+        # move log to location specified by log_file
+        if os.path.isfile(self._log.name):
+            if not os.path.dirname(log_file):
+                log_file = os.path.join(os.getcwd(), log_file)
+            shutil.move(self._log.name, log_file)
+
+
+    def clean_up(self):
+        """
+        clean_up() -> None
+        Remove all the remaining files that could have been created during execution.
+
+        returns None
+        """
+
+        self._proc = None
+        if os.path.isfile(self._log.name):
+            os.remove(self._log.name)
+
+
+    def close(self):
+        """
+        close() -> None
+        Terminate the browser process and clean up all processes.
+
+        returns None
+        """
+
+        # terminate the browser process
+        if self._proc is not None:
+            if self._proc.poll() is None:
+                self._proc.terminate()
+            self._proc.wait()
+            if not self._log.closed:
+                self._log.write("[Exit code: %r]\n" % self._proc.poll())
+
+        # join worker threads and processes
+        for worker in self._workers:
+            worker.join()
+            worker_log = None if self._log.closed else worker.collect_log()
+
+            # copy worker logs to main log if is exists and contains data
+            if worker_log:
+                self._log.write("\n")
+                self._log.write("[Worker: %s]\n" % worker.name)
+                self._log.write(worker_log)
+                self._log.write("\n")
+            worker.clean_up()
+
+        # clear out old workers
+        self._workers = list()
+
+        # close Xfvb
+        if self._xvfb is not None:
+            self._xvfb.stop()
+
+        # close log
+        if self._log is not None and not self._log.closed:
+            self._log.close()
+
+        # remove temporary profile directory if necessary
+        if self._remove_profile and os.path.isdir(self._remove_profile):
+            shutil.rmtree(self._remove_profile)
+            self._profile = None # a temporary profile was use so reset self._profile
+
+
+    def get_pid(self):
+        """
+        get_pid() -> int
+
+        returns the process ID of the browser process
+        """
+        return None if self._proc is None else self._proc.pid
+
+
+    def launch(self, bin_path, launch_timeout=300, location=None, memory_limit=None,
+               prefs_js=None, safe_mode=False):
+        """
+        launch(bin_path[, launch_timout, location, memory_limit, pref_js, safe_mode])
+        Launch a new browser process using the binary specified with bin_path. Optional limits
+        can be set for time to launch the browser by setting launch_timeout (default: 300 seconds)
+        or the maximum amount of memory the browser can use by setting memory_limit (default: None).
+        The URL loaded by default can be set with location. prefs_js allows a custom prefs.js
+        file to be specified. safe_mode is a boolean indicating whether or not to launch the
+        browser in "safe mode". WARNING: Launching in safe mode blocks with a dialog that must be
+        dismissed manually.
+
+        returns None
+        """
+        if self._proc is not None:
+            raise LaunchError("Process is already running")
+
+        bin_path = os.path.abspath(bin_path)
+        if not os.path.isfile(bin_path) or not os.access(bin_path, os.X_OK):
+            raise IOError("%s is not an executable" % bin_path)
+
+        if memory_limit is not None and memory_limiter.IMPORT_ERR:
+            raise EnvironmentError("Please install psutil")
+
+        env = self._create_environ(bin_path)
+        launch_timeout = max(launch_timeout, 10) # force 10 seconds minimum launch_timeout
 
         # create temp profile directory if needed
         if self._profile is None:
             self._profile = tempfile.mkdtemp(prefix="ffprof_")
             if prefs_js:
                 shutil.copyfile(prefs_js, os.path.join(self._profile, "prefs.js"))
+            # since this is a temp profile director it should be removed
+            self._remove_profile = self._profile
 
         # Performing the bootstrap helps guarantee that the browser
         # will be loaded and ready to accept input when launch() returns
@@ -304,8 +272,7 @@ class FFPuppet(object):
             "-no-remote",
             "-profile",
             self._profile,
-            "http://127.0.0.1:%d" % init_soc.getsockname()[1]
-        ]
+            "http://127.0.0.1:%d" % init_soc.getsockname()[1]]
 
         if safe_mode:
             cmd.append("-safe-mode")
@@ -322,52 +289,32 @@ class FFPuppet(object):
                 #"--leak-check=full",
                 "--trace-children=yes",
                 #"--track-origins=yes",
-                "--vex-iropt-register-updates=allregs-at-mem-access"
-            ] + cmd # enable valgrind
+                "--vex-iropt-register-updates=allregs-at-mem-access"] + cmd # enable valgrind
+
+        self._log = open_unique()
+        self._log.write("Launch command: %s\n\n" % " ".join(cmd))
+        self._log.flush()
 
         # launch the browser
-        if self._platform == "windows":
-            self._proc = subprocess.Popen(
-                cmd,
-                creationflags=subprocess.CREATE_NEW_PROCESS_GROUP,
-                env=env,
-                shell=False,
-                stderr=self._log,
-                stdout=self._log
-            )
-        else: # not windows
-            self._proc = subprocess.Popen(
-                cmd,
-                env=env,
-                shell=False,
-                stderr=self._log,
-                stdout=self._log
-            )
+        self._proc = subprocess.Popen(
+            cmd,
+            creationflags=subprocess.CREATE_NEW_PROCESS_GROUP if self._platform == "windows" else 0,
+            env=env,
+            shell=False,
+            stderr=self._log,
+            stdout=self._log)
 
         self._bootstrap_finish(init_soc, timeout=launch_timeout, url=location)
 
         if memory_limit is not None:
             # launch memory monitor thread
-            memory_monitor = threading.Thread(
-                target=proc_memory_monitor,
-                args=(psutil.Process(self._proc.pid), memory_limit)
-            )
-            memory_monitor.start()
-            self._workers.append(memory_monitor)
+            self._workers.append(memory_limiter.MemoryLimiterWorker())
+            self._workers[-1].start(self._proc.pid, memory_limit)
 
         if self._windbg:
-            tmp_fd, self._debugger_log = tempfile.mkstemp(
-                suffix="_log.txt",
-                prefix=time.strftime("ffp_windbg_%Y-%m-%d_%H-%M-%S_")
-            )
-            os.close(tmp_fd)
-
-            debug_monitor = multiprocessing.Process(
-                target=debugger_windbg.debug,
-                args=(self._proc.pid, self._debugger_log)
-            )
-            debug_monitor.start()
-            self._workers.append(debug_monitor)
+            # launch pykd debugger
+            self._workers.append(debugger_windbg.DebuggerPyKDWorker())
+            self._workers[-1].start(self._proc.pid)
 
 
     def is_running(self):
@@ -549,7 +496,10 @@ def main():
     except KeyboardInterrupt:
         log.info("Ctrl+C detected. Shutting down...")
     finally:
-        ffp.close(log_file=args.log)
+        ffp.close()
+        if args.log:
+            ffp.save_log(args.log)
+        ffp.clean_up()
 
 
 if __name__ == "__main__":

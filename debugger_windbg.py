@@ -2,29 +2,44 @@
 # License, v. 2.0. If a copy of the MPL was not distributed with this
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
-"""
-debugger_windbg.py is intended to be used with ffpuppet to provide basic debugger
-information with minimal iteration with the process.
 
-Note: Only works with x86 builds at the moment.
-"""
+import os
+import multiprocessing
+
+try:
+    import pykd
+    IMPORT_ERR = False
+except ImportError as err:
+    IMPORT_ERR = True
+
+import puppet_worker
 
 __author__ = "Tyson Smith"
 __credits__ = ["Tyson Smith"]
 
-import pykd
-
-COMPLETE_TOKEN = "Debugger session complete.\n"
-
-def debug(process_id, output_log):
+class DebuggerPyKDWorker(puppet_worker.BaseWorker):
     """
-    debug(process_id, output_log)
-    Use debug() takes the process_id if the process to attach to and the collected
-    debug data is saved to output_log.
+    DebuggerPyKDWorker is intended to be used with ffpuppet to provide basic debugger
+    information with minimal interaction with the browser process.
+
+    Note: Only works with x86 builds at the moment.
+    """
+    name = os.path.splitext(os.path.basename(__file__))[0]
+
+    def start(self, process_id):
+        self._worker = multiprocessing.Process(target=_run, args=(process_id, self._log))
+        self._worker.start()
+
+
+def _run(process_id, log_file):
+    """
+    _run(process_id, log_file) -> None
+    _run() takes the process_id of the process to attach to.
+    The collected debugger data is saved to log_file.
 
     returns None
     """
-    with open(output_log, "w") as out_fp:
+    with open(log_file, "w") as out_fp:
         out_fp.write("\nAttaching WinDBG debugger...\n")
         try:
             session_id = pykd.attachProcess(process_id)
@@ -41,6 +56,3 @@ def debug(process_id, output_log):
             out_fp.write("DbgException: %s\n" % dbg_e)
         except KeyboardInterrupt:
             pass
-        finally:
-            # Add COMPLETE_TOKEN message to help sync the processes
-            out_fp.write(COMPLETE_TOKEN)
