@@ -50,7 +50,7 @@ class LaunchError(Exception):
 
 class FFPuppet(object):
     def __init__(self, use_profile=None, use_valgrind=False, use_windbg=False, use_xvfb=False):
-        self._abort_tokens = [] # tokens used to notify log_scanner to kill the browser process
+        self._abort_tokens = set() # tokens used to notify log_scanner to kill the browser process
         self._log = None
         self._platform = platform.system().lower()
         self._proc = None
@@ -149,8 +149,7 @@ class FFPuppet(object):
 
 
     def add_abort_token(self, token):
-        if token not in self._abort_tokens:
-            self._abort_tokens.append(token)
+        self._abort_tokens.add(token)
 
 
     def save_log(self, log_file):
@@ -179,7 +178,7 @@ class FFPuppet(object):
         returns None
         """
 
-        self._abort_tokens = []
+        self._abort_tokens = set()
         self._proc = None
         if os.path.isfile(self._log.name):
             os.remove(self._log.name)
@@ -330,7 +329,7 @@ class FFPuppet(object):
             self._workers[-1].start(self._proc.pid)
 
         if self._use_valgrind:
-            self._abort_tokens.append(re.compile(r"==\d+==\s"))
+            self._abort_tokens.add(re.compile(r"==\d+==\s"))
 
         if self._abort_tokens:
             # launch log scanner thread
