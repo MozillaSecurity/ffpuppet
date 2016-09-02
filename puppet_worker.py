@@ -13,7 +13,8 @@ __credits__ = ["Tyson Smith"]
 
 class BaseWorker(object):
     """
-
+    BaseWorker is the base class that is to be used to create workers to perform
+    asynchronous tasks related to FFPuppet or the browser process.
     """
     name = "BaseWorker" # override in subclass
 
@@ -38,7 +39,7 @@ class BaseWorker(object):
 
 
     def collect_log(self):
-        if self._worker.is_alive():
+        if self._worker is not None and self._worker.is_alive():
             raise RuntimeError("Worker must exit before collecting log")
 
         if not os.path.isfile(self._log):
@@ -51,4 +52,5 @@ class BaseWorker(object):
 
 
     def join(self):
-        self._worker.join()
+        if self._worker is not None:
+            self._worker.join()

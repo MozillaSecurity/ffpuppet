@@ -14,7 +14,8 @@ __credits__ = ["Tyson Smith"]
 
 class LogScannerWorker(puppet_worker.BaseWorker):
     """
-
+    LogScannerWorker will search through the browser log until a token is found.
+    When a token is found terminate() is called on the browser process.
     """
     name = os.path.splitext(os.path.basename(__file__))[0]
 
@@ -30,12 +31,12 @@ def _run(puppet, log_file):
     returns None
     """
 
-    if not os.path.isfile(puppet._log.name):
-        return
-
     prev_offset = offset = 0
     token_found = None
     while puppet.is_running():
+        if not os.path.isfile(puppet._log.name):
+            return
+
         with open(puppet._log.name, "r") as scan_fp:
             scan_fp.seek(offset, os.SEEK_SET)
             data = scan_fp.read()
@@ -47,6 +48,7 @@ def _run(puppet, log_file):
 
         # don't be a CPU hog if there is nothing to search
         if prev_offset == offset:
+            time.sleep(0.1)
             continue
 
         prev_offset = offset
