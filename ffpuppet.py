@@ -1,7 +1,7 @@
 #!/usr/bin/env python2
 import argparse
 import errno
-import logging as log
+import logging
 import os
 import platform
 import random
@@ -21,6 +21,10 @@ except ImportError:
 import debugger_windbg
 import log_scanner
 import memory_limiter
+
+
+log = logging.getLogger("ffpuppet") # pylint: disable=invalid-name
+
 
 def open_unique():
     """
@@ -438,6 +442,11 @@ class FFPuppet(object):
 
 
 def main():
+
+    if len(logging.getLogger().handlers) == 0:
+        logging.basicConfig()
+    logging.getLogger().setLevel(logging.INFO)
+
     parser = argparse.ArgumentParser(description="Firefox launcher/wrapper")
     parser.add_argument(
         "binary",
