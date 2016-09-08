@@ -160,6 +160,9 @@ class FFPuppet(object):
         Return None
         """
 
+        if self._log is None:
+            return
+
         if self.is_running():
             raise RuntimeError("Log is still in use. Call close() first!")
 
@@ -180,7 +183,7 @@ class FFPuppet(object):
 
         self._abort_tokens = set()
         self._proc = None
-        if os.path.isfile(self._log.name):
+        if self._log is not None and os.path.isfile(self._log.name):
             os.remove(self._log.name)
 
 
