@@ -60,6 +60,7 @@ class FFPuppet(object):
         self._windbg = use_windbg
         self._workers = list() # collection of threads and processes
         self._xvfb = None
+        self._log_trim_pos = None
 
         if self._profile is not None:
             if not os.path.isdir(self._profile):
@@ -152,6 +153,10 @@ class FFPuppet(object):
         self._abort_tokens.add(token)
 
 
+    def trim_log(self):
+        self._log_trim_pos = self._log.tell()
+
+
     def save_log(self, log_file):
         """
         save_log(log_file) -> None
@@ -166,11 +171,18 @@ class FFPuppet(object):
         if self.is_running():
             raise RuntimeError("Log is still in use. Call close() first!")
 
-        # move log to location specified by log_file
-        if os.path.isfile(self._log.name):
-            if not os.path.dirname(log_file):
-                log_file = os.path.join(os.getcwd(), log_file)
-            shutil.move(self._log.name, log_file)
+        if self._log_trim_pos is None:
+            with open(log_file, "w") as out_file:
+                with open(self._log.name) as in_file:
+                    in_file.seek(self._log_trim_pos)
+                    out_file.write(in_file.read())
+            os.unlink(self._log.name)
+        else:
+            # move log to location specified by log_file
+            if os.path.isfile(self._log.name):
+                if not os.path.dirname(log_file):
+                    log_file = os.path.join(os.getcwd(), log_file)
+                shutil.move(self._log.name, log_file)
 
 
     def clean_up(self):
