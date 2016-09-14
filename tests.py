@@ -9,9 +9,10 @@ import socket
 import sys
 import tempfile
 import threading
+import time
 import unittest
 
-import ffpuppet
+from ffpuppet import FFPuppet, LaunchError
 
 
 class TestCase(unittest.TestCase):
@@ -55,7 +56,7 @@ class PuppetTests(TestCase):
     if sys.platform != 'win32':
         def test_0(self):
             "test that invalid executables raise the right exception"
-            ffp = ffpuppet.FFPuppet()
+            ffp = FFPuppet()
             with self.assertRaisesRegex(IOError, "is not an executable"):
                 try:
                     ffp.launch(self.tmpfn)
@@ -66,20 +67,24 @@ class PuppetTests(TestCase):
 
     def test_1(self):
         "test hang on start"
-        ffp = ffpuppet.FFPuppet()
+        ffp = FFPuppet()
         with open(self.tmpfn, 'w') as prefs:
             prefs.write('#fftest_hang\n')
         try:
-            with self.assertRaisesRegex(ffpuppet.LaunchError, "Launching browser timed out"):
-                ffp.launch('testff.py', prefs_js=self.tmpfn, launch_timeout=1)
+            start = time.time()
+            with self.assertRaisesRegex(LaunchError, "Launching browser timed out"):
+                ffp.launch('testff.py', prefs_js=self.tmpfn, launch_timeout=10)
+            duration = time.time() - start
         finally:
             ffp.close()
             ffp.save_log(self.tmpfn)
             ffp.clean_up()
+        self.assertGreater(duration, 10)
+        self.assertLess(duration, 60)
 
     def test_2(self):
         "test logging"
-        ffp = ffpuppet.FFPuppet()
+        ffp = FFPuppet()
 
         class _req_handler(BaseHTTPRequestHandler):
             def do_GET(self):
@@ -104,7 +109,7 @@ class PuppetTests(TestCase):
 
     def test_3(self):
         "test log trimming"
-        ffp = ffpuppet.FFPuppet()
+        ffp = FFPuppet()
 
         class _req_handler(BaseHTTPRequestHandler):
             def do_GET(self):
