@@ -171,7 +171,7 @@ class FFPuppet(object):
         if self.is_running():
             raise RuntimeError("Log is still in use. Call close() first!")
 
-        if self._log_trim_pos is None:
+        if self._log_trim_pos is not None:
             with open(log_file, "w") as out_file:
                 with open(self._log.name) as in_file:
                     in_file.seek(self._log_trim_pos)
