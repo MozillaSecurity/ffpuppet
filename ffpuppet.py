@@ -153,8 +153,14 @@ class FFPuppet(object):
         self._abort_tokens.add(token)
 
 
-    def trim_log(self):
-        self._log_trim_pos = self._log.tell()
+    def tell_log(self):
+        return self._log.tell()
+
+
+    def trim_log(self, pos=None):
+        if pos is None:
+            pos = self.tell_log()
+        self._log_trim_pos = pos
 
 
     def save_log(self, log_file):
