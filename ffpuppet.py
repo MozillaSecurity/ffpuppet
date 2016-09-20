@@ -261,16 +261,17 @@ class FFPuppet(object):
 
 
     def launch(self, bin_path, launch_timeout=300, location=None, memory_limit=None,
-               prefs_js=None, safe_mode=False):
+               prefs_js=None, safe_mode=False, extension=False):
         """
-        launch(bin_path[, launch_timout, location, memory_limit, pref_js, safe_mode])
+        launch(bin_path[, launch_timeout, location, memory_limit, pref_js, safe_mode, extension])
         Launch a new browser process using the binary specified with bin_path. Optional limits
         can be set for time to launch the browser by setting launch_timeout (default: 300 seconds)
         or the maximum amount of memory the browser can use by setting memory_limit (default: None).
         The URL loaded by default can be set with location. prefs_js allows a custom prefs.js
         file to be specified. safe_mode is a boolean indicating whether or not to launch the
         browser in "safe mode". WARNING: Launching in safe mode blocks with a dialog that must be
-        dismissed manually.
+        dismissed manually. Extension indicates whether the DOMFuzz fuzzPriv extension should be
+        installed.
 
         returns None
         """
@@ -294,6 +295,11 @@ class FFPuppet(object):
                 shutil.copyfile(prefs_js, os.path.join(self._profile, "prefs.js"))
             # since this is a temp profile director it should be removed
             self._remove_profile = self._profile
+
+        if extension:
+            os.mkdir(os.path.join(self._profile, "extensions"))
+            os.symlink(os.path.join(os.path.dirname(__file__), "..", "funfuzz", "dom", "extension"), # XXX: tell user how to fix if this raises
+                       os.path.join(self._profile, "extensions", "domfuzz@squarefree.com"))
 
         # Performing the bootstrap helps guarantee that the browser
         # will be loaded and ready to accept input when launch() returns
@@ -472,6 +478,9 @@ def main():
         "binary",
         help="Firefox binary to execute")
     parser.add_argument(
+        "-e", "--extension", action="store_true",
+        help="Install the fuzzPriv extension.")
+    parser.add_argument(
         "-l", "--log",
         help="log file name")
     parser.add_argument(
@@ -518,7 +527,8 @@ def main():
             launch_timeout=args.timeout,
             memory_limit=args.memory * 1024 * 1024 if args.memory else None,
             prefs_js=args.prefs,
-            safe_mode=args.safe_mode)
+            safe_mode=args.safe_mode,
+            extension=args.extension)
         log.info("Running firefox (pid: %d)...", ffp.get_pid())
         ffp.wait()
     except KeyboardInterrupt:
