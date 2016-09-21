@@ -34,7 +34,8 @@ positional arguments:
 
 optional arguments:
   -h, --help            show this help message and exit
-  -e, --extension       Install the fuzzPriv extension (Requires funfuzz)
+  -e, --extension       Install the fuzzPriv extension (specify path to
+                        funfuzz/dom/extension)
   -l LOG, --log LOG     log file name
   -m MEMORY, --memory MEMORY
                         Process memory limit in MBs (Requires psutil)
