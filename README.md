@@ -22,8 +22,7 @@ Linux requires xvfb in order to run headless.
 Usage
 -----
 ```
-python ffpuppet.py -h
-usage: ffpuppet.py [-h] [-l LOG] [-m MEMORY] [-p PREFS] [-P PROFILE]
+usage: ffpuppet.py [-h] [-e] [-l LOG] [-m MEMORY] [-p PREFS] [-P PROFILE]
                    [--safe-mode] [-t TIMEOUT] [-u URL] [--valgrind] [--windbg]
                    [--xvfb]
                    binary
@@ -35,6 +34,7 @@ positional arguments:
 
 optional arguments:
   -h, --help            show this help message and exit
+  -e, --extension       Install the fuzzPriv extension (Requires funfuzz)
   -l LOG, --log LOG     log file name
   -m MEMORY, --memory MEMORY
                         Process memory limit in MBs (Requires psutil)
@@ -47,11 +47,10 @@ optional arguments:
                         safe mode blocks with a dialog that must be dismissed
                         manually.
   -t TIMEOUT, --timeout TIMEOUT
-                        Launch timeout. This is the amount of time to wait for
-                        the browser to become responsive after launching.
+                        Number of seconds to wait for the browser to become
+                        responsive after launching. (default: 300)
   -u URL, --url URL     Server URL or local file to load.
   --valgrind            Use valgrind
   --windbg              Collect crash log with WinDBG (Windows only)
   --xvfb                Use xvfb (Linux only)
-
 ```

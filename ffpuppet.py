@@ -23,6 +23,15 @@ import log_scanner
 import memory_limiter
 
 
+EXTENSION_PATH = None
+# look for funfuzz in cwd, and in same path as ffpuppet.
+for dir_ in [os.path.join("funfuzz", "dom", "extension"),
+             os.path.join(os.path.dirname(__file__), "..", "funfuzz", "dom", "extension")]:
+    if os.path.isdir(dir_):
+        EXTENSION_PATH = dir_
+        break
+
+
 log = logging.getLogger("ffpuppet") # pylint: disable=invalid-name
 
 
@@ -297,9 +306,10 @@ class FFPuppet(object):
             self._remove_profile = self._profile
 
         if extension:
+            if EXTENSION_PATH is None:
+                raise EnvironmentError("fuzzPriv extension requested, but can't find funfuzz")
             os.mkdir(os.path.join(self._profile, "extensions"))
-            os.symlink(os.path.join(os.path.dirname(__file__), "..", "funfuzz", "dom", "extension"), # XXX: tell user how to fix if this raises
-                       os.path.join(self._profile, "extensions", "domfuzz@squarefree.com"))
+            os.symlink(EXTENSION_PATH, os.path.join(self._profile, "extensions", "domfuzz@squarefree.com"))
 
         # Performing the bootstrap helps guarantee that the browser
         # will be loaded and ready to accept input when launch() returns
@@ -479,7 +489,7 @@ def main():
         help="Firefox binary to execute")
     parser.add_argument(
         "-e", "--extension", action="store_true",
-        help="Install the fuzzPriv extension.")
+        help="Install the fuzzPriv extension (Requires funfuzz)")
     parser.add_argument(
         "-l", "--log",
         help="log file name")
