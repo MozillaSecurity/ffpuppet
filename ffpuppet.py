@@ -23,15 +23,6 @@ import log_scanner
 import memory_limiter
 
 
-EXTENSION_PATH = None
-# look for funfuzz in cwd, and in same path as ffpuppet.
-for dir_ in [os.path.join("funfuzz", "dom", "extension"),
-             os.path.join(os.path.dirname(__file__), "..", "funfuzz", "dom", "extension")]:
-    if os.path.isdir(dir_):
-        EXTENSION_PATH = dir_
-        break
-
-
 log = logging.getLogger("ffpuppet") # pylint: disable=invalid-name
 
 
@@ -247,8 +238,8 @@ class FFPuppet(object):
         self._workers = list()
 
         # close Xfvb
-        if self._xvfb is not None:
-            self._xvfb.stop()
+        #if self._xvfb is not None:
+        #    self._xvfb.stop()
 
         # close log
         if self._log is not None and not self._log.closed:
@@ -270,7 +261,7 @@ class FFPuppet(object):
 
 
     def launch(self, bin_path, launch_timeout=300, location=None, memory_limit=None,
-               prefs_js=None, safe_mode=False, extension=False):
+               prefs_js=None, safe_mode=False, extension=None):
         """
         launch(bin_path[, launch_timeout, location, memory_limit, pref_js, safe_mode, extension])
         Launch a new browser process using the binary specified with bin_path. Optional limits
@@ -279,7 +270,7 @@ class FFPuppet(object):
         The URL loaded by default can be set with location. prefs_js allows a custom prefs.js
         file to be specified. safe_mode is a boolean indicating whether or not to launch the
         browser in "safe mode". WARNING: Launching in safe mode blocks with a dialog that must be
-        dismissed manually. Extension indicates whether the DOMFuzz fuzzPriv extension should be
+        dismissed manually. Extension indicates the path to the DOMFuzz fuzzPriv extension to be
         installed.
 
         returns None
@@ -305,11 +296,9 @@ class FFPuppet(object):
             # since this is a temp profile director it should be removed
             self._remove_profile = self._profile
 
-        if extension:
-            if EXTENSION_PATH is None:
-                raise EnvironmentError("fuzzPriv extension requested, but can't find funfuzz")
+        if extension is not None:
             os.mkdir(os.path.join(self._profile, "extensions"))
-            os.symlink(EXTENSION_PATH, os.path.join(self._profile, "extensions", "domfuzz@squarefree.com"))
+            os.symlink(os.path.abspath(extension), os.path.join(self._profile, "extensions", "domfuzz@squarefree.com"))
 
         # Performing the bootstrap helps guarantee that the browser
         # will be loaded and ready to accept input when launch() returns
