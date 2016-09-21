@@ -238,8 +238,8 @@ class FFPuppet(object):
         self._workers = list()
 
         # close Xfvb
-        #if self._xvfb is not None:
-        #    self._xvfb.stop()
+        if self._xvfb is not None:
+            self._xvfb.stop()
 
         # close log
         if self._log is not None and not self._log.closed:
