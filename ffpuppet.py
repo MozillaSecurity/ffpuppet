@@ -477,7 +477,7 @@ def main():
         "binary",
         help="Firefox binary to execute")
     parser.add_argument(
-        "-e", "--extension", action="store_true",
+        "-e", "--extension",
         help="Install the fuzzPriv extension (specify path to funfuzz/dom/extension)")
     parser.add_argument(
         "-l", "--log",
