@@ -204,6 +204,10 @@ class FFPuppet(object):
         if self._log is not None and os.path.isfile(self._log.name):
             os.remove(self._log.name)
 
+        # close Xfvb
+        if self._xvfb is not None:
+            self._xvfb.stop()
+
 
     def close(self):
         """
@@ -236,10 +240,6 @@ class FFPuppet(object):
 
         # clear out old workers
         self._workers = list()
-
-        # close Xfvb
-        if self._xvfb is not None:
-            self._xvfb.stop()
 
         # close log
         if self._log is not None and not self._log.closed:
