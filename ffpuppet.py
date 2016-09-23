@@ -60,7 +60,6 @@ class FFPuppet(object):
         self._windbg = use_windbg
         self._workers = list() # collection of threads and processes
         self._xvfb = None
-        self._log_trim_pos = None
 
         if self._profile is not None:
             if not os.path.isdir(self._profile):
@@ -153,16 +152,6 @@ class FFPuppet(object):
         self._abort_tokens.add(token)
 
 
-    def tell_log(self):
-        return self._log.tell()
-
-
-    def trim_log(self, pos=None):
-        if pos is None:
-            pos = self.tell_log()
-        self._log_trim_pos = pos
-
-
     def save_log(self, log_file):
         """
         save_log(log_file) -> None
@@ -177,18 +166,13 @@ class FFPuppet(object):
         if self.is_running():
             raise RuntimeError("Log is still in use. Call close() first!")
 
-        if self._log_trim_pos is not None:
-            with open(log_file, "w") as out_file:
-                with open(self._log.name) as in_file:
-                    in_file.seek(self._log_trim_pos)
-                    out_file.write(in_file.read())
-            os.unlink(self._log.name)
-        else:
-            # move log to location specified by log_file
-            if os.path.isfile(self._log.name):
-                if not os.path.dirname(log_file):
-                    log_file = os.path.join(os.getcwd(), log_file)
-                shutil.move(self._log.name, log_file)
+        # move log to location specified by log_file
+        if os.path.isfile(self._log.name):
+            if not os.path.dirname(log_file):
+                log_file = os.path.join(os.getcwd(), log_file)
+            shutil.move(self._log.name, log_file)
+
+        self._log = None
 
 
     def clean_up(self):
@@ -329,6 +313,11 @@ class FFPuppet(object):
                 #"--track-origins=yes",
                 "--vex-iropt-register-updates=allregs-at-mem-access"] + cmd # enable valgrind
 
+        # clean up existing log file before creating a new one
+        if self._log is not None and os.path.isfile(self._log.name):
+            os.remove(self._log.name)
+
+        # open log
         self._log = open_unique()
         self._log.write("Launch command: %s\n\n" % " ".join(cmd))
         self._log.flush()
