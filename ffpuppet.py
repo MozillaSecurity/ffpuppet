@@ -160,11 +160,12 @@ class FFPuppet(object):
         Return None
         """
 
-        if self._log is None:
-            return
-
         if self.is_running():
             raise RuntimeError("Log is still in use. Call close() first!")
+
+        # check if there is a log to save
+        if self._log is None:
+            return
 
         # move log to location specified by log_file
         if os.path.isfile(self._log.name):
@@ -206,7 +207,7 @@ class FFPuppet(object):
             if self._proc.poll() is None:
                 self._proc.terminate()
             self._proc.wait()
-            if not self._log.closed:
+            if self._log is not None and not self._log.closed:
                 self._log.write("[Exit code: %r]\n" % self._proc.poll())
 
         # join worker threads and processes
