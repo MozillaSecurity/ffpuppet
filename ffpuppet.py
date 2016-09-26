@@ -180,16 +180,22 @@ class FFPuppet(object):
         """
         clean_up() -> None
         Remove all the remaining files that could have been created during execution.
+        Note: Calling launch() after calling clean_up() is not intended and may not work
+        as expected.
 
         returns None
         """
 
-        self._abort_tokens = set()
+        # if close() was not called call it
+        if self._proc is not None:
+            self.close()
         self._proc = None
+
         if self._log is not None and os.path.isfile(self._log.name):
             os.remove(self._log.name)
+        self._log = None
 
-        # close Xfvb
+        # close Xvfb
         if self._xvfb is not None:
             self._xvfb.stop()
 
@@ -209,6 +215,7 @@ class FFPuppet(object):
             self._proc.wait()
             if self._log is not None and not self._log.closed:
                 self._log.write("[Exit code: %r]\n" % self._proc.poll())
+            self._proc = None
 
         # join worker threads and processes
         for worker in self._workers:
