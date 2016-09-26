@@ -49,7 +49,8 @@ class LaunchError(Exception):
 
 
 class FFPuppet(object):
-    def __init__(self, use_profile=None, use_valgrind=False, use_windbg=False, use_xvfb=False):
+    def __init__(self, use_profile=None, use_valgrind=False, use_windbg=False, use_xvfb=False,
+                 detect_soft_assertions=False):
         self._abort_tokens = set() # tokens used to notify log_scanner to kill the browser process
         self._log = None
         self._platform = platform.system().lower()
@@ -102,6 +103,8 @@ class FFPuppet(object):
                     raise
                 break
 
+        if detect_soft_assertions:
+            self.add_abort_token("###!!! ASSERTION:")
 
     def _create_environ(self, target_bin):
         env = os.environ
