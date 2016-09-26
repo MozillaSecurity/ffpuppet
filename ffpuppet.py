@@ -60,6 +60,7 @@ class FFPuppet(object):
         self._windbg = use_windbg
         self._workers = list() # collection of threads and processes
         self._xvfb = None
+        self.closed = True # False once launch() is called and True once close() is called
 
         if self._profile is not None:
             if not os.path.isdir(self._profile):
@@ -160,7 +161,7 @@ class FFPuppet(object):
         Return None
         """
 
-        if self.is_running():
+        if not self.closed:
             raise RuntimeError("Log is still in use. Call close() first!")
 
         # check if there is a log to save
@@ -187,9 +188,8 @@ class FFPuppet(object):
         """
 
         # if close() was not called call it
-        if self._proc is not None:
+        if not self.closed:
             self.close()
-        self._proc = None
 
         if self._log is not None and os.path.isfile(self._log.name):
             os.remove(self._log.name)
@@ -199,6 +199,12 @@ class FFPuppet(object):
         if self._xvfb is not None:
             self._xvfb.stop()
 
+        # at this point everything should be cleaned up
+        assert self.closed, "self.closed is not True"
+        assert self._proc is None, "self._proc is not None"
+        assert self._remove_profile is None, "self._remove_profile is not None"
+        assert not self._workers, "self._workers is not empty"
+
 
     def close(self):
         """
@@ -207,6 +213,9 @@ class FFPuppet(object):
 
         returns None
         """
+
+        if self.closed:
+            return # already closed
 
         # terminate the browser process
         if self._proc is not None:
@@ -241,6 +250,9 @@ class FFPuppet(object):
         if self._remove_profile and os.path.isdir(self._remove_profile):
             shutil.rmtree(self._remove_profile)
             self._profile = None # a temporary profile was use so reset self._profile
+            self._remove_profile = None
+
+        self.closed = True
 
 
     def get_pid(self):
@@ -277,6 +289,7 @@ class FFPuppet(object):
         if memory_limit is not None and memory_limiter.IMPORT_ERR:
             raise EnvironmentError("Please install psutil")
 
+        self.closed = False
         env = self._create_environ(bin_path)
         launch_timeout = max(launch_timeout, 10) # force 10 seconds minimum launch_timeout
 
