@@ -149,6 +149,10 @@ class FFPuppet(object):
                 env["ASAN_SYMBOLIZER_PATH"] = symbolizer_bin
                 env["MSAN_SYMBOLIZER_PATH"] = symbolizer_bin
 
+        # https://bugzilla.mozilla.org/show_bug.cgi?id=1305151
+        # skia assertions are easily hit and mostly due to precision, disable them.
+        env["MOZ_SKIA_DISABLE_ASSERTS"] = "1"
+
         return env
 
 
