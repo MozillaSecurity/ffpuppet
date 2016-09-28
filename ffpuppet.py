@@ -50,7 +50,7 @@ class LaunchError(Exception):
 
 class FFPuppet(object):
     def __init__(self, use_profile=None, use_valgrind=False, use_windbg=False, use_xvfb=False,
-                 detect_soft_assertions=False):
+                 use_gdb=False, detect_soft_assertions=False):
         self._abort_tokens = set() # tokens used to notify log_scanner to kill the browser process
         self._log = None
         self._platform = platform.system().lower()
@@ -58,6 +58,7 @@ class FFPuppet(object):
         self._profile = use_profile
         self._remove_profile = None # profile that needs to be removed when complete
         self._use_valgrind = use_valgrind
+        self._use_gdb = use_gdb
         self._windbg = use_windbg
         self._workers = list() # collection of threads and processes
         self._xvfb = None
@@ -80,6 +81,13 @@ class FFPuppet(object):
                 raise EnvironmentError("WinDBG only available on Windows")
             if debugger_windbg.IMPORT_ERR:
                 raise EnvironmentError("Please install PyKD")
+
+        if use_gdb:
+            try:
+                with open(os.devnull, "w") as null_fp:
+                    subprocess.call(["gdb", "--version"], stdout=null_fp, stderr=null_fp)
+            except OSError:
+                raise EnvironmentError("Please install GDB")
 
         if use_xvfb:
             if self._platform != "linux":
@@ -340,6 +348,29 @@ class FFPuppet(object):
                 "--trace-children=yes",
                 #"--track-origins=yes",
                 "--vex-iropt-register-updates=allregs-at-mem-access"] + cmd # enable valgrind
+        if self._use_gdb:
+            cmd = [
+                "gdb",
+                "-nx",
+                "-x", os.path.abspath(os.path.join(os.path.dirname(__file__), "cmds.gdb")),
+                "-ex", "run",
+                "-ex", "symbol-file",
+                #"-ex", "symbol-file %s",
+                "-ex", "sharedlibrary",
+                "-ex", "info proc mappings",
+                "-ex", "info threads",
+                "-ex", "shared",
+                "-ex", "info sharedlibrary",
+                "-ex", "backtrace full",
+                "-ex", "info locals",
+                "-ex", "info registers",
+                "-ex", "disassemble",
+                #"-ex", "init-if-undefined $_exitcode = -1", # windows
+                #"-ex", "quit $_exitcode", # windows
+                "-ex", "quit_with_code",
+                "-return-child-result",
+                "-batch",
+                "--args"] + cmd # enable gdb
 
         # clean up existing log file before creating a new one
         if self._log is not None and os.path.isfile(self._log.name):
@@ -497,6 +528,9 @@ def main():
         "-e", "--extension",
         help="Install the fuzzPriv extension (specify path to funfuzz/dom/extension)")
     parser.add_argument(
+        "-g", "--gdb", action="store_true",
+        help="Use GDB")
+    parser.add_argument(
         "-l", "--log",
         help="log file name")
     parser.add_argument(
@@ -535,7 +569,8 @@ def main():
         use_profile=args.profile,
         use_valgrind=args.valgrind,
         use_windbg=args.windbg,
-        use_xvfb=args.xvfb)
+        use_xvfb=args.xvfb,
+        use_gdb=args.gdb)
     try:
         ffp.launch(
             args.binary,
