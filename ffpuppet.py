@@ -168,6 +168,28 @@ class FFPuppet(object):
         self._abort_tokens.add(token)
 
 
+    def clone_log(self, target_file=None):
+        """
+        clone_log(target_file) -> str
+        Create a copy of the current log. The contents will be saved to target_file.
+
+        Return the name of the file containing the cloned log or None on failure
+        """
+
+        # check if there is a log to clone
+        if self._log is None or not os.path.isfile(self._log.name):
+            return None
+
+        if target_file is None:
+            target_file = open_unique()
+            target_file.close()
+            target_file = target_file.name
+
+        shutil.copyfile(self._log.name, target_file)
+
+        return target_file
+
+
     def save_log(self, log_file):
         """
         save_log(log_file) -> None
