@@ -376,6 +376,11 @@ class FFPuppet(object):
                 "-nx",
                 "-x", os.path.abspath(os.path.join(os.path.dirname(__file__), "cmds.gdb")),
                 "-ex", "run",
+                "-ex", "print $_siginfo",
+                "-ex", "info locals",
+                "-ex", "info registers",
+                "-ex", "backtrace full",
+                "-ex", "disassemble",
                 "-ex", "symbol-file",
                 #"-ex", "symbol-file %s",
                 "-ex", "sharedlibrary",
@@ -383,10 +388,6 @@ class FFPuppet(object):
                 "-ex", "info threads",
                 "-ex", "shared",
                 "-ex", "info sharedlibrary",
-                "-ex", "backtrace full",
-                "-ex", "info locals",
-                "-ex", "info registers",
-                "-ex", "disassemble",
                 #"-ex", "init-if-undefined $_exitcode = -1", # windows
                 #"-ex", "quit $_exitcode", # windows
                 "-ex", "quit_with_code",

@@ -1,6 +1,5 @@
 define quit_with_code
   if $_siginfo
-    print $_siginfo
     quit 128+$_siginfo.si_signo
   else
     quit $_exitcode
