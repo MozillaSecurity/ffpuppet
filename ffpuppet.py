@@ -340,7 +340,12 @@ class FFPuppet(object):
 
         if extension is not None:
             os.mkdir(os.path.join(self._profile, "extensions"))
-            os.symlink(os.path.abspath(extension), os.path.join(self._profile, "extensions", "domfuzz@squarefree.com"))
+            if os.path.isfile(extension) and extension.endswith(".xpi"):
+                shutil.copyfile(extension, os.path.join(self._profile, "extensions", os.path.basename(extension)))
+            elif os.path.isdir(extension):
+                os.symlink(os.path.abspath(extension), os.path.join(self._profile, "extensions", "domfuzz@squarefree.com"))
+            else:
+                raise RuntimeError("Unknown extension: %s" % extension)
 
         # Performing the bootstrap helps guarantee that the browser
         # will be loaded and ready to accept input when launch() returns
