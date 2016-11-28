@@ -302,7 +302,7 @@ class FFPuppet(object):
 
 
     def launch(self, bin_path, launch_timeout=300, location=None, memory_limit=None,
-               prefs_js=None, safe_mode=False, extension=None):
+               prefs_js=None, safe_mode=False, extension=None, inject=False):
         """
         launch(bin_path[, launch_timeout, location, memory_limit, pref_js, safe_mode, extension])
         Launch a new browser process using the binary specified with bin_path. Optional limits
@@ -344,15 +344,23 @@ class FFPuppet(object):
 
         # Performing the bootstrap helps guarantee that the browser
         # will be loaded and ready to accept input when launch() returns
-        init_soc = self._bootstrap_start(timeout=launch_timeout)
+        if not inject:
+            init_soc = self._bootstrap_start(timeout=launch_timeout)
 
         # build Firefox launch command
         cmd = [
             bin_path,
             "-no-remote",
             "-profile",
-            self._profile,
-            "http://127.0.0.1:%d" % init_soc.getsockname()[1]]
+            self._profile]
+
+        if inject:
+            if not extension:
+                raise RuntimeError("Can't use -fuzzinject without domfuzz extension")
+            cmd.append("-fuzzinject")
+            cmd.append(location)
+        else:
+            cmd.append("http://127.0.0.1:%d" % init_soc.getsockname()[1])
 
         if safe_mode:
             cmd.append("-safe-mode")
@@ -413,7 +421,8 @@ class FFPuppet(object):
             stderr=self._log,
             stdout=self._log)
 
-        self._bootstrap_finish(init_soc, timeout=launch_timeout, url=location)
+        if not inject:
+            self._bootstrap_finish(init_soc, timeout=launch_timeout, url=location)
 
         if memory_limit is not None:
             # launch memory monitor thread
