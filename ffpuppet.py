@@ -541,7 +541,7 @@ class FFPuppet(object):
         returns exit code if process exits and None if timeout expired
         """
         timer_exp = time.time() + timeout
-        while True:
+        while self._proc is not None:
             if timeout > 0 and timer_exp <= time.time():
                 break
             if self._proc.poll() is not None:
