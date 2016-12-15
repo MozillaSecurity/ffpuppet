@@ -152,7 +152,10 @@ class FFPuppet(object):
 
         # look for llvm-symbolizer bundled with firefox build
         if "ASAN_SYMBOLIZER_PATH" not in env:
-            symbolizer_bin = os.path.join(os.path.dirname(target_bin), "llvm-symbolizer")
+            if self._platform == "windows":
+                symbolizer_bin = os.path.join(os.path.dirname(target_bin), "llvm-symbolizer.exe")
+            else:
+                symbolizer_bin = os.path.join(os.path.dirname(target_bin), "llvm-symbolizer")
             if os.path.isfile(symbolizer_bin):
                 env["ASAN_SYMBOLIZER_PATH"] = symbolizer_bin
                 env["MSAN_SYMBOLIZER_PATH"] = symbolizer_bin
