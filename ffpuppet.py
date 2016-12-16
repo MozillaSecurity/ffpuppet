@@ -341,12 +341,14 @@ class FFPuppet(object):
             # since this is a temp profile director it should be removed
             self._remove_profile = self._profile
 
+        # XXX: fuzzpriv extension support
+        # should be removed when bug 1322400 is resolved if it is no longer used
         if extension is not None:
             os.mkdir(os.path.join(self._profile, "extensions"))
             if os.path.isfile(extension) and extension.endswith(".xpi"):
                 shutil.copyfile(extension, os.path.join(self._profile, "extensions", os.path.basename(extension)))
             elif os.path.isdir(extension):
-                os.symlink(os.path.abspath(extension), os.path.join(self._profile, "extensions", "domfuzz@squarefree.com"))
+                shutil.copytree(os.path.abspath(extension), os.path.join(self._profile, "extensions", "domfuzz@squarefree.com"))
             else:
                 raise RuntimeError("Unknown extension: %s" % extension)
 
