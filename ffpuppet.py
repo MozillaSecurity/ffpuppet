@@ -208,13 +208,11 @@ class FFPuppet(object):
         if self._log is None:
             return
 
-        # move log to location specified by log_file
+        # copy log to location specified by log_file
         if os.path.isfile(self._log.name):
             if not os.path.dirname(log_file):
                 log_file = os.path.join(os.getcwd(), log_file)
-            shutil.move(self._log.name, log_file)
-
-        self._log = None
+            shutil.copy(self._log.name, log_file)
 
 
     def clean_up(self):
