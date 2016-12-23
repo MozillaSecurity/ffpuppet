@@ -236,6 +236,7 @@ class FFPuppet(object):
         # close Xvfb
         if self._xvfb is not None:
             self._xvfb.stop()
+            self._xvfb = None
 
         # at this point everything should be cleaned up
         assert self.closed, "self.closed is not True"
