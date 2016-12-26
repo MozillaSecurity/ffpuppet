@@ -132,8 +132,9 @@ class FFPuppet(object):
         # https://github.com/google/sanitizers/wiki/AddressSanitizerFlags
         if "ASAN_OPTIONS" not in env:
             env["ASAN_OPTIONS"] = ":".join((
+                "abort_on_error=true",
                 #"alloc_dealloc_mismatch=false", # different defaults per OS
-                "allocator_may_return_null=false",
+                "allocator_may_return_null=true",
                 "check_initialization_order=true",
                 #"check_malloc_usable_size=false", # defaults True
                 #"detect_stack_use_after_return=true", # can't launch firefox with this enabled
