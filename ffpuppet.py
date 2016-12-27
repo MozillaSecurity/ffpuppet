@@ -326,6 +326,12 @@ class FFPuppet(object):
         if not os.path.isfile(bin_path) or not os.access(bin_path, os.X_OK):
             raise IOError("%s is not an executable" % bin_path)
 
+        if location is not None:
+            if os.path.isfile(location):
+                location = 'file:%s' % urllib.pathname2url(os.path.abspath(location))
+            elif re.match(r"http(s)?://", location, re.IGNORECASE) is None:
+                raise IOError("Cannot find %s" % os.path.abspath(location))
+
         if memory_limit is not None and memory_limiter.IMPORT_ERR:
             raise EnvironmentError("Please install psutil")
 
@@ -507,9 +513,6 @@ class FFPuppet(object):
             # handle browser test connection incoming data
             while len(conn.recv(4096)) == 4096:
                 pass
-
-            if url is not None and os.path.isfile(url):
-                url = 'file:%s' % urllib.pathname2url(os.path.abspath(url))
 
             # redirect to about:blank
             body = "<script>window.onload=function(){window.location='%s'}</script>" % (
