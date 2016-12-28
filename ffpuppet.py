@@ -376,6 +376,11 @@ class FFPuppet(object):
         if safe_mode:
             self.cmd.append("-safe-mode")
 
+        if args:
+            self.cmd.extend(args)
+        elif not self._prepare_only:
+            self.cmd.append("http://127.0.0.1:%d" % init_soc.getsockname()[1])
+
         if self._use_valgrind:
             self.cmd = [
                 "valgrind",
