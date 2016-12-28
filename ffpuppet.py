@@ -308,17 +308,37 @@ class FFPuppet(object):
     def launch(self, bin_path, launch_timeout=300, location=None, memory_limit=None,
                prefs_js=None, safe_mode=False, extension=None, args=None):
         """
-        launch(bin_path[, launch_timeout, location, memory_limit, pref_js, safe_mode, extension])
-        Launch a new browser process using the binary specified with bin_path. Optional limits
-        can be set for time to launch the browser by setting launch_timeout (default: 300 seconds)
-        or the maximum amount of memory the browser can use by setting memory_limit (default: None).
-        The URL loaded by default can be set with location. prefs_js allows a custom prefs.js
-        file to be specified. safe_mode is a boolean indicating whether or not to launch the
-        browser in "safe mode". WARNING: Launching in safe mode blocks with a dialog that must be
-        dismissed manually. Extension indicates the path to the DOMFuzz fuzzPriv extension to be
-        installed.
-
-        returns None
+        Launch a new browser process.
+        
+        @type bin_path: String
+        @param bin_path: Path to the Firefox binary
+        
+        @type launch_timeout: int
+        @param launch_timeout: Timeout in seconds for launching the browser
+        
+        @type location: String
+        @param location: URL to navigate to after successfully starting up the browser
+                         This parameter remains unused if @args is specified instead.
+        
+        @type memory_limit: int
+        @param memory_limit: Memory limit in bytes. Browser will be terminated if its memory usage
+                             exceeds the amount specified here.
+        
+        @type prefs_js: String
+        @param prefs_js: Path to a prefs.js file to install in the Firefox profile.
+        
+        @type safe_mode: bool
+        @param safe_mode: Launch Firefox in safe mode. WARNING: Launching in safe mode blocks with
+                          a dialog that must be dismissed manually.
+        
+        @type extension: String
+        @param extension: Path to an extension (e.g. DOMFuzz fuzzPriv extension) to be installed.
+        
+        @type args: list
+        @param args: Additional arguments passed to Firefox. Specifying this overrides @location.
+        
+        @rtype: None
+        @return: None
         """
         if self._proc is not None:
             raise LaunchError("Process is already running")
