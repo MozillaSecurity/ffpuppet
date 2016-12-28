@@ -64,6 +64,8 @@ class FFPuppet(object):
         self._workers = list() # collection of threads and processes
         self._xvfb = None
         self.closed = True # False once launch() is called and True once close() is called
+        self.cmd = None # Last command line used to start the process
+        self.env = None # Last environment used to start the process
 
         if self._profile is not None:
             if not os.path.isdir(self._profile):
@@ -329,7 +331,7 @@ class FFPuppet(object):
             raise EnvironmentError("Please install psutil")
 
         self.closed = False
-        env = self._create_environ(bin_path)
+        self.env = self._create_environ(bin_path)
         launch_timeout = max(launch_timeout, 10) # force 10 seconds minimum launch_timeout
 
         # create temp profile directory if needed
@@ -357,17 +359,17 @@ class FFPuppet(object):
             init_soc = self._bootstrap_start(timeout=launch_timeout)
 
         # build Firefox launch command
-        cmd = [
+        self.cmd = [
             bin_path,
             "-no-remote",
             "-profile",
             self._profile]
 
         if safe_mode:
-            cmd.append("-safe-mode")
+            self.cmd.append("-safe-mode")
 
         if self._use_valgrind:
-            cmd = [
+            self.cmd = [
                 "valgrind",
                 "-q",
                 #"---error-limit=no",
@@ -378,9 +380,10 @@ class FFPuppet(object):
                 #"--leak-check=full",
                 "--trace-children=yes",
                 #"--track-origins=yes",
-                "--vex-iropt-register-updates=allregs-at-mem-access"] + cmd # enable valgrind
+                "--vex-iropt-register-updates=allregs-at-mem-access"] + self.cmd # enable valgrind
+
         if self._use_gdb:
-            cmd = [
+            self.cmd = [
                 "gdb",
                 "-nx",
                 "-x", os.path.abspath(os.path.join(os.path.dirname(__file__), "cmds.gdb")),
@@ -402,7 +405,8 @@ class FFPuppet(object):
                 "-ex", "quit_with_code",
                 "-return-child-result",
                 "-batch",
-                "--args"] + cmd # enable gdb
+                "--args"] + self.cmd # enable gdb
+
         if self._prepare_only:
             return
 
@@ -412,14 +416,14 @@ class FFPuppet(object):
 
         # open log
         self._log = open_unique()
-        self._log.write("Launch command: %s\n\n" % " ".join(cmd))
+        self._log.write("Launch command: %s\n\n" % " ".join(self.cmd))
         self._log.flush()
 
         # launch the browser
         self._proc = subprocess.Popen(
-            cmd,
+            self.cmd,
             creationflags=subprocess.CREATE_NEW_PROCESS_GROUP if self._platform == "windows" else 0,
-            env=env,
+            env=self.env,
             shell=False,
             stderr=self._log,
             stdout=self._log)
