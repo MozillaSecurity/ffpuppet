@@ -50,10 +50,11 @@ class LaunchError(Exception):
 
 class FFPuppet(object):
     def __init__(self, use_profile=None, use_valgrind=False, use_windbg=False, use_xvfb=False,
-                 use_gdb=False, detect_soft_assertions=False):
+                 use_gdb=False, detect_soft_assertions=False, prepare_only=False):
         self._abort_tokens = set() # tokens used to notify log_scanner to kill the browser process
         self._log = None
         self._platform = platform.system().lower()
+        self._prepare_only = prepare_only
         self._proc = None
         self._profile = use_profile
         self._remove_profile = None # profile that needs to be removed when complete
@@ -303,7 +304,7 @@ class FFPuppet(object):
 
 
     def launch(self, bin_path, launch_timeout=300, location=None, memory_limit=None,
-               prefs_js=None, safe_mode=False, extension=None, inject=False):
+               prefs_js=None, safe_mode=False, extension=None, args=None):
         """
         launch(bin_path[, launch_timeout, location, memory_limit, pref_js, safe_mode, extension])
         Launch a new browser process using the binary specified with bin_path. Optional limits
@@ -352,7 +353,7 @@ class FFPuppet(object):
 
         # Performing the bootstrap helps guarantee that the browser
         # will be loaded and ready to accept input when launch() returns
-        if not inject:
+        if args is None and not self._prepare_only:
             init_soc = self._bootstrap_start(timeout=launch_timeout)
 
         # build Firefox launch command
@@ -361,14 +362,6 @@ class FFPuppet(object):
             "-no-remote",
             "-profile",
             self._profile]
-
-        if inject:
-            if not extension:
-                raise RuntimeError("Can't use -fuzzinject without domfuzz extension")
-            cmd.append("-fuzzinject")
-            cmd.append(location)
-        else:
-            cmd.append("http://127.0.0.1:%d" % init_soc.getsockname()[1])
 
         if safe_mode:
             cmd.append("-safe-mode")
@@ -410,6 +403,8 @@ class FFPuppet(object):
                 "-return-child-result",
                 "-batch",
                 "--args"] + cmd # enable gdb
+        if self._prepare_only:
+            return
 
         # clean up existing log file before creating a new one
         if self._log is not None and os.path.isfile(self._log.name):
@@ -429,7 +424,7 @@ class FFPuppet(object):
             stderr=self._log,
             stdout=self._log)
 
-        if not inject:
+        if not args:
             self._bootstrap_finish(init_soc, timeout=launch_timeout, url=location)
 
         if memory_limit is not None:
