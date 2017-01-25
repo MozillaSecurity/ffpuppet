@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
 import os.path
-import re
 import sys
 import time
 import urllib.request
@@ -21,27 +20,56 @@ def main():
     assert url is not None
     # read prefs to see how to run
     cmd = None
-    with open(os.path.join(profile, 'prefs.js')) as prefs_js:
-        for line in prefs_js:
-            if line.startswith('user_pref'):
-                pass
-            elif line.startswith('#'):
-                line = line.lstrip('#').strip()
-                if line == 'fftest_hang':
-                    cmd = 'hang'
-                # don't worry about unknown values
-            elif line.strip():
-                raise RuntimeError('unknown value in prefs.js: %s' % line)
+    if profile is not None:
+        with open(os.path.join(profile, 'prefs.js')) as prefs_js:
+            for line in prefs_js:
+                if line.startswith('user_pref'):
+                    pass
+                elif line.startswith('#'):
+                    line = line.lstrip('#').strip()
+                    if line == 'fftest_hang':
+                        cmd = 'hang'
+                    elif line == 'fftest_startup_crash':
+                        cmd = 'start_crash'
+                    elif line == 'fftest_memory':
+                        cmd = 'memory'
+                    elif line == 'fftest_soft_assert':
+                        cmd = 'soft_assert'
+                    # don't worry about unknown values
+                elif line.strip():
+                    raise RuntimeError('unknown value in prefs.js: %s' % line)
+    #sys.stdout.write('cmd: %s\n' % cmd)
+    #sys.stdout.flush()
     if cmd == 'hang':
-        print('hanging')
+        sys.stdout.write('hanging\n')
+        sys.stdout.flush()
         while True:
             time.sleep(60)
-    initial_req = urllib.request.urlopen(url).read().decode("utf-8")
-    redirect = re.search(r"window.location='([^']+)'", initial_req).group(1)
-    real_req = urllib.request.urlopen(redirect).read().decode("utf-8")
-    print(real_req)
+    elif cmd == 'start_crash':
+        sys.stdout.write('simulating start up crash\n')
+        sys.stdout.flush()
+        sys.exit(1)
 
+    if url is not None:
+        with urllib.request.urlopen(url) as conn:
+            sys.stdout.write(conn.read().decode('utf-8'))
+            sys.stdout.write('\n')
+            sys.stdout.flush()
+
+    if cmd == 'memory':
+        sys.stdout.write('simulating high memory usage\n')
+        sys.stdout.flush()
+        blob = []
+        with open(os.devnull, "r") as r_fp:
+            for _ in range(200):
+                blob.append(r_fp.read(1024*1024))
+        time.sleep(10) # wait to be terminated
+    elif cmd == 'soft_assert':
+        sys.stdout.write('simulating soft assertion\n')
+        sys.stdout.write('###!!! ASSERTION: test\n')
+        sys.stdout.flush()
+        time.sleep(1) # wait to be terminated
+        sys.exit(0)
 
 if __name__ == '__main__':
     main()
-
