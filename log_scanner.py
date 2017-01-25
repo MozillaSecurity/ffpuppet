@@ -32,14 +32,21 @@ def _run(puppet, log_file):
     """
 
     prev_offset = offset = 0
+    prev_size = 0
     token_found = None
     while puppet.is_running():
         if not os.path.isfile(puppet._log.name):
             return
 
+        # check if file has new data
+        if prev_size == os.path.getsize(puppet._log.name):
+            time.sleep(0.1)
+            continue
+
         with open(puppet._log.name, "r") as scan_fp:
             scan_fp.seek(offset, os.SEEK_SET)
             data = scan_fp.read()
+            prev_size = scan_fp.tell()
 
         # update offset for next pass
         last_line_position = data.rfind("\n")
