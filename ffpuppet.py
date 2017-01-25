@@ -497,7 +497,7 @@ class FFPuppet(object):
             # wait for browser test connection
             while True:
                 try:
-                    init_soc.settimeout(1.0)
+                    init_soc.settimeout(0.1)
                     conn, _ = init_soc.accept()
                     conn.settimeout(timeout)
                 except socket.timeout:
@@ -514,18 +514,10 @@ class FFPuppet(object):
             while len(conn.recv(4096)) == 4096:
                 pass
 
-            # redirect to about:blank
-            body = "<script>window.onload=function(){window.location='%s'}</script>" % (
-                "about:blank" if url is None else url)
-
-            # send response
             conn.sendall(
-                "HTTP/1.1 200 OK\r\n" \
-                "Cache-Control: max-age=0, no-cache\r\n" \
-                "Content-Length: %s\r\n" \
-                "Content-Type: text/html; charset=UTF-8\r\n" \
-                "Connection: close\r\n\r\n%s" % (len(body), body)
-            )
+                "HTTP/1.1 307 Temporary Redirect\r\n" \
+                "Location: %s\r\n" \
+                "Connection: close\r\n\r\n" % ("http://" if url is None else url))
 
         except socket.error:
             raise LaunchError("Failed to launch browser")
