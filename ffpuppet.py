@@ -517,7 +517,7 @@ class FFPuppet(object):
             conn.sendall(
                 "HTTP/1.1 307 Temporary Redirect\r\n" \
                 "Location: %s\r\n" \
-                "Connection: close\r\n\r\n" % ("http://" if url is None else url))
+                "Connection: close\r\n" % ("http://" if url is None else url))
 
         except socket.error:
             raise LaunchError("Failed to launch browser")
