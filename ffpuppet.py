@@ -328,7 +328,7 @@ class FFPuppet(object):
 
         if location is not None:
             if os.path.isfile(location):
-                location = 'file:%s' % urllib.pathname2url(os.path.abspath(location))
+                location = 'file://%s' % urllib.pathname2url(os.path.abspath(location))
             elif re.match(r"http(s)?://", location, re.IGNORECASE) is None:
                 raise IOError("Cannot find %s" % os.path.abspath(location))
 
@@ -514,10 +514,14 @@ class FFPuppet(object):
             while len(conn.recv(4096)) == 4096:
                 pass
 
+            response = "<head>" \
+                "<meta http-equiv=\"refresh\" content=\"0; url=%s\"/>" \
+                "</head>" % ("about:blank" if url is None else url)
             conn.sendall(
-                "HTTP/1.1 307 Temporary Redirect\r\n" \
-                "Location: %s\r\n" \
-                "Connection: close\r\n" % ("http://" if url is None else url))
+                "HTTP/1.1 200 OK\r\n" \
+                "Content-Length: text/html\r\n" \
+                "Content-Type: %s\r\n" \
+                "Connection: close\r\n\r\n%s" % (len(response), response))
 
         except socket.error:
             raise LaunchError("Failed to launch browser")
