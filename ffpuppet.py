@@ -519,8 +519,8 @@ class FFPuppet(object):
                 "</head>" % ("about:blank" if url is None else url)
             conn.sendall(
                 "HTTP/1.1 200 OK\r\n" \
-                "Content-Length: text/html\r\n" \
-                "Content-Type: %s\r\n" \
+                "Content-Length: %d\r\n" \
+                "Content-Type: text/html\r\n" \
                 "Connection: close\r\n\r\n%s" % (len(response), response))
 
         except socket.error:
