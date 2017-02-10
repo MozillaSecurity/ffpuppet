@@ -175,10 +175,12 @@ class FFPuppet(object):
         self._abort_tokens.add(token)
 
 
-    def clone_log(self, target_file=None):
+    def clone_log(self, target_file=None, offset=None):
         """
         clone_log(target_file) -> str
         Create a copy of the current log. The contents will be saved to target_file.
+
+        If offset is given, only copy from the given offset.
 
         Return the name of the file containing the cloned log or None on failure
         """
@@ -187,12 +189,18 @@ class FFPuppet(object):
         if self._log is None or not os.path.isfile(self._log.name):
             return None
 
-        if target_file is None:
-            target_file = open_unique()
-            target_file.close()
-            target_file = target_file.name
-
-        shutil.copyfile(self._log.name, target_file)
+        with open(self._log.name, "rb") as logfp:
+            if offset is not None:
+                logfp.seek(offset)
+            if target_file is None:
+                cpyfp = open_unique()
+                target_file = cpyfp.name
+            else:
+                cpyfp = open(target_file, "wb")
+            try:
+                shutil.copyfileobj(logfp, cpyfp)
+            finally:
+                cpyfp.close()
 
         return target_file
 

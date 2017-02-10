@@ -198,11 +198,20 @@ class PuppetTests(TestCase):
         try:
             ffp.launch('testff.py')
             # make sure logs are available
-            self.assertIsNotNone(ffp.clone_log())
+            self.assertEqual(ffp.clone_log(target_file=self.tmpfn), self.tmpfn)
+            with open(self.tmpfn, "rb") as tmpfp:
+                orig = tmpfp.read()
+            self.assertEqual(ffp.clone_log(target_file=self.tmpfn, offset=10), self.tmpfn)
+            self.assertGreater(len(orig), 10)
+            with open(self.tmpfn, "rb") as tmpfp:
+                self.assertEqual(tmpfp.read(), orig[10:])
         finally:
             ffp.close()
             # make sure logs are available
             self.assertEqual(ffp.clone_log(target_file=self.tmpfn), self.tmpfn)
+            with open(self.tmpfn, "rb") as tmpfp:
+                self.assertTrue(tmpfp.read().startswith(orig))
+                self.assertGreater(tmpfp.tell(), len(orig))
             ffp.clean_up()
             # verify clean_up() removed the logs
             self.assertIsNone(ffp.clone_log(target_file=self.tmpfn))
