@@ -50,11 +50,10 @@ class LaunchError(Exception):
 
 class FFPuppet(object):
     def __init__(self, use_profile=None, use_valgrind=False, use_windbg=False, use_xvfb=False,
-                 use_gdb=False, detect_soft_assertions=False, prepare_only=False):
+                 use_gdb=False, detect_soft_assertions=False):
         self._abort_tokens = set() # tokens used to notify log_scanner to kill the browser process
         self._log = None
         self._platform = platform.system().lower()
-        self._prepare_only = prepare_only
         self._proc = None
         self._profile = use_profile
         self._remove_profile = None # profile that needs to be removed when complete
@@ -64,8 +63,6 @@ class FFPuppet(object):
         self._workers = list() # collection of threads and processes
         self._xvfb = None
         self.closed = True # False once launch() is called and True once close() is called
-        self.cmd = None # Last command line used to start the process
-        self.env = None # Last environment used to start the process
 
         if self._profile is not None:
             if not os.path.isdir(self._profile):
@@ -117,7 +114,17 @@ class FFPuppet(object):
         if detect_soft_assertions:
             self.add_abort_token("###!!! ASSERTION:")
 
-    def _create_environ(self, target_bin):
+
+    def get_environ(self, target_bin):
+        """
+        Get the string environment that is used when launching the browser.
+
+        @type bin_path: String
+        @param bin_path: Path to the Firefox binary
+
+        @rtype: dict
+        @return: A dict representing the string environment
+        """
         env = os.environ
         if self._use_valgrind:
             # https://developer.gimp.org/api/2.0/glib/glib-running.html#G_DEBUG
@@ -315,102 +322,32 @@ class FFPuppet(object):
         return None if self._proc is None else self._proc.pid
 
 
-    def launch(self, bin_path, launch_timeout=300, location=None, memory_limit=None,
-               prefs_js=None, safe_mode=False, extension=None, args=None):
+    def build_launch_cmd(self, bin_path, additional_args=None):
         """
-        Launch a new browser process.
-        
+        Build a command that can be used to launch the browser.
+
         @type bin_path: String
         @param bin_path: Path to the Firefox binary
-        
-        @type launch_timeout: int
-        @param launch_timeout: Timeout in seconds for launching the browser
-        
-        @type location: String
-        @param location: URL to navigate to after successfully starting up the browser
-                         This parameter remains unused if @args is specified instead.
-        
-        @type memory_limit: int
-        @param memory_limit: Memory limit in bytes. Browser will be terminated if its memory usage
-                             exceeds the amount specified here.
-        
-        @type prefs_js: String
-        @param prefs_js: Path to a prefs.js file to install in the Firefox profile.
-        
-        @type safe_mode: bool
-        @param safe_mode: Launch Firefox in safe mode. WARNING: Launching in safe mode blocks with
-                          a dialog that must be dismissed manually.
-        
-        @type extension: String
-        @param extension: Path to an extension (e.g. DOMFuzz fuzzPriv extension) to be installed.
-        
-        @type args: list
-        @param args: Additional arguments passed to Firefox. Specifying this overrides @location.
-        
-        @rtype: None
-        @return: None
+
+        @type additional_args: list
+        @param additional_args: Additional arguments passed to Firefox.
+
+        @rtype: list
+        @return: List of arguments that make up the launch command
         """
-        if self._proc is not None:
-            raise LaunchError("Process is already running")
-
-        bin_path = os.path.abspath(bin_path)
-        if not os.path.isfile(bin_path) or not os.access(bin_path, os.X_OK):
-            raise IOError("%s is not an executable" % bin_path)
-
-        if location is not None:
-            if os.path.isfile(location):
-                location = 'file://%s' % urllib.pathname2url(os.path.abspath(location))
-            elif re.match(r"http(s)?://", location, re.IGNORECASE) is None:
-                raise IOError("Cannot find %s" % os.path.abspath(location))
-
-        if memory_limit is not None and memory_limiter.IMPORT_ERR:
-            raise EnvironmentError("Please install psutil")
-
-        self.closed = False
-        self.env = self._create_environ(bin_path)
-        launch_timeout = max(launch_timeout, 10) # force 10 seconds minimum launch_timeout
-
-        # create temp profile directory if needed
-        if self._profile is None:
-            self._profile = tempfile.mkdtemp(prefix="ffprof_")
-            if prefs_js:
-                shutil.copyfile(prefs_js, os.path.join(self._profile, "prefs.js"))
-            # since this is a temp profile director it should be removed
-            self._remove_profile = self._profile
-
-        # XXX: fuzzpriv extension support
-        # should be removed when bug 1322400 is resolved if it is no longer used
-        if extension is not None:
-            os.mkdir(os.path.join(self._profile, "extensions"))
-            if os.path.isfile(extension) and extension.endswith(".xpi"):
-                shutil.copyfile(extension, os.path.join(self._profile, "extensions", os.path.basename(extension)))
-            elif os.path.isdir(extension):
-                shutil.copytree(os.path.abspath(extension), os.path.join(self._profile, "extensions", "domfuzz@squarefree.com"))
-            else:
-                raise RuntimeError("Unknown extension: %s" % extension)
-
-        # Performing the bootstrap helps guarantee that the browser
-        # will be loaded and ready to accept input when launch() returns
-        if args is None and not self._prepare_only:
-            init_soc = self._bootstrap_start(timeout=launch_timeout)
-
-        # build Firefox launch command
-        self.cmd = [
+        cmd = [
             bin_path,
             "-no-remote",
             "-profile",
             self._profile]
 
-        if safe_mode:
-            self.cmd.append("-safe-mode")
-
-        if args:
-            self.cmd.extend(args)
-        elif not self._prepare_only:
-            self.cmd.append("http://127.0.0.1:%d" % init_soc.getsockname()[1])
+        if additional_args:
+            if not isinstance(additional_args, list):
+                raise TypeError("additional_args must be of type 'list'")
+            cmd.extend(additional_args)
 
         if self._use_valgrind:
-            self.cmd = [
+            cmd = [
                 "valgrind",
                 "-q",
                 #"---error-limit=no",
@@ -421,10 +358,10 @@ class FFPuppet(object):
                 #"--leak-check=full",
                 "--trace-children=yes",
                 #"--track-origins=yes",
-                "--vex-iropt-register-updates=allregs-at-mem-access"] + self.cmd # enable valgrind
+                "--vex-iropt-register-updates=allregs-at-mem-access"] + cmd
 
         if self._use_gdb:
-            self.cmd = [
+            cmd = [
                 "gdb",
                 "-nx",
                 "-x", os.path.abspath(os.path.join(os.path.dirname(__file__), "cmds.gdb")),
@@ -446,10 +383,115 @@ class FFPuppet(object):
                 "-ex", "quit_with_code",
                 "-return-child-result",
                 "-batch",
-                "--args"] + self.cmd # enable gdb
+                "--args"] + cmd # enable gdb
 
-        if self._prepare_only:
-            return
+        return cmd
+
+
+    def create_profile(self, extension=None, prefs_js=None):
+        """
+        Create a profile to be used with Firefox
+
+        @type extension: String
+        @param extension: Path to an extension (e.g. DOMFuzz fuzzPriv extension) to be installed.
+
+        @type prefs_js: String
+        @param prefs_js: Path to a prefs.js file to install in the Firefox profile.
+
+        @rtype: None
+        @return: None
+        """
+        self._profile = tempfile.mkdtemp(prefix="ffprof_")
+        # since this is a temporary profile directory it should be removed later
+        self._remove_profile = self._profile
+
+        if prefs_js is not None:
+            if not os.path.isfile(prefs_js):
+                raise IOError("prefs.js file does not exist: %r" % prefs_js)
+            shutil.copyfile(prefs_js, os.path.join(self._profile, "prefs.js"))
+
+        # XXX: fuzzpriv extension support
+        # should be removed when bug 1322400 is resolved if it is no longer used
+        if extension is not None:
+            os.mkdir(os.path.join(self._profile, "extensions"))
+            if os.path.isfile(extension) and extension.endswith(".xpi"):
+                shutil.copyfile(
+                    extension,
+                    os.path.join(self._profile, "extensions", os.path.basename(extension)))
+            elif os.path.isdir(extension):
+                shutil.copytree(
+                    os.path.abspath(extension),
+                    os.path.join(self._profile, "extensions", "domfuzz@squarefree.com"))
+            else:
+                raise RuntimeError("Unknown extension: %s" % extension)
+
+
+    def launch(self, bin_path, launch_timeout=300, location=None, memory_limit=None,
+               prefs_js=None, safe_mode=False, extension=None):
+        """
+        Launch a new browser process.
+        
+        @type bin_path: String
+        @param bin_path: Path to the Firefox binary
+        
+        @type launch_timeout: int
+        @param launch_timeout: Timeout in seconds for launching the browser
+        
+        @type location: String
+        @param location: URL to navigate to after successfully starting up the browser
+        
+        @type memory_limit: int
+        @param memory_limit: Memory limit in bytes. Browser will be terminated if its memory usage
+                             exceeds the amount specified here.
+        
+        @type prefs_js: String
+        @param prefs_js: Path to a prefs.js file to install in the Firefox profile.
+        
+        @type safe_mode: bool
+        @param safe_mode: Launch Firefox in safe mode. WARNING: Launching in safe mode blocks with
+                          a dialog that must be dismissed manually.
+        
+        @type extension: String
+        @param extension: Path to an extension (e.g. DOMFuzz fuzzPriv extension) to be installed.
+        
+        
+        @rtype: None
+        @return: None
+        """
+        if self._proc is not None:
+            raise LaunchError("Process is already running")
+
+        bin_path = os.path.abspath(bin_path)
+        if not os.path.isfile(bin_path) or not os.access(bin_path, os.X_OK):
+            raise IOError("%s is not an executable" % bin_path)
+
+        if location is not None:
+            if os.path.isfile(location):
+                location = "file://%s" % urllib.pathname2url(os.path.abspath(location))
+            elif re.match(r"http(s)?://", location, re.IGNORECASE) is None:
+                raise IOError("Cannot find %s" % os.path.abspath(location))
+
+        if memory_limit is not None and memory_limiter.IMPORT_ERR:
+            raise EnvironmentError("Please install psutil")
+
+        self.closed = False
+        launch_timeout = max(launch_timeout, 10) # force 10 seconds minimum launch_timeout
+
+        # create and modify the profile only if one is not specified
+        if self._profile is None:
+            self.create_profile(extension=extension, prefs_js=prefs_js)
+
+        # performing the bootstrap helps guarantee that the browser
+        # will be loaded and ready to accept input when launch() returns
+        init_soc = self._bootstrap_start(timeout=launch_timeout)
+
+        launch_args = ["http://127.0.0.1:%d" % init_soc.getsockname()[1]]
+        if safe_mode:
+            launch_args.insert(0, "-safe-mode")
+
+        cmd = self.build_launch_cmd(
+            bin_path,
+            additional_args=launch_args)
 
         # clean up existing log file before creating a new one
         if self._log is not None and os.path.isfile(self._log.name):
@@ -457,20 +499,19 @@ class FFPuppet(object):
 
         # open log
         self._log = open_unique()
-        self._log.write("Launch command: %s\n\n" % " ".join(self.cmd))
+        self._log.write("Launch command: %s\n\n" % " ".join(cmd))
         self._log.flush()
 
         # launch the browser
         self._proc = subprocess.Popen(
-            self.cmd,
+            cmd,
             creationflags=subprocess.CREATE_NEW_PROCESS_GROUP if self._platform == "windows" else 0,
-            env=self.env,
+            env=self.get_environ(bin_path),
             shell=False,
             stderr=self._log,
             stdout=self._log)
 
-        if not args:
-            self._bootstrap_finish(init_soc, timeout=launch_timeout, url=location)
+        self._bootstrap_finish(init_soc, timeout=launch_timeout, url=location)
 
         if memory_limit is not None:
             # launch memory monitor thread
