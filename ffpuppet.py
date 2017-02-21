@@ -278,7 +278,13 @@ class FFPuppet(object):
         # terminate the browser process
         if self._proc is not None:
             if self._proc.poll() is None:
-                self._proc.terminate()
+                if self._use_valgrind:
+                    # XXX: hack to prevent the browser from hanging when
+                    # running under Valgrind and pressing ctrl+c...
+                    # psutil's terminate() does work though
+                    self._proc.kill()
+                else:
+                    self._proc.terminate()
             self._proc.wait()
             if self._log is not None and not self._log.closed:
                 self._log.write("[Exit code: %r]\n" % self._proc.poll())
@@ -356,7 +362,6 @@ class FFPuppet(object):
                 "--show-possibly-lost=no",
                 "--read-inline-info=yes",
                 #"--leak-check=full",
-                "--trace-children=yes",
                 #"--track-origins=yes",
                 "--vex-iropt-register-updates=allregs-at-mem-access"] + cmd
 
