@@ -244,6 +244,8 @@ class FFPuppet(object):
         returns None
         """
 
+        log.debug("clean_up() called")
+
         # if close() was not called call it
         if not self.closed:
             self.close()
@@ -272,12 +274,15 @@ class FFPuppet(object):
         returns None
         """
 
+        log.debug("close() called")
         if self.closed:
             return # already closed
 
         # terminate the browser process
         if self._proc is not None:
+            log.debug("firefox pid: %r", self._proc.pid)
             if self._proc.poll() is None:
+                log.debug("process needs to be closed")
                 if self._use_valgrind:
                     # XXX: hack to prevent the browser from hanging when
                     # running under Valgrind and pressing ctrl+c...
@@ -287,10 +292,12 @@ class FFPuppet(object):
                     self._proc.terminate()
             self._proc.wait()
             if self._log is not None and not self._log.closed:
-                self._log.write("[Exit code: %r]\n" % self._proc.poll())
+                self._log.write("[Exit code: %r]\n" % self._proc.returncode)
+            log.debug("exit code: %r", self._proc.returncode)
             self._proc = None
 
         # join worker threads and processes
+        log.debug("joining %d worker(s)...", len(self._workers))
         for worker in self._workers:
             worker.join()
             worker_log = None if self._log.closed else worker.collect_log()
@@ -362,7 +369,7 @@ class FFPuppet(object):
                 "--show-possibly-lost=no",
                 "--read-inline-info=yes",
                 #"--leak-check=full",
-                #"--track-origins=yes",
+                "--track-origins=yes",
                 "--vex-iropt-register-updates=allregs-at-mem-access"] + cmd
 
         if self._use_gdb:
@@ -515,8 +522,10 @@ class FFPuppet(object):
             shell=False,
             stderr=self._log,
             stdout=self._log)
+        log.debug("launched firefox with pid: %d", self._proc.pid)
 
         self._bootstrap_finish(init_soc, timeout=launch_timeout, url=location)
+        log.debug("bootstrap complete")
 
         if memory_limit is not None:
             # launch memory monitor thread
@@ -634,11 +643,6 @@ class FFPuppet(object):
 
 
 def main():
-
-    if len(logging.getLogger().handlers) == 0:
-        logging.basicConfig()
-    logging.getLogger().setLevel(logging.INFO)
-
     parser = argparse.ArgumentParser(description="Firefox launcher/wrapper")
     parser.add_argument(
         "binary",
@@ -676,13 +680,23 @@ def main():
         "--valgrind", action="store_true",
         help="Use valgrind")
     parser.add_argument(
+        "-v", "--verbose", action="store_true",
+        help="Output includes debug prints")
+    parser.add_argument(
         "--windbg", action="store_true",
         help="Collect crash log with WinDBG (Windows only)")
     parser.add_argument(
         "--xvfb", action="store_true",
         help="Use xvfb (Linux only)")
-
     args = parser.parse_args()
+
+    # set output verbosity
+    log_level = logging.INFO
+    log_fmt = "[%(asctime)s] %(message)s"
+    if args.verbose:
+        log_level = logging.DEBUG
+        log_fmt = "%(levelname).1s %(name)s [%(asctime)s] %(message)s"
+    logging.basicConfig(format=log_fmt, datefmt="%Y-%m-%d %H:%M:%S", level=log_level)
 
     ffp = FFPuppet(
         use_profile=args.profile,
