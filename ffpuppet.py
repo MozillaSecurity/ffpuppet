@@ -369,7 +369,7 @@ class FFPuppet(object):
                 "--show-possibly-lost=no",
                 "--read-inline-info=yes",
                 #"--leak-check=full",
-                "--track-origins=yes",
+                #"--track-origins=yes",
                 "--vex-iropt-register-updates=allregs-at-mem-access"] + cmd
 
         if self._use_gdb:
