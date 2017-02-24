@@ -135,6 +135,7 @@ class FFPuppet(object):
         env["MOZ_CC_RUN_DURING_SHUTDOWN"] = "1"
         env["MOZ_CRASHREPORTER_DISABLE"] = "1"
         env["MOZ_GDB_SLEEP"] = "0"
+        #env["NO_EM_RESTART"] = "1"  # does this do anything???
         env["XRE_NO_WINDOWS_CRASH_DIALOG"] = "1"
         env["XPCOM_DEBUG_BREAK"] = "warn"
 
@@ -283,13 +284,7 @@ class FFPuppet(object):
             log.debug("firefox pid: %r", self._proc.pid)
             if self._proc.poll() is None:
                 log.debug("process needs to be closed")
-                if self._use_valgrind:
-                    # XXX: hack to prevent the browser from hanging when
-                    # running under Valgrind and pressing ctrl+c...
-                    # psutil's terminate() does work though
-                    self._proc.kill()
-                else:
-                    self._proc.terminate()
+                self._proc.kill()
             self._proc.wait()
             if self._log is not None and not self._log.closed:
                 self._log.write("[Exit code: %r]\n" % self._proc.returncode)
