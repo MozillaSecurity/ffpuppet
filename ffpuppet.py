@@ -282,9 +282,9 @@ class FFPuppet(object):
 
         # terminate the browser process
         if self._proc is not None:
-            assert len(psutil.Process(self._proc.pid).children(recursive=True)) == 0
             log.debug("firefox pid: %r", self._proc.pid)
             if self._proc.poll() is None:
+                assert len(psutil.Process(self._proc.pid).children(recursive=True)) == 0
                 log.debug("process needs to be closed")
                 self._proc.kill()
             self._proc.wait()
