@@ -136,7 +136,7 @@ class FFPuppet(object):
         env["MOZ_CC_RUN_DURING_SHUTDOWN"] = "1"
         env["MOZ_CRASHREPORTER_DISABLE"] = "1"
         env["MOZ_GDB_SLEEP"] = "0"
-        #env["NO_EM_RESTART"] = "1" # keep process attached to terminal, does this do anything???
+        env["NO_EM_RESTART"] = "1" # keep process attached to terminal, does this do anything???
         env["XRE_NO_WINDOWS_CRASH_DIALOG"] = "1"
         env["XPCOM_DEBUG_BREAK"] = "warn"
 
