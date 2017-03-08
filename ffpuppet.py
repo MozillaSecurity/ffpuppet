@@ -248,9 +248,7 @@ class FFPuppet(object):
 
         log.debug("clean_up() called")
 
-        # if close() was not called call it
-        if not self.closed:
-            self.close()
+        self.close()
 
         if self._log is not None and os.path.isfile(self._log.name):
             os.remove(self._log.name)
@@ -277,8 +275,6 @@ class FFPuppet(object):
         """
 
         log.debug("close() called")
-        if self.closed:
-            return # already closed
 
         # terminate the browser process
         if self._proc is not None:
@@ -297,9 +293,9 @@ class FFPuppet(object):
         log.debug("joining %d worker(s)...", len(self._workers))
         for worker in self._workers:
             worker.join()
-            worker_log = None if self._log.closed else worker.collect_log()
 
             # copy worker logs to main log if is exists and contains data
+            worker_log = None if self._log.closed else worker.collect_log()
             if worker_log:
                 self._log.write("\n")
                 self._log.write("[Worker: %s]\n" % worker.name)

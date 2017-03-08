@@ -302,4 +302,19 @@ class PuppetTests(TestCase):
             self.assertTrue(os.path.isdir(prf_dir))
             shutil.rmtree(prf_dir)
 
+    def test_13(self):
+        "test calling close() and clean_up() in mutliple states"
+        prf_dir = tempfile.mkdtemp()
+        ffp = FFPuppet(use_profile=prf_dir)
+        ffp.close()
+        try:
+            ffp.launch('testff.py')
+        finally:
+            ffp.close()
+            ffp.clean_up()
+            ffp.close()
+            ffp.clean_up()
+            self.assertTrue(os.path.isdir(prf_dir))
+            shutil.rmtree(prf_dir)
+
 # TODO: open file url, open missing file url
