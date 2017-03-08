@@ -22,7 +22,6 @@ import debugger_windbg
 import log_scanner
 import memory_limiter
 
-import psutil
 
 log = logging.getLogger("ffpuppet") # pylint: disable=invalid-name
 
@@ -136,7 +135,6 @@ class FFPuppet(object):
         env["MOZ_CC_RUN_DURING_SHUTDOWN"] = "1"
         env["MOZ_CRASHREPORTER_DISABLE"] = "1"
         env["MOZ_GDB_SLEEP"] = "0"
-        env["NO_EM_RESTART"] = "1" # keep process attached to terminal, does this do anything???
         env["XRE_NO_WINDOWS_CRASH_DIALOG"] = "1"
         env["XPCOM_DEBUG_BREAK"] = "warn"
 
@@ -280,9 +278,14 @@ class FFPuppet(object):
         if self._proc is not None:
             log.debug("firefox pid: %r", self._proc.pid)
             if self._proc.poll() is None:
-                assert len(psutil.Process(self._proc.pid).children(recursive=True)) == 0
                 log.debug("process needs to be closed")
-                self._proc.kill()
+                if self._use_valgrind:
+                    # XXX: hack to prevent the browser from hanging when
+                    # running under Valgrind and pressing ctrl+c...
+                    # psutil's terminate() does work though
+                    self._proc.kill()
+                else:
+                    self._proc.terminate()
             self._proc.wait()
             if self._log is not None and not self._log.closed:
                 self._log.write("[Exit code: %r]\n" % self._proc.returncode)
@@ -515,14 +518,10 @@ class FFPuppet(object):
             shell=False,
             stderr=self._log,
             stdout=self._log)
-        p = psutil.Process(self._proc.pid)
         log.debug("launched firefox with pid: %d", self._proc.pid)
 
         self._bootstrap_finish(init_soc, timeout=launch_timeout, url=location)
         log.debug("bootstrap complete")
-
-        assert self._proc.poll() is None
-        assert len(p.children(recursive=True)) == 0
 
         if memory_limit is not None:
             # launch memory monitor thread
