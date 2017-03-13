@@ -418,6 +418,9 @@ class FFPuppet(object):
                 raise IOError("prefs.js file does not exist: %r" % prefs_js)
             shutil.copyfile(prefs_js, os.path.join(self._profile, "prefs.js"))
 
+        with open(os.path.join(self._profile, "times.json"), "w") as times_fp:
+            times_fp.write('{"created":%d}' % (int(time.time()) * 1000))
+
         # XXX: fuzzpriv extension support
         # should be removed when bug 1322400 is resolved if it is no longer used
         if extension is not None:
