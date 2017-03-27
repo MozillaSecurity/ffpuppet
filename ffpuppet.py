@@ -647,6 +647,9 @@ def main():
         "binary",
         help="Firefox binary to execute")
     parser.add_argument(
+        "-d", "--dump", action="store_true",
+        help="Display browser log on process exit")
+    parser.add_argument(
         "-e", "--extension",
         help="Install the fuzzPriv extension (specify path to funfuzz/dom/extension)")
     parser.add_argument(
@@ -690,11 +693,12 @@ def main():
     args = parser.parse_args()
 
     # set output verbosity
-    log_level = logging.INFO
-    log_fmt = "[%(asctime)s] %(message)s"
     if args.verbose:
         log_level = logging.DEBUG
         log_fmt = "%(levelname).1s %(name)s [%(asctime)s] %(message)s"
+    else:
+        log_level = logging.INFO
+        log_fmt = "[%(asctime)s] %(message)s"
     logging.basicConfig(format=log_fmt, datefmt="%Y-%m-%d %H:%M:%S", level=log_level)
 
     ffp = FFPuppet(
@@ -712,14 +716,23 @@ def main():
             prefs_js=args.prefs,
             safe_mode=args.safe_mode,
             extension=args.extension)
-        log.info("Running firefox (pid: %d)...", ffp.get_pid())
+        log.info("Running Firefox (pid: %d)...", ffp.get_pid())
         ffp.wait()
     except KeyboardInterrupt:
         log.info("Ctrl+C detected. Shutting down...")
     finally:
         ffp.close()
-        if args.log:
-            ffp.save_log(args.log)
+        log.info("Firefox process closed")
+        output_log = open_unique()
+        output_log.close()
+        ffp.save_log(output_log.name)
+        if args.dump:
+            with open(output_log.name, "r") as log_fp:
+                log.info("\n[Browser log start]\n%s\n[Browser log end]", log_fp.read())
+        if args.log is not None:
+            shutil.move(output_log.name, args.log)
+        else:
+            os.remove(output_log.name)
         ffp.clean_up()
 
 
