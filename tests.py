@@ -1,4 +1,5 @@
 import errno
+import logging
 try:
     from http.server import HTTPServer, BaseHTTPRequestHandler
 except ImportError:
@@ -14,6 +15,10 @@ import time
 import unittest
 
 from ffpuppet import FFPuppet, LaunchError
+
+
+logging.basicConfig(level=logging.DEBUG if bool(os.getenv("DEBUG")) else logging.INFO)
+log = logging.getLogger("ffp_test")
 
 
 class TestCase(unittest.TestCase):
@@ -205,16 +210,16 @@ class PuppetTests(TestCase):
             self.assertGreater(len(orig), 10)
             with open(self.tmpfn, "rb") as tmpfp:
                 self.assertEqual(tmpfp.read(), orig[10:])
-        finally:
             ffp.close()
             # make sure logs are available
             self.assertEqual(ffp.clone_log(target_file=self.tmpfn), self.tmpfn)
             with open(self.tmpfn, "rb") as tmpfp:
                 self.assertTrue(tmpfp.read().startswith(orig))
                 self.assertGreater(tmpfp.tell(), len(orig))
+        finally:
             ffp.clean_up()
-            # verify clean_up() removed the logs
-            self.assertIsNone(ffp.clone_log(target_file=self.tmpfn))
+        # verify clean_up() removed the logs
+        self.assertIsNone(ffp.clone_log(target_file=self.tmpfn))
 
     def test_9(self):
         "test hitting memory limit"
@@ -238,8 +243,8 @@ class PuppetTests(TestCase):
             ffp.save_log(self.tmpfn)
             ffp.clean_up()
             httpd.shutdown()
-            with open(self.tmpfn, "r") as fp:
-                self.assertRegex(fp.read(), "MEMORY_LIMIT_EXCEEDED")
+        with open(self.tmpfn, "r") as fp:
+            self.assertRegex(fp.read(), "MEMORY_LIMIT_EXCEEDED")
 
     def test_10(self):
         "test calling launch() multiple times"
@@ -287,8 +292,8 @@ class PuppetTests(TestCase):
             ffp.save_log(self.tmpfn)
             ffp.clean_up()
             httpd.shutdown()
-            with open(self.tmpfn, "r") as fp:
-                self.assertRegex(fp.read(), "TOKEN_LOCATED")
+        with open(self.tmpfn, "r") as fp:
+            self.assertRegex(fp.read(), "TOKEN_LOCATED")
 
     def test_12(self):
         "test using an existing profile directory"
@@ -314,7 +319,6 @@ class PuppetTests(TestCase):
             ffp.clean_up()
             ffp.close()
             ffp.clean_up()
-            self.assertTrue(os.path.isdir(prf_dir))
-            shutil.rmtree(prf_dir)
+        shutil.rmtree(prf_dir)
 
 # TODO: open file url, open missing file url
