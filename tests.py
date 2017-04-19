@@ -231,8 +231,8 @@ class PuppetTests(TestCase):
         httpd = create_server(_req_handler)
         try:
             location = "http://127.0.0.1:%d" % httpd.server_address[1]
-            ffp.launch('testff.py', location=location, prefs_js=self.tmpfn, memory_limit=150)
-            self.assertIsNotNone(ffp.wait(5))
+            ffp.launch('testff.py', location=location, prefs_js=self.tmpfn, memory_limit=100)
+            self.assertIsNotNone(ffp.wait(60))
         finally:
             ffp.close()
             ffp.save_log(self.tmpfn)

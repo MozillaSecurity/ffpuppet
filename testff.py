@@ -72,7 +72,7 @@ def main():
         with open(os.devnull, "r") as r_fp:
             for _ in range(200):
                 blob.append(r_fp.read(1024*1024))
-        time.sleep(10) # wait to be terminated
+        time.sleep(60) # wait to be terminated
     elif cmd == 'soft_assert':
         sys.stdout.write('simulating soft assertion\n')
         sys.stdout.write('###!!! ASSERTION: test\n')
