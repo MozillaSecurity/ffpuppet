@@ -1,4 +1,11 @@
 #!/usr/bin/env python2
+
+# This Source Code Form is subject to the terms of the Mozilla Public
+# License, v. 2.0. If a copy of the MPL was not distributed with this
+# file, You can obtain one at http://mozilla.org/MPL/2.0/.
+
+__author__ = "Tyson Smith"
+
 import argparse
 import errno
 import logging
@@ -28,10 +35,10 @@ log = logging.getLogger("ffpuppet") # pylint: disable=invalid-name
 
 def open_unique():
     """
-    open_unique()
-    Create a unique file.
+    Create and open a unique file.
 
-    returns a File Object
+    @rtype: file object
+    @return: An open file object.
     """
 
     tmp_fd, log_file = tempfile.mkstemp(
@@ -174,22 +181,37 @@ class FFPuppet(object):
         # https://bugzilla.mozilla.org/show_bug.cgi?id=1305151
         # skia assertions are easily hit and mostly due to precision, disable them.
         env["MOZ_SKIA_DISABLE_ASSERTS"] = "1"
+        env["UBSAN_OPTIONS"] = "print_stacktrace=1"
 
         return env
 
 
     def add_abort_token(self, token):
+        """
+        Add a token that when present in the browser log will have the browser process terminated.
+
+        @type token: String
+        @param token: string to search for in the browser log.
+
+        @rtype: None
+        @return: None
+        """
+
         self._abort_tokens.add(token)
 
 
     def clone_log(self, target_file=None, offset=None):
         """
-        clone_log(target_file) -> str
-        Create a copy of the current log. The contents will be saved to target_file.
+        Create a copy of the current browser log.
 
-        If offset is given, only copy from the given offset.
+        @type target_file: String
+        @param target_file: The log contents will be saved to target_file.
 
-        Return the name of the file containing the cloned log or None on failure
+        @type offset: int
+        @param offset: Where to begin reading the log from
+
+        @rtype: String or None
+        @return: Name of the file containing the cloned log or None on failure
         """
 
         # check if there is a log to clone
@@ -214,10 +236,14 @@ class FFPuppet(object):
 
     def save_log(self, log_file):
         """
-        save_log(log_file) -> None
-        The log will be saved to log_file. Should only be called after close().
+        The browser log will be saved to log_file.
+        This should only be called after close().
 
-        Return None
+        @type log_file: String
+        @param log_file: File to create to contain log data.
+
+        @rtype: None
+        @return: None
         """
 
         if not self.closed:
@@ -236,12 +262,13 @@ class FFPuppet(object):
 
     def clean_up(self):
         """
-        clean_up() -> None
         Remove all the remaining files that could have been created during execution.
-        Note: Calling launch() after calling clean_up() is not intended and may not work
+
+        NOTE: Calling launch() after calling clean_up() is not intended and may not work
         as expected.
 
-        returns None
+        @rtype: None
+        @return: None
         """
 
         log.debug("clean_up() called")
@@ -266,10 +293,10 @@ class FFPuppet(object):
 
     def close(self):
         """
-        close() -> None
         Terminate the browser process and clean up all processes.
 
-        returns None
+        @rtype: None
+        @return: None
         """
 
         log.debug("close() called")
@@ -324,9 +351,10 @@ class FFPuppet(object):
 
     def get_pid(self):
         """
-        get_pid() -> int
+        Get the browser process ID
 
-        returns the process ID of the browser process
+        @rtype: int
+        @return: browser process ID
         """
         return None if self._proc is None else self._proc.pid
 
@@ -365,7 +393,7 @@ class FFPuppet(object):
                 "--show-possibly-lost=no",
                 "--read-inline-info=yes",
                 #"--leak-check=full",
-                #"--track-origins=yes",
+                "--track-origins=yes",
                 "--vex-iropt-register-updates=allregs-at-mem-access"] + cmd
 
         if self._use_gdb:
@@ -547,10 +575,10 @@ class FFPuppet(object):
 
     def is_running(self):
         """
-        is_running() -> bool
         Check if the browser process is running.
 
-        returns True if the process is running otherwise False
+        @rtype: bool
+        @return: True if the process is running otherwise False
         """
         return self._proc is not None and self._proc.poll() is None
 
@@ -623,12 +651,15 @@ class FFPuppet(object):
 
     def wait(self, timeout=0):
         """
-        wait([timeout]) -> int
         Wait for process to terminate. This call will block until the process exits unless
         a timeout is specified. If a timeout greater than zero is specified the call will
         only block until the timeout expires.
 
-        returns exit code if process exits and None if timeout expired
+        @type timeout: float
+        @param timeout: maximum amount of time to wait for process to terminate
+
+        @rtype: int or None
+        @return: exit code if process exits and None if timeout expired
         """
         timer_exp = time.time() + timeout
         while self._proc is not None:
