@@ -132,7 +132,7 @@ class FFPuppet(object):
         @rtype: dict
         @return: A dict representing the string environment
         """
-        env = os.environ
+        env = dict(os.environ)
         if self._use_valgrind:
             # https://developer.gimp.org/api/2.0/glib/glib-running.html#G_DEBUG
             env["G_DEBUG"] = "gc-friendly"
