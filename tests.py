@@ -5,6 +5,7 @@ try:
 except ImportError:
     from BaseHTTPServer import HTTPServer, BaseHTTPRequestHandler
 import os
+import platform
 import random
 import shutil
 import socket
@@ -345,7 +346,7 @@ class PuppetTests(TestCase):
 
     def test_16(self):
         "test launching under Xvfb"
-        if self._platform != "linux":
+        if platform.system().lower() != "linux":
             with self.assertRaisesRegex(EnvironmentError, "Xvfb is only supported on Linux"):
                 ffp = FFPuppet(use_xvfb=True)
         else:
