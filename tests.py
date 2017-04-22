@@ -321,4 +321,36 @@ class PuppetTests(TestCase):
             ffp.clean_up()
         shutil.rmtree(prf_dir)
 
+    def test_14(self):
+        "test manually setting ASAN_SYMBOLIZER_PATH"
+        os.environ["ASAN_SYMBOLIZER_PATH"] = "foo/bar"
+        ffp = FFPuppet()
+        env = ffp.get_environ("fake/bin/path")
+        ffp.close()
+        ffp.clean_up()
+        os.environ.pop("ASAN_SYMBOLIZER_PATH", None)
+        self.assertEqual(env["ASAN_SYMBOLIZER_PATH"], "foo/bar")
+
+    def test_15(self):
+        "test automatically using bundled llvm-symbolizer"
+        test_dir = tempfile.mkdtemp()
+        with open(os.path.join(test_dir, "llvm-symbolizer"), "w") as fp:
+            fp.write("test")
+        ffp = FFPuppet()
+        env = ffp.get_environ(os.path.join(test_dir, "fake_bin"))
+        ffp.close()
+        ffp.clean_up()
+        shutil.rmtree(test_dir)
+        self.assertEqual(env["ASAN_SYMBOLIZER_PATH"], os.path.join(test_dir, "llvm-symbolizer"))
+
+    def test_16(self):
+        "test launching under Xvfb"
+        if self._platform != "linux":
+            with self.assertRaisesRegex(EnvironmentError, "Xvfb is only supported on Linux"):
+                ffp = FFPuppet(use_xvfb=True)
+        else:
+            ffp = FFPuppet(use_xvfb=True)
+        ffp.close()
+        ffp.clean_up()
+
 # TODO: open file url, open missing file url
