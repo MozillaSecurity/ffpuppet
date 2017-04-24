@@ -304,7 +304,8 @@ class FFPuppet(object):
         # terminate the browser process
         if self._proc is not None:
             log.debug("firefox pid: %r", self._proc.pid)
-            if self._proc.poll() is None:
+            still_running = self._proc.poll() is None
+            if still_running:
                 log.debug("process needs to be closed")
                 if self._use_valgrind:
                     # XXX: hack to prevent the browser from hanging when
@@ -313,8 +314,11 @@ class FFPuppet(object):
                     self._proc.kill()
                 else:
                     self._proc.terminate()
+
             self._proc.wait()
             if self._log is not None and not self._log.closed:
+                if still_running:
+                    self._log.write("[Process was closed by ffpuppet]\n")
                 self._log.write("[Exit code: %r]\n" % self._proc.returncode)
             log.debug("exit code: %r", self._proc.returncode)
             self._proc = None
