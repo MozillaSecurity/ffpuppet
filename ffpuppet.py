@@ -181,7 +181,10 @@ class FFPuppet(object):
         # https://bugzilla.mozilla.org/show_bug.cgi?id=1305151
         # skia assertions are easily hit and mostly due to precision, disable them.
         env["MOZ_SKIA_DISABLE_ASSERTS"] = "1"
-        env["UBSAN_OPTIONS"] = "print_stacktrace=1"
+
+        # setup Undefined Behavior Sanitizer options if not set manually
+        if "UBSAN_OPTIONS" not in env:
+            env["UBSAN_OPTIONS"] = "print_stacktrace=1"
 
         return env
 
