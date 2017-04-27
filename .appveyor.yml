@@ -1,0 +1,13 @@
+environment:
+    DEBUG: "1"
+    matrix:
+        - PYTHON: "C:\\Python27"
+        - PYTHON: "C:\\Python27-x64"
+branches:
+    only:
+        - master
+install:
+    - "%PYTHON%\\python.exe -m pip install pytest psutil"
+build: off
+test_script:
+    - "%PYTHON%\\python.exe -m pytest tests.py -v"
