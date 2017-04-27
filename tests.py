@@ -21,6 +21,7 @@ from ffpuppet import FFPuppet, LaunchError
 logging.basicConfig(level=logging.DEBUG if bool(os.getenv("DEBUG")) else logging.INFO)
 log = logging.getLogger("ffp_test")
 
+TESTFF_BIN = os.path.join("testff", "testff.exe") if sys.platform.startswith('win') else "testff.py"
 
 class TestCase(unittest.TestCase):
 
@@ -85,7 +86,7 @@ class PuppetTests(TestCase):
         httpd = create_server(_req_handler)
         try:
             location = "http://127.0.0.1:%d" % httpd.server_address[1]
-            ffp.launch('testff.py', location=location)
+            ffp.launch(TESTFF_BIN, location=location)
             self.assertEqual(ffp.wait(1), 0) # will close automatically
         finally:
             ffp.close()
@@ -101,7 +102,7 @@ class PuppetTests(TestCase):
             prefs.write('#fftest_startup_crash\n')
         try:
             with self.assertRaisesRegex(LaunchError, "Failure during browser startup"):
-                ffp.launch('testff.py', prefs_js=self.tmpfn)
+                ffp.launch(TESTFF_BIN, prefs_js=self.tmpfn)
         finally:
             self.assertEqual(ffp.wait(1), 1) # test crash returns 1
             ffp.close()
@@ -116,7 +117,7 @@ class PuppetTests(TestCase):
         try:
             start = time.time()
             with self.assertRaisesRegex(LaunchError, "Launching browser timed out"):
-                ffp.launch('testff.py', prefs_js=self.tmpfn, launch_timeout=1)
+                ffp.launch(TESTFF_BIN, prefs_js=self.tmpfn, launch_timeout=1)
             duration = time.time() - start
         finally:
             ffp.close()
@@ -138,7 +139,7 @@ class PuppetTests(TestCase):
         httpd = create_server(_req_handler)
         try:
             location = "http://127.0.0.1:%d" % httpd.server_address[1]
-            ffp.launch('testff.py', location=location)
+            ffp.launch(TESTFF_BIN, location=location)
             ffp.wait()
         finally:
             ffp.close()
@@ -155,7 +156,7 @@ class PuppetTests(TestCase):
         ffp = FFPuppet()
         self.assertIsNone(ffp.get_pid())
         try:
-            ffp.launch('testff.py')
+            ffp.launch(TESTFF_BIN)
             self.assertGreater(ffp.get_pid(), 0)
         finally:
             ffp.close()
@@ -167,7 +168,7 @@ class PuppetTests(TestCase):
         ffp = FFPuppet()
         self.assertFalse(ffp.is_running())
         try:
-            ffp.launch('testff.py')
+            ffp.launch(TESTFF_BIN)
             self.assertTrue(ffp.is_running())
         finally:
             ffp.close()
@@ -188,7 +189,7 @@ class PuppetTests(TestCase):
         httpd = create_server(_req_handler)
         try:
             location = "http://127.0.0.1:%d" % httpd.server_address[1]
-            ffp.launch('testff.py', location=location)
+            ffp.launch(TESTFF_BIN, location=location)
             self.assertEqual(ffp.wait(5), 0)
         finally:
             ffp.close()
@@ -202,7 +203,7 @@ class PuppetTests(TestCase):
         ffp = FFPuppet()
         self.assertIsNone(ffp.clone_log(target_file=self.tmpfn))
         try:
-            ffp.launch('testff.py')
+            ffp.launch(TESTFF_BIN)
             # make sure logs are available
             self.assertEqual(ffp.clone_log(target_file=self.tmpfn), self.tmpfn)
             with open(self.tmpfn, "rb") as tmpfp:
@@ -237,7 +238,7 @@ class PuppetTests(TestCase):
         httpd = create_server(_req_handler)
         try:
             location = "http://127.0.0.1:%d" % httpd.server_address[1]
-            ffp.launch('testff.py', location=location, prefs_js=self.tmpfn, memory_limit=100)
+            ffp.launch(TESTFF_BIN, location=location, prefs_js=self.tmpfn, memory_limit=100)
             self.assertIsNotNone(ffp.wait(60))
         finally:
             ffp.close()
@@ -260,12 +261,12 @@ class PuppetTests(TestCase):
         try:
             location = "http://127.0.0.1:%d" % httpd.server_address[1]
             for _ in range(10):
-                ffp.launch('testff.py', location=location)
+                ffp.launch(TESTFF_BIN, location=location)
                 ffp.close()
             # call 2x without calling launch
-            ffp.launch('testff.py', location=location)
+            ffp.launch(TESTFF_BIN, location=location)
             with self.assertRaisesRegex(LaunchError, "Process is already running"):
-                ffp.launch('testff.py', location=location)
+                ffp.launch(TESTFF_BIN, location=location)
         finally:
             ffp.close()
             ffp.clean_up()
@@ -286,7 +287,7 @@ class PuppetTests(TestCase):
         httpd = create_server(_req_handler)
         try:
             location = "http://127.0.0.1:%d" % httpd.server_address[1]
-            ffp.launch('testff.py', location=location, prefs_js=self.tmpfn)
+            ffp.launch(TESTFF_BIN, location=location, prefs_js=self.tmpfn)
             self.assertIsNotNone(ffp.wait(5))
         finally:
             ffp.close()
@@ -301,7 +302,7 @@ class PuppetTests(TestCase):
         prf_dir = tempfile.mkdtemp()
         ffp = FFPuppet(use_profile=prf_dir)
         try:
-            ffp.launch('testff.py')
+            ffp.launch(TESTFF_BIN)
         finally:
             ffp.close()
             ffp.clean_up()
@@ -314,7 +315,7 @@ class PuppetTests(TestCase):
         ffp = FFPuppet(use_profile=prf_dir)
         ffp.close()
         try:
-            ffp.launch('testff.py')
+            ffp.launch(TESTFF_BIN)
         finally:
             ffp.close()
             ffp.clean_up()
@@ -334,24 +335,28 @@ class PuppetTests(TestCase):
 
     def test_15(self):
         "test automatically using bundled llvm-symbolizer"
+        test_bin = "llvm-symbolizer.exe" if sys.platform.startswith('win') else "llvm-symbolizer"
         test_dir = tempfile.mkdtemp()
-        with open(os.path.join(test_dir, "llvm-symbolizer"), "w") as fp:
+        with open(os.path.join(test_dir, test_bin), "w") as fp:
             fp.write("test")
         ffp = FFPuppet()
         env = ffp.get_environ(os.path.join(test_dir, "fake_bin"))
         ffp.close()
         ffp.clean_up()
         shutil.rmtree(test_dir)
-        self.assertEqual(env["ASAN_SYMBOLIZER_PATH"], os.path.join(test_dir, "llvm-symbolizer"))
+        self.assertIn("ASAN_SYMBOLIZER_PATH", env)
+        self.assertEqual(env["ASAN_SYMBOLIZER_PATH"], os.path.join(test_dir, test_bin))
 
     def test_16(self):
         "test launching under Xvfb"
+        ffp = None
         if platform.system().lower() != "linux":
             with self.assertRaisesRegex(EnvironmentError, "Xvfb is only supported on Linux"):
                 ffp = FFPuppet(use_xvfb=True)
         else:
             ffp = FFPuppet(use_xvfb=True)
-        ffp.close()
-        ffp.clean_up()
+        if ffp is not None:
+            ffp.close()
+            ffp.clean_up()
 
 # TODO: open file url, open missing file url
