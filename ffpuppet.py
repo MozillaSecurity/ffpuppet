@@ -180,7 +180,11 @@ class FFPuppet(object):
 
         # https://bugzilla.mozilla.org/show_bug.cgi?id=1305151
         # skia assertions are easily hit and mostly due to precision, disable them.
-        env["MOZ_SKIA_DISABLE_ASSERTS"] = "1"
+        if "MOZ_SKIA_DISABLE_ASSERTS" not in env:
+            env["MOZ_SKIA_DISABLE_ASSERTS"] = "1"
+
+        #if "RUST_BACKTRACE" not in env:
+        #    env["RUST_BACKTRACE"] = "1"
 
         # setup Undefined Behavior Sanitizer options if not set manually
         if "UBSAN_OPTIONS" not in env:
@@ -513,7 +517,7 @@ class FFPuppet(object):
 
         if location is not None:
             if os.path.isfile(location):
-                location = "file://%s" % urllib.pathname2url(os.path.abspath(location))
+                location = "file:///%s" % urllib.pathname2url(os.path.abspath(location).lstrip('/'))
             elif re.match(r"http(s)?://", location, re.IGNORECASE) is None:
                 raise IOError("Cannot find %s" % os.path.abspath(location))
 
