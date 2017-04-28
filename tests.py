@@ -65,13 +65,11 @@ class PuppetTests(TestCase):
         def test_0(self):
             "test that invalid executables raise the right exception"
             ffp = FFPuppet()
-            with self.assertRaisesRegex(IOError, "is not an executable"):
-                try:
+            try:
+                with self.assertRaisesRegex(IOError, "is not an executable"):
                     ffp.launch(self.tmpfn)
-                finally:
-                    ffp.close()
-                    ffp.save_log(self.tmpfn)
-                    ffp.clean_up()
+            finally:
+                ffp.clean_up()
 
     def test_1(self):
         "test basic launch and close"
@@ -303,32 +301,29 @@ class PuppetTests(TestCase):
         ffp = FFPuppet(use_profile=prf_dir)
         try:
             ffp.launch(TESTFF_BIN)
-        finally:
             ffp.close()
+        finally:
             ffp.clean_up()
             self.assertTrue(os.path.isdir(prf_dir))
             shutil.rmtree(prf_dir)
 
     def test_13(self):
         "test calling close() and clean_up() in mutliple states"
-        prf_dir = tempfile.mkdtemp()
-        ffp = FFPuppet(use_profile=prf_dir)
+        ffp = FFPuppet()
         ffp.close()
         try:
             ffp.launch(TESTFF_BIN)
+            ffp.close()
+            ffp.clean_up()
+            ffp.close()
         finally:
-            ffp.close()
             ffp.clean_up()
-            ffp.close()
-            ffp.clean_up()
-        shutil.rmtree(prf_dir)
 
     def test_14(self):
         "test manually setting ASAN_SYMBOLIZER_PATH"
         os.environ["ASAN_SYMBOLIZER_PATH"] = "foo/bar"
         ffp = FFPuppet()
         env = ffp.get_environ("fake/bin/path")
-        ffp.close()
         ffp.clean_up()
         os.environ.pop("ASAN_SYMBOLIZER_PATH", None)
         self.assertEqual(env["ASAN_SYMBOLIZER_PATH"], "foo/bar")
@@ -341,7 +336,6 @@ class PuppetTests(TestCase):
             fp.write("test")
         ffp = FFPuppet()
         env = ffp.get_environ(os.path.join(test_dir, "fake_bin"))
-        ffp.close()
         ffp.clean_up()
         shutil.rmtree(test_dir)
         self.assertIn("ASAN_SYMBOLIZER_PATH", env)
@@ -356,7 +350,27 @@ class PuppetTests(TestCase):
         else:
             ffp = FFPuppet(use_xvfb=True)
         if ffp is not None:
-            ffp.close()
             ffp.clean_up()
 
-# TODO: open file url, open missing file url
+    def test_17(self):
+        "test passing a file and a non existing file to launch() via location"
+        ffp = FFPuppet()
+        try:
+            with self.assertRaisesRegex(IOError, "Cannot find"):
+                ffp.launch(TESTFF_BIN, location="fake_file.none")
+            ffp.close()
+            with tempfile.NamedTemporaryFile() as test_fp:
+                test_fp.write("test")
+                test_fp.seek(0)
+                ffp.launch(TESTFF_BIN, location=test_fp.name)
+        finally:
+            ffp.clean_up()
+
+    def test_18(self):
+        "test passing a non existing prefs file to launch() via prefs_js"
+        ffp = FFPuppet()
+        try:
+            with self.assertRaisesRegex(IOError, "prefs.js file does not exist"):
+                ffp.launch(TESTFF_BIN, prefs_js="fake_file.js")
+        finally:
+            ffp.clean_up()
