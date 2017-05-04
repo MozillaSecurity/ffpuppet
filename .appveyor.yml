@@ -10,4 +10,4 @@ install:
     - "%PYTHON%\\python.exe -m pip install pylint pytest psutil"
 build: off
 test_script:
-    - "%PYTHON%\\python.exe -m pytest tests.py -v && pylint --errors-only ffpuppet.py"
+    - "%PYTHON%\\python.exe -m pytest tests.py -v && %PYTHON%\\python.exe -m pylint --errors-only --ignore=testff.py ffpuppet"
