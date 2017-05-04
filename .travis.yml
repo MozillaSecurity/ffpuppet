@@ -7,6 +7,6 @@ branches:
 before_script:
     - pip install pylint pytest-cov python-coveralls psutil xvfbwrapper
 script:
-    - py.test tests.py -v --cov . --cov-report term-missing && pylint ffpuppet.py --errors-only
+    - py.test tests.py -v --cov . --cov-report term-missing --cov-config .coveragerc && pylint --errors-only --ignore=testff.py ffpuppet
 after_success:
     - coveralls
