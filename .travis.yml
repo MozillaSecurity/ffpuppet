@@ -5,8 +5,8 @@ branches:
     only:
         - master
 before_script:
-    - pip install pytest-cov python-coveralls psutil xvfbwrapper
+    - pip install pylint pytest-cov python-coveralls psutil xvfbwrapper
 script:
-    - py.test tests.py -v --cov . --cov-report term-missing
+    - py.test tests.py -v --cov . --cov-report term-missing && pylint --errors-only
 after_success:
     - coveralls
