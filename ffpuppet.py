@@ -4,8 +4,6 @@
 # License, v. 2.0. If a copy of the MPL was not distributed with this
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
-__author__ = "Tyson Smith"
-
 import argparse
 import errno
 import logging
@@ -18,7 +16,10 @@ import socket
 import subprocess
 import tempfile
 import time
-import urllib
+try: # py 2-3 compat
+    from urllib import pathname2url # pylint: disable=no-name-in-module,import-error
+except ImportError:
+    from urllib.request import pathname2url # pylint: disable=no-name-in-module,import-error
 
 try:
     import xvfbwrapper
@@ -29,11 +30,12 @@ import debugger_windbg
 import log_scanner
 import memory_limiter
 
+__author__ = "Tyson Smith"
 
 log = logging.getLogger("ffpuppet") # pylint: disable=invalid-name
 
 
-def open_unique():
+def open_unique(mode="w"):
     """
     Create and open a unique file.
 
@@ -43,12 +45,11 @@ def open_unique():
 
     tmp_fd, log_file = tempfile.mkstemp(
         suffix="_log.txt",
-        prefix=time.strftime("ffp_%Y-%m-%d_%H-%M-%S_")
-    )
+        prefix=time.strftime("ffp_%Y-%m-%d_%H-%M-%S_"))
     os.close(tmp_fd)
 
     # open with 'open' so the file object 'name' attribute is correct
-    return open(log_file, "wb")
+    return open(log_file, mode)
 
 
 class LaunchError(Exception):
@@ -229,7 +230,7 @@ class FFPuppet(object):
             if offset is not None:
                 logfp.seek(offset)
             if target_file is None:
-                cpyfp = open_unique()
+                cpyfp = open_unique("wb")
                 target_file = cpyfp.name
             else:
                 cpyfp = open(target_file, "wb")
@@ -517,7 +518,7 @@ class FFPuppet(object):
 
         if location is not None:
             if os.path.isfile(location):
-                location = "file:///%s" % urllib.pathname2url(os.path.abspath(location).lstrip('/'))
+                location = "file:///%s" % pathname2url(os.path.abspath(location).lstrip('/'))
             elif re.match(r"http(s)?://", location, re.IGNORECASE) is None:
                 raise IOError("Cannot find %s" % os.path.abspath(location))
 
@@ -642,11 +643,13 @@ class FFPuppet(object):
             response = "<head>" \
                 "<meta http-equiv=\"refresh\" content=\"0; url=%s\"/>" \
                 "</head>" % ("about:blank" if url is None else url)
+            response = response.encode() # py 2-3 compat
+
             conn.sendall(
-                "HTTP/1.1 200 OK\r\n" \
-                "Content-Length: %d\r\n" \
-                "Content-Type: text/html\r\n" \
-                "Connection: close\r\n\r\n%s" % (len(response), response))
+                b"HTTP/1.1 200 OK\r\n"
+                b"Content-Length: %d\r\n"
+                b"Content-Type: text/html\r\n"
+                b"Connection: close\r\n\r\n%s" % (len(response), bytes(response)))
 
         except socket.error:
             raise LaunchError("Failed to launch browser")
@@ -780,4 +783,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-

@@ -38,14 +38,17 @@ def create_server(handler):
     "returns a server object, call shutdown when done"
     while True:
         try:
-            httpd = HTTPServer(('127.0.0.1', random.randint(0x2000, 0xFFFF)), handler)
+            httpd = HTTPServer(('127.0.0.1', random.randint(0x800, 0xFFFF)), handler)
         except socket.error as soc_e:
             if soc_e.errno == errno.EADDRINUSE: # Address already in use
                 continue
             raise
         break
     def _srv_thread():
-        httpd.serve_forever()
+        try:
+            httpd.serve_forever()
+        finally:
+            httpd.socket.close()
     thread = threading.Thread(target=_srv_thread)
     thread.start()
     # XXX: join the thread on shutdown() .. somehow
@@ -79,7 +82,7 @@ class PuppetTests(TestCase):
             def do_GET(self):
                 self.send_response(200)
                 self.end_headers()
-                self.wfile.write("test")
+                self.wfile.write(b"test")
 
         httpd = create_server(_req_handler)
         try:
@@ -132,7 +135,7 @@ class PuppetTests(TestCase):
             def do_GET(self):
                 self.send_response(200)
                 self.end_headers()
-                self.wfile.write("hello world")
+                self.wfile.write(b"hello world")
 
         httpd = create_server(_req_handler)
         try:
@@ -144,6 +147,7 @@ class PuppetTests(TestCase):
             ffp.save_log(self.tmpfn)
             ffp.clean_up()
             httpd.shutdown()
+
         with open(self.tmpfn) as log_fp:
             log = log_fp.read().splitlines()
         self.assertTrue(log[0].startswith('Launch command'))
@@ -181,7 +185,7 @@ class PuppetTests(TestCase):
             def do_GET(self):
                 self.send_response(200)
                 self.end_headers()
-                self.wfile.write("test")
+                self.wfile.write(b"test")
 
         self.assertIsNone(ffp.wait())
         httpd = create_server(_req_handler)
@@ -231,7 +235,7 @@ class PuppetTests(TestCase):
             def do_GET(self):
                 self.send_response(200)
                 self.end_headers()
-                self.wfile.write("hello world")
+                self.wfile.write(b"hello world")
 
         httpd = create_server(_req_handler)
         try:
@@ -253,7 +257,7 @@ class PuppetTests(TestCase):
             def do_GET(self):
                 self.send_response(200)
                 self.end_headers()
-                self.wfile.write("hello world")
+                self.wfile.write(b"hello world")
 
         httpd = create_server(_req_handler)
         try:
@@ -280,7 +284,7 @@ class PuppetTests(TestCase):
             def do_GET(self):
                 self.send_response(200)
                 self.end_headers()
-                self.wfile.write("hello world")
+                self.wfile.write(b"hello world")
 
         httpd = create_server(_req_handler)
         try:
@@ -360,7 +364,7 @@ class PuppetTests(TestCase):
                 ffp.launch(TESTFF_BIN, location="fake_file.none")
             ffp.close()
             with tempfile.NamedTemporaryFile() as test_fp:
-                test_fp.write("test")
+                test_fp.write(b"test")
                 test_fp.seek(0)
                 ffp.launch(TESTFF_BIN, location=test_fp.name)
         finally:
