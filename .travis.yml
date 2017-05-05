@@ -1,12 +1,17 @@
 language: python
 python:
     - 2.7
+    - 3.2
+    - 3.3
+    - 3.4
+    - 3.5
+    - 3.6
 branches:
     only:
         - master
 before_script:
-    - pip install pylint pytest-cov python-coveralls psutil xvfbwrapper
+    - if [ $TRAVIS_PYTHON_VERSION == 2.7 -o $TRAVIS_PYTHON_VERSION == 3.5 ]; then pip install psutil pylint pytest-cov python-coveralls xvfbwrapper; else pip install psutil pylint xvfbwrapper; fi
 script:
-    - py.test tests.py -v --cov . --cov-report term-missing --cov-config .coveragerc && pylint --errors-only --ignore=testff.py ffpuppet
+    - if [ $TRAVIS_PYTHON_VERSION == 2.7 -o $TRAVIS_PYTHON_VERSION == 3.5 ]; then py.test tests.py -v --cov . --cov-report term-missing --cov-config .coveragerc && pylint --errors-only --ignore=testff.py ffpuppet; else py.test tests.py -v && pylint --errors-only --ignore=testff.py ffpuppet; fi
 after_success:
-    - coveralls
+    - if [ $TRAVIS_PYTHON_VERSION == 2.7 -o $TRAVIS_PYTHON_VERSION == 3.5 ]; then coveralls; fi
