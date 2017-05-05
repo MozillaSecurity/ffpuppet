@@ -1,1 +1,3 @@
-from ffpuppet import *
+from .ffpuppet import *
+
+__all__ = ("FFPuppet", "LaunchError")
