@@ -4,7 +4,6 @@
 # License, v. 2.0. If a copy of the MPL was not distributed with this
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
-from __future__ import absolute_import
 import argparse
 import errno
 import logging
@@ -27,7 +26,9 @@ try:
 except ImportError:
     pass
 
-from workers import debugger_windbg, log_scanner, memory_limiter # pylint: disable=import-error
+import workers.debugger_windbg as debugger_windbg
+import workers.log_scanner as log_scanner
+import workers.memory_limiter as memory_limiter
 
 __author__ = "Tyson Smith"
 __all__ = ("FFPuppet", "LaunchError")
@@ -38,6 +39,9 @@ log = logging.getLogger("ffpuppet") # pylint: disable=invalid-name
 def open_unique(mode="w"):
     """
     Create and open a unique file.
+
+    @type mode: String
+    @param mode: File mode. See documentation for open().
 
     @rtype: file object
     @return: An open file object.
