@@ -27,10 +27,7 @@ try:
 except ImportError:
     pass
 
-
-from . import debugger_windbg
-from . import log_scanner
-from . import memory_limiter
+from workers import debugger_windbg, log_scanner, memory_limiter # pylint: disable=import-error
 
 __author__ = "Tyson Smith"
 __all__ = ("FFPuppet", "LaunchError")
