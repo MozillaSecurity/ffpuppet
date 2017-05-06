@@ -16,7 +16,7 @@ import socket
 import subprocess
 import tempfile
 import time
-try: # py 2-3 compat
+try: # py 2-3 compatibility
     from urllib import pathname2url # pylint: disable=no-name-in-module,import-error
 except ImportError:
     from urllib.request import pathname2url # pylint: disable=no-name-in-module,import-error
@@ -26,9 +26,15 @@ try:
 except ImportError:
     pass
 
-import workers.debugger_windbg as debugger_windbg
-import workers.log_scanner as log_scanner
-import workers.memory_limiter as memory_limiter
+try: # py 2-3 compatibility
+    import workers.debugger_windbg as debugger_windbg
+    import workers.log_scanner as log_scanner
+    import workers.memory_limiter as memory_limiter
+except ImportError:
+    import ffpuppet.workers.debugger_windbg as debugger_windbg # pylint: disable=no-name-in-module
+    import ffpuppet.workers.log_scanner as log_scanner # pylint: disable=no-name-in-module
+    import ffpuppet.workers.memory_limiter as memory_limiter # pylint: disable=no-name-in-module
+
 
 __author__ = "Tyson Smith"
 __all__ = ("FFPuppet", "LaunchError")
