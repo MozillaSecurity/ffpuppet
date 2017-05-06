@@ -16,6 +16,7 @@ class BaseWorker(object):
     BaseWorker is the base class that is to be used to create workers to perform
     asynchronous tasks related to FFPuppet or the browser process.
     """
+    available = True
     name = "BaseWorker" # override in subclass
 
     def __init__(self):
@@ -27,7 +28,7 @@ class BaseWorker(object):
     def _create_logfile():
         tmp_fd, log = tempfile.mkstemp(
             suffix="_log.txt",
-            prefix=time.strftime("ffp_%m-%d_%H-%M-%S_worker"))
+            prefix=time.strftime("ffpworker_%m-%d_%H-%M-%S_"))
         os.close(tmp_fd)
 
         return log

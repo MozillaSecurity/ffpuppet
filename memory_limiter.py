@@ -9,21 +9,20 @@ import time
 
 try:
     import psutil
-    IMPORT_ERR = False
-except ImportError as err:
-    IMPORT_ERR = True
+except ImportError:
+    psutil = None
 
-import puppet_worker
+from puppet_worker import BaseWorker
 
 __author__ = "Tyson Smith"
 __credits__ = ["Tyson Smith"]
 
-
-class MemoryLimiterWorker(puppet_worker.BaseWorker):
+class MemoryLimiterWorker(BaseWorker):
     """
     MemoryLimiterWorker intended to be used with ffpuppet to limit the about of memory
     used by the browser process.
     """
+    available = psutil is not None
     name = os.path.splitext(os.path.basename(__file__))[0]
 
     def start(self, process_id, memory_limit):

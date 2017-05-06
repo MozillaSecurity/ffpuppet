@@ -7,12 +7,12 @@ import re
 import threading
 import time
 
-import puppet_worker
+from puppet_worker import BaseWorker
 
 __author__ = "Tyson Smith"
 __credits__ = ["Tyson Smith"]
 
-class LogScannerWorker(puppet_worker.BaseWorker):
+class LogScannerWorker(BaseWorker):
     """
     LogScannerWorker will search through the browser log until a token is found.
     When a token is found terminate() is called on the browser process.

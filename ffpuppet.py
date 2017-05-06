@@ -26,9 +26,9 @@ try:
 except ImportError:
     pass
 
-import debugger_windbg
-import log_scanner
-import memory_limiter
+from debugger_windbg import DebuggerPyKDWorker
+from log_scanner import LogScannerWorker
+from memory_limiter import MemoryLimiterWorker
 
 __author__ = "Tyson Smith"
 
@@ -59,7 +59,7 @@ class LaunchError(Exception):
 class FFPuppet(object):
     def __init__(self, use_profile=None, use_valgrind=False, use_windbg=False, use_xvfb=False,
                  use_gdb=False, detect_soft_assertions=False):
-        self._abort_tokens = set() # tokens used to notify log_scanner to kill the browser process
+        self._abort_tokens = set() # tokens used to notify log scanner to kill the browser process
         self._log = None
         self._platform = platform.system().lower()
         self._proc = None
@@ -87,7 +87,7 @@ class FFPuppet(object):
         if use_windbg:
             if self._platform != "windows":
                 raise EnvironmentError("WinDBG only available on Windows")
-            if debugger_windbg.IMPORT_ERR:
+            if not DebuggerPyKDWorker.available:
                 raise EnvironmentError("Please install PyKD")
 
         if use_gdb:
@@ -522,7 +522,7 @@ class FFPuppet(object):
             elif re.match(r"http(s)?://", location, re.IGNORECASE) is None:
                 raise IOError("Cannot find %s" % os.path.abspath(location))
 
-        if memory_limit is not None and memory_limiter.IMPORT_ERR:
+        if memory_limit is not None and not MemoryLimiterWorker.available:
             raise EnvironmentError("Please install psutil")
 
         self.closed = False
@@ -568,12 +568,12 @@ class FFPuppet(object):
 
         if memory_limit is not None:
             # launch memory monitor thread
-            self._workers.append(memory_limiter.MemoryLimiterWorker())
+            self._workers.append(MemoryLimiterWorker())
             self._workers[-1].start(self._proc.pid, memory_limit)
 
         if self._windbg:
             # launch pykd debugger
-            self._workers.append(debugger_windbg.DebuggerPyKDWorker())
+            self._workers.append(DebuggerPyKDWorker())
             self._workers[-1].start(self._proc.pid)
 
         if self._use_valgrind:
@@ -581,7 +581,7 @@ class FFPuppet(object):
 
         if self._abort_tokens:
             # launch log scanner thread
-            self._workers.append(log_scanner.LogScannerWorker())
+            self._workers.append(LogScannerWorker())
             self._workers[-1].start(self)
 
 

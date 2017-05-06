@@ -8,22 +8,22 @@ import multiprocessing
 
 try:
     import pykd
-    IMPORT_ERR = False
-except ImportError as err:
-    IMPORT_ERR = True
+except ImportError:
+    pykd = None
 
-import puppet_worker
+from puppet_worker import BaseWorker
 
 __author__ = "Tyson Smith"
 __credits__ = ["Tyson Smith"]
 
-class DebuggerPyKDWorker(puppet_worker.BaseWorker):
+class DebuggerPyKDWorker(BaseWorker):
     """
     DebuggerPyKDWorker is intended to be used with ffpuppet to provide basic debugger
     information with minimal interaction with the browser process.
 
     Note: Only works with x86 builds at the moment.
     """
+    available = pykd is not None
     name = os.path.splitext(os.path.basename(__file__))[0]
 
     def start(self, process_id):
