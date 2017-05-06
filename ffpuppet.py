@@ -644,15 +644,14 @@ class FFPuppet(object):
                 pass
 
             response = "<head>" \
-                "<meta http-equiv=\"refresh\" content=\"0; url=%s\"/>" \
-                "</head>" % ("about:blank" if url is None else url)
-            response = response.encode() # py 2-3 compat
+                       "<meta http-equiv=\"refresh\" content=\"0; url=%s\"/>" \
+                       "</head>" % ("about:blank" if url is None else url)
+            response = "HTTP/1.1 200 OK\r\n" \
+                       "Content-Length: %d\r\n" \
+                       "Content-Type: text/html\r\n" \
+                       "Connection: close\r\n\r\n%s" % (len(response), response)
 
-            conn.sendall(
-                b"HTTP/1.1 200 OK\r\n"
-                b"Content-Length: %d\r\n"
-                b"Content-Type: text/html\r\n"
-                b"Connection: close\r\n\r\n%s" % (len(response), bytes(response)))
+            conn.sendall(response.encode("UTF-8"))
 
         except socket.error:
             raise LaunchError("Failed to launch browser")
