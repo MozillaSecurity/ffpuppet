@@ -2,17 +2,18 @@
 # License, v. 2.0. If a copy of the MPL was not distributed with this
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
+from __future__ import absolute_import
 import os
 import re
 import threading
 import time
 
-from puppet_worker import BaseWorker
+from . import puppet_worker
 
 __author__ = "Tyson Smith"
 __credits__ = ["Tyson Smith"]
 
-class LogScannerWorker(BaseWorker):
+class LogScannerWorker(puppet_worker.BaseWorker):
     """
     LogScannerWorker will search through the browser log until a token is found.
     When a token is found terminate() is called on the browser process.

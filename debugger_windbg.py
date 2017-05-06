@@ -2,7 +2,7 @@
 # License, v. 2.0. If a copy of the MPL was not distributed with this
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
-
+from __future__ import absolute_import
 import os
 import multiprocessing
 
@@ -11,12 +11,12 @@ try:
 except ImportError:
     pykd = None
 
-from puppet_worker import BaseWorker
+from . import puppet_worker
 
 __author__ = "Tyson Smith"
 __credits__ = ["Tyson Smith"]
 
-class DebuggerPyKDWorker(BaseWorker):
+class DebuggerPyKDWorker(puppet_worker.BaseWorker):
     """
     DebuggerPyKDWorker is intended to be used with ffpuppet to provide basic debugger
     information with minimal interaction with the browser process.

@@ -12,12 +12,12 @@ try:
 except ImportError:
     psutil = None
 
-from puppet_worker import BaseWorker
+from . import puppet_worker
 
 __author__ = "Tyson Smith"
 __credits__ = ["Tyson Smith"]
 
-class MemoryLimiterWorker(BaseWorker):
+class MemoryLimiterWorker(puppet_worker.BaseWorker):
     """
     MemoryLimiterWorker intended to be used with ffpuppet to limit the about of memory
     used by the browser process.

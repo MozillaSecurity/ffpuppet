@@ -4,6 +4,7 @@
 # License, v. 2.0. If a copy of the MPL was not distributed with this
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
+from __future__ import absolute_import
 import argparse
 import errno
 import logging
@@ -26,11 +27,13 @@ try:
 except ImportError:
     pass
 
-from debugger_windbg import DebuggerPyKDWorker
-from log_scanner import LogScannerWorker
-from memory_limiter import MemoryLimiterWorker
+
+from . import debugger_windbg
+from . import log_scanner
+from . import memory_limiter
 
 __author__ = "Tyson Smith"
+__all__ = ("FFPuppet", "LaunchError")
 
 log = logging.getLogger("ffpuppet") # pylint: disable=invalid-name
 
@@ -87,7 +90,7 @@ class FFPuppet(object):
         if use_windbg:
             if self._platform != "windows":
                 raise EnvironmentError("WinDBG only available on Windows")
-            if not DebuggerPyKDWorker.available:
+            if not debugger_windbg.DebuggerPyKDWorker.available:
                 raise EnvironmentError("Please install PyKD")
 
         if use_gdb:
@@ -522,7 +525,7 @@ class FFPuppet(object):
             elif re.match(r"http(s)?://", location, re.IGNORECASE) is None:
                 raise IOError("Cannot find %s" % os.path.abspath(location))
 
-        if memory_limit is not None and not MemoryLimiterWorker.available:
+        if memory_limit is not None and not memory_limiter.MemoryLimiterWorker.available:
             raise EnvironmentError("Please install psutil")
 
         self.closed = False
@@ -568,12 +571,12 @@ class FFPuppet(object):
 
         if memory_limit is not None:
             # launch memory monitor thread
-            self._workers.append(MemoryLimiterWorker())
+            self._workers.append(memory_limiter.MemoryLimiterWorker())
             self._workers[-1].start(self._proc.pid, memory_limit)
 
         if self._windbg:
             # launch pykd debugger
-            self._workers.append(DebuggerPyKDWorker())
+            self._workers.append(debugger_windbg.DebuggerPyKDWorker())
             self._workers[-1].start(self._proc.pid)
 
         if self._use_valgrind:
@@ -581,7 +584,7 @@ class FFPuppet(object):
 
         if self._abort_tokens:
             # launch log scanner thread
-            self._workers.append(LogScannerWorker())
+            self._workers.append(log_scanner.LogScannerWorker())
             self._workers[-1].start(self)
 
 
