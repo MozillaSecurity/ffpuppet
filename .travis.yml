@@ -10,8 +10,8 @@ branches:
     only:
         - master
 before_script:
-    - if [ $TRAVIS_PYTHON_VERSION == 2.7 -o $TRAVIS_PYTHON_VERSION == 3.5 ]; then pip install psutil pylint pytest-cov python-coveralls xvfbwrapper; else pip install psutil pylint xvfbwrapper; fi
+    - if [ $TRAVIS_PYTHON_VERSION == 2.7 -o $TRAVIS_PYTHON_VERSION == 3.5 ]; then pip install psutil pylint pytest-cov python-coveralls xvfbwrapper; else pip install psutil xvfbwrapper; fi
 script:
-    - if [ $TRAVIS_PYTHON_VERSION == 2.7 -o $TRAVIS_PYTHON_VERSION == 3.5 ]; then py.test tests.py -v --cov . --cov-report term-missing --cov-config .coveragerc && pylint --errors-only --ignore=testff.py ffpuppet; else py.test tests.py -v && pylint --errors-only --ignore=testff.py ffpuppet; fi
+    - if [ $TRAVIS_PYTHON_VERSION == 2.7 -o $TRAVIS_PYTHON_VERSION == 3.5 ]; then py.test tests.py -v --cov . --cov-report term-missing --cov-config .coveragerc && pylint --errors-only --ignore=testff.py ffpuppet; else py.test tests.py -v; fi
 after_success:
     - if [ $TRAVIS_PYTHON_VERSION == 2.7 -o $TRAVIS_PYTHON_VERSION == 3.5 ]; then coveralls; fi
