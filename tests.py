@@ -9,6 +9,7 @@ import platform
 import random
 import shutil
 import socket
+import subprocess
 import sys
 import tempfile
 import threading
@@ -378,3 +379,24 @@ class PuppetTests(TestCase):
                 ffp.launch(TESTFF_BIN, prefs_js="fake_file.js")
         finally:
             ffp.clean_up()
+
+    if sys.platform != 'win32': # GDB work untested on windows
+        def test_19(self):
+            "test launching with gdb"
+            ffp = FFPuppet(use_gdb=True)
+            try:
+                bin_path = subprocess.check_output(["which", "echo"]).strip()
+                if not isinstance(bin_path, str):
+                    bin_path = bin_path.decode() # python 3 compatibility
+                # launch will fail b/c 'echo' will exit right away but that's fine
+                with self.assertRaisesRegex(LaunchError, "Failure during browser startup"):
+                    self.assertEqual(ffp.launch(bin_path), 0)
+                ffp.close()
+                ffp.save_log(self.tmpfn)
+                with open(self.tmpfn, "r") as log_fp:
+                    log_data = log_fp.read()
+                # verify GDB ran and executed the script
+                self.assertRegexpMatches(log_data, r"[Inferior \d+ (process \d+) exited with code \d+]")
+                self.assertRegexpMatches(log_data, r"\+quit_with_code")
+            finally:
+                ffp.clean_up()
