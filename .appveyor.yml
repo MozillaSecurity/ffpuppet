@@ -12,7 +12,7 @@ branches:
     only:
         - master
 install:
-    - "%PYTHON%\\python.exe -m pip install pylint pytest psutil"
+    - "%PYTHON%\\python.exe -m pip install pylint pytest"
 build: off
 test_script:
     - "%PYTHON%\\python.exe -m pytest tests.py -v && %PYTHON%\\python.exe -m pylint --errors-only --ignore=testff.py ffpuppet"
