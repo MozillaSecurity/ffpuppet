@@ -1,4 +1,4 @@
 psutil >= 4.2.0; python_version != '3.2'
-psutil -= 4.2.0; python_version == '3.2'
+psutil ~= 4.2.0; python_version == '3.2'
 pykd >= 0.3.1.5; sys_platform == 'win32'
 xvfbwrapper >= 0.2.8; sys_platform == 'linux'
