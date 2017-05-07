@@ -394,6 +394,10 @@ class FFPuppet(object):
         @rtype: list
         @return: List of arguments that make up the launch command
         """
+
+        if not isinstance(bin_path, str):
+            raise TypeError("Expecting 'str' got %r" % type(bin_path).__name__)
+
         cmd = [
             bin_path,
             "-no-remote",
@@ -402,7 +406,10 @@ class FFPuppet(object):
 
         if additional_args:
             if not isinstance(additional_args, list):
-                raise TypeError("additional_args must be of type 'list'")
+                raise TypeError("Expecting 'list' got %r" % type(additional_args).__name__)
+            for add_arg in additional_args:
+                if not isinstance(add_arg, str):
+                    raise TypeError("Expecting 'str' got %r" % type(add_arg).__name__)
             cmd.extend(additional_args)
 
         if self._use_valgrind:
