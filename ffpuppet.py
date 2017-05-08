@@ -689,7 +689,7 @@ class FFPuppet(object):
         return None
 
 
-def main():
+def _parse_args(argv=None):
     parser = argparse.ArgumentParser(description="Firefox launcher/wrapper")
     parser.add_argument(
         "binary",
@@ -735,7 +735,11 @@ def main():
     parser.add_argument(
         "--xvfb", action="store_true",
         help="Use xvfb (Linux only)")
-    args = parser.parse_args()
+    return parser.parse_args(argv)
+
+
+def main(argv=None):
+    args = _parse_args(argv)
 
     # set output verbosity
     if args.verbose:

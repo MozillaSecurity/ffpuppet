@@ -16,7 +16,7 @@ import threading
 import time
 import unittest
 
-from ffpuppet import FFPuppet, LaunchError
+from ffpuppet import FFPuppet, LaunchError, main
 
 
 logging.basicConfig(level=logging.DEBUG if bool(os.getenv("DEBUG")) else logging.INFO)
@@ -400,3 +400,22 @@ class PuppetTests(TestCase):
                 self.assertRegexpMatches(log_data, r"\+quit_with_code")
             finally:
                 ffp.clean_up()
+
+
+class ScriptTests(TestCase):
+    def test_01(self):
+        "test calling main with '-h'"
+        with self.assertRaisesRegex(SystemExit, "0"):
+            main(["-h"])
+
+    def test_02(self):
+        "test calling main with test binary/script"
+        fd, tmpfn = tempfile.mkstemp()
+        os.close(fd)
+        os.remove(tmpfn)
+        try:
+            main([TESTFF_BIN, "-l", tmpfn, "-d"])
+            self.assertTrue(os.path.isfile(tmpfn))
+        finally:
+            if os.path.isfile(tmpfn):
+                os.remove(tmpfn)
