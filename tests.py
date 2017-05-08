@@ -63,7 +63,8 @@ class PuppetTests(TestCase):
         os.close(fd)
 
     def tearDown(self):
-        os.unlink(self.tmpfn)
+        if os.path.isfile(self.tmpfn):
+            os.unlink(self.tmpfn)
 
     if sys.platform != 'win32':
         def test_0(self):
@@ -139,20 +140,23 @@ class PuppetTests(TestCase):
                 self.wfile.write(b"hello world")
 
         httpd = create_server(_req_handler)
+        log_dir = tempfile.mkdtemp()
         try:
             location = "http://127.0.0.1:%d" % httpd.server_address[1]
             ffp.launch(TESTFF_BIN, location=location)
             ffp.wait()
-        finally:
             ffp.close()
-            ffp.save_log(self.tmpfn)
+            log_file = os.path.join(log_dir, "test_log.txt")
+            ffp.save_log(log_file)
+            with open(log_file) as log_fp:
+                log = log_fp.read().splitlines()
+            self.assertTrue(log[0].startswith('Launch command'))
+            self.assertEqual(log[1:], ['', "hello world", "[Exit code: 0]"])
+        finally:
             ffp.clean_up()
             httpd.shutdown()
-
-        with open(self.tmpfn) as log_fp:
-            log = log_fp.read().splitlines()
-        self.assertTrue(log[0].startswith('Launch command'))
-        self.assertEqual(log[1:], ['', "hello world", "[Exit code: 0]"])
+            if os.path.isdir(log_dir):
+                shutil.rmtree(log_dir)
 
     def test_5(self):
         "test get_pid()"
@@ -203,6 +207,7 @@ class PuppetTests(TestCase):
 
     def test_8(self):
         "test clone_log()"
+        rnd_log = None
         ffp = FFPuppet()
         self.assertIsNone(ffp.clone_log(target_file=self.tmpfn))
         try:
@@ -215,6 +220,9 @@ class PuppetTests(TestCase):
             self.assertGreater(len(orig), 10)
             with open(self.tmpfn, "rb") as tmpfp:
                 self.assertEqual(tmpfp.read(), orig[10:])
+            # grab log without giving a target file name
+            rnd_log = ffp.clone_log()
+            self.assertIsNotNone(rnd_log)
             ffp.close()
             # make sure logs are available
             self.assertEqual(ffp.clone_log(target_file=self.tmpfn), self.tmpfn)
@@ -223,6 +231,8 @@ class PuppetTests(TestCase):
                 self.assertGreater(tmpfp.tell(), len(orig))
         finally:
             ffp.clean_up()
+            if rnd_log is not None and os.path.isfile(rnd_log):
+                os.remove(rnd_log)
         # verify clean_up() removed the logs
         self.assertIsNone(ffp.clone_log(target_file=self.tmpfn))
 
@@ -372,7 +382,7 @@ class PuppetTests(TestCase):
             ffp.clean_up()
 
     def test_18(self):
-        "test passing a non existing prefs file to launch() via prefs_js"
+        "test passing nonexistent file to launch() via prefs_js"
         ffp = FFPuppet()
         try:
             with self.assertRaisesRegex(IOError, "prefs.js file does not exist"):
@@ -400,6 +410,31 @@ class PuppetTests(TestCase):
                 self.assertRegexpMatches(log_data, r"\+quit_with_code")
             finally:
                 ffp.clean_up()
+
+    def test_20(self):
+        "test passing nonexistent profile directory to launch() via use_profile"
+        with self.assertRaisesRegex(IOError, "Cannot find profile.+"):
+            FFPuppet(use_profile="fake_dir")
+
+    def test_21(self):
+        "test calling save_log() before close()"
+        ffp = FFPuppet()
+
+        class _req_handler(BaseHTTPRequestHandler):
+            def do_GET(self):
+                self.send_response(200)
+                self.end_headers()
+                self.wfile.write(b"hello world")
+
+        httpd = create_server(_req_handler)
+        try:
+            location = "http://127.0.0.1:%d" % httpd.server_address[1]
+            ffp.launch(TESTFF_BIN, location=location)
+            with self.assertRaisesRegex(RuntimeError, "Log is still in use.+"):
+                ffp.save_log(self.tmpfn)
+        finally:
+            ffp.clean_up()
+            httpd.shutdown()
 
 
 class ScriptTests(TestCase):

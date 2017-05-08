@@ -258,12 +258,8 @@ class FFPuppet(object):
         if not self.closed:
             raise RuntimeError("Log is still in use. Call close() first!")
 
-        # check if there is a log to save
-        if self._log is None:
-            return
-
         # copy log to location specified by log_file
-        if os.path.isfile(self._log.name):
+        if self._log is not None and os.path.isfile(self._log.name):
             if not os.path.dirname(log_file):
                 log_file = os.path.join(os.getcwd(), log_file)
             shutil.copy(self._log.name, log_file)
