@@ -51,19 +51,21 @@ def main():
         sys.stdout.flush()
         sys.exit(1)
 
-    if url is not None:
-        while True:
-            with urllib.request.urlopen(url) as conn:
-                data = conn.read().decode('utf-8')
-                # check for redirects
-                redirect = re.search(r"content=\"0;\surl=([^\"]+)\"", data)
-                if redirect is not None:
-                    url = redirect.group(1)
-                    continue
-                sys.stdout.write(data)
-                sys.stdout.write('\n')
-                sys.stdout.flush()
+    while url is not None:
+        if url.startswith("about"):
             break
+        with urllib.request.urlopen(url) as conn:
+            data = conn.read().decode('utf-8')
+            # check for redirects
+            redirect = re.search(r"content=\"0;\surl=([^\"]+)\"", data)
+            if redirect is not None:
+                url = redirect.group(1)
+                continue
+            sys.stdout.write(data)
+            sys.stdout.write('\n')
+            sys.stdout.flush()
+        break
+
 
     if cmd == 'memory':
         sys.stdout.write('simulating high memory usage\n')
