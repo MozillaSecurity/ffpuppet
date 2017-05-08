@@ -1,6 +1,7 @@
 [run]
 omit =
-	debugger_windbg.py
+	__main__.py
+	workers/debugger_windbg.py
 	setup.py
 	testff.py
 
