@@ -9,7 +9,7 @@ branches:
     only:
         - master
 before_script:
-    - sudo apt-get install gdb
+    - sudo apt-get install gdb valgrind
     - if [ $TRAVIS_PYTHON_VERSION == 2.7 -o $TRAVIS_PYTHON_VERSION == 3.5 ]; then pip install pylint pytest-cov python-coveralls; fi
 script:
     - if [ $TRAVIS_PYTHON_VERSION == 2.7 -o $TRAVIS_PYTHON_VERSION == 3.5 ]; then py.test tests.py -v --cov . --cov-report term-missing --cov-config .coveragerc && pylint --errors-only --ignore=testff.py,debugger_windbg.py ffpuppet; else py.test tests.py -v; fi
