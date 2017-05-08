@@ -1,2 +1,11 @@
 [run]
-omit = setup.py, testff.py
+omit =
+	debugger_windbg.py
+	setup.py
+	testff.py
+
+[report]
+exclude_lines =
+	except ImportError:
+	if __name__ == .__main__.:
+	raise EnvironmentError("Please install
