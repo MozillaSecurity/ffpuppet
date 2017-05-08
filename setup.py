@@ -7,6 +7,6 @@ if __name__ == '__main__':
     setup(name="ffpuppet",
           version="0.1",
           install_requires=requires,
-          packages=['ffpuppet'],
+          packages=['ffpuppet', 'ffpuppet.workers'],
           package_dir={'ffpuppet': ''})
 
