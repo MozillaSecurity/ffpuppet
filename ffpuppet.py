@@ -85,6 +85,8 @@ class FFPuppet(object):
             self._profile = os.path.abspath(self._profile)
 
         if use_valgrind:
+            if self._platform == "windows":
+                raise EnvironmentError("Valgrind is not supported on Windows")
             try:
                 with open(os.devnull, "w") as null_fp:
                     subprocess.call(["valgrind", "--version"], stdout=null_fp, stderr=null_fp)
@@ -249,7 +251,7 @@ class FFPuppet(object):
         This should only be called after close().
 
         @type log_file: String
-        @param log_file: File to create to contain log data.
+        @param log_file: File to create to contain log data. Existing files will be overwritten.
 
         @rtype: None
         @return: None
@@ -260,8 +262,12 @@ class FFPuppet(object):
 
         # copy log to location specified by log_file
         if self._log is not None and os.path.isfile(self._log.name):
-            if not os.path.dirname(log_file):
-                log_file = os.path.join(os.getcwd(), log_file)
+            dst_path = os.path.dirname(log_file)
+            if not dst_path:
+                dst_path = os.getcwd()
+            if not os.path.isdir(dst_path):
+                os.makedirs(dst_path)
+            log_file = os.path.join(os.path.abspath(dst_path), log_file)
             shutil.copy(self._log.name, log_file)
 
 
@@ -409,7 +415,7 @@ class FFPuppet(object):
                 "--show-possibly-lost=no",
                 "--read-inline-info=yes",
                 #"--leak-check=full",
-                "--track-origins=yes",
+                #"--track-origins=yes",
                 "--vex-iropt-register-updates=allregs-at-mem-access"] + cmd
 
         if self._use_gdb:

@@ -91,8 +91,8 @@ class PuppetTests(TestCase):
             location = "http://127.0.0.1:%d" % httpd.server_address[1]
             ffp.launch(TESTFF_BIN, location=location)
             self.assertEqual(ffp.wait(1), 0) # will close automatically
-        finally:
             ffp.close()
+        finally:
             ffp.clean_up()
             httpd.shutdown()
         self.assertFalse(ffp.is_running())
@@ -106,10 +106,10 @@ class PuppetTests(TestCase):
         try:
             with self.assertRaisesRegex(LaunchError, "Failure during browser startup"):
                 ffp.launch(TESTFF_BIN, prefs_js=self.tmpfn)
-        finally:
             self.assertEqual(ffp.wait(1), 1) # test crash returns 1
             ffp.close()
             ffp.save_log(self.tmpfn)
+        finally:
             ffp.clean_up()
 
     def test_3(self):
@@ -122,9 +122,9 @@ class PuppetTests(TestCase):
             with self.assertRaisesRegex(LaunchError, "Launching browser timed out"):
                 ffp.launch(TESTFF_BIN, prefs_js=self.tmpfn, launch_timeout=1)
             duration = time.time() - start
-        finally:
             ffp.close()
             ffp.save_log(self.tmpfn)
+        finally:
             ffp.clean_up()
         self.assertGreater(duration, 9) # min launch_timeout is 10
         self.assertLess(duration, 60)
@@ -146,12 +146,17 @@ class PuppetTests(TestCase):
             ffp.launch(TESTFF_BIN, location=location)
             ffp.wait()
             ffp.close()
-            log_file = os.path.join(log_dir, "test_log.txt")
+            log_file = os.path.join(log_dir, "some_dir", "test_log.txt") # nonexistent directory
             ffp.save_log(log_file)
+            self.assertTrue(os.path.isfile(log_file))
             with open(log_file) as log_fp:
                 log = log_fp.read().splitlines()
             self.assertTrue(log[0].startswith('Launch command'))
             self.assertEqual(log[1:], ['', "hello world", "[Exit code: 0]"])
+            log_file = "rel_test_path.txt" # save to cwd
+            ffp.save_log(log_file)
+            self.assertTrue(os.path.isfile(log_file))
+            os.remove(log_file)
         finally:
             ffp.clean_up()
             httpd.shutdown()
@@ -435,6 +440,30 @@ class PuppetTests(TestCase):
         finally:
             ffp.clean_up()
             httpd.shutdown()
+
+    def test_22(self):
+        "test launching with Valgrind"
+        if sys.platform.startswith('win'):
+            with self.assertRaisesRegex(EnvironmentError, "Valgrind is not supported on Windows"):
+                FFPuppet(use_valgrind=True)
+        else:
+            ffp = FFPuppet(use_valgrind=True)
+            try:
+                bin_path = subprocess.check_output(["which", "echo"]).strip()
+                if not isinstance(bin_path, str):
+                    bin_path = bin_path.decode() # python 3 compatibility
+                # launch will fail b/c 'echo' will exit right away but that's fine
+                with self.assertRaisesRegex(LaunchError, "Failure during browser startup"):
+                    self.assertEqual(ffp.launch(bin_path), 0)
+                ffp.close()
+                ffp.save_log(self.tmpfn)
+                with open(self.tmpfn, "r") as log_fp:
+                    log_data = log_fp.read()
+                # verify Valgrind ran and executed the script
+                self.assertRegexpMatches(log_data, r"valgrind -q")
+                self.assertRegexpMatches(log_data, r"\[Exit code: 0\]")
+            finally:
+                ffp.clean_up()
 
 
 class ScriptTests(TestCase):
