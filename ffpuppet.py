@@ -27,11 +27,9 @@ except ImportError:
     pass
 
 try: # py 2-3 compatibility
-    import workers.debugger_windbg as debugger_windbg
     import workers.log_scanner as log_scanner
     import workers.memory_limiter as memory_limiter
 except ImportError:
-    import ffpuppet.workers.debugger_windbg as debugger_windbg # pylint: disable=no-name-in-module
     import ffpuppet.workers.log_scanner as log_scanner # pylint: disable=no-name-in-module
     import ffpuppet.workers.memory_limiter as memory_limiter # pylint: disable=no-name-in-module
 
@@ -67,7 +65,7 @@ class LaunchError(Exception):
 
 
 class FFPuppet(object):
-    def __init__(self, use_profile=None, use_valgrind=False, use_windbg=False, use_xvfb=False,
+    def __init__(self, use_profile=None, use_valgrind=False, use_xvfb=False,
                  use_gdb=False, detect_soft_assertions=False):
         self._abort_tokens = set() # tokens used to notify log scanner to kill the browser process
         self._log = None
@@ -77,7 +75,6 @@ class FFPuppet(object):
         self._remove_profile = None # profile that needs to be removed when complete
         self._use_valgrind = use_valgrind
         self._use_gdb = use_gdb
-        self._windbg = use_windbg
         self._workers = list() # collection of threads and processes
         self._xvfb = None
         self.closed = True # False once launch() is called and True once close() is called
@@ -93,12 +90,6 @@ class FFPuppet(object):
                     subprocess.call(["valgrind", "--version"], stdout=null_fp, stderr=null_fp)
             except OSError:
                 raise EnvironmentError("Please install Valgrind")
-
-        if use_windbg:
-            if self._platform != "windows":
-                raise EnvironmentError("WinDBG only available on Windows")
-            if not debugger_windbg.DebuggerPyKDWorker.available:
-                raise EnvironmentError("Please install PyKD")
 
         if use_gdb:
             try:
@@ -588,10 +579,6 @@ class FFPuppet(object):
             self._workers.append(memory_limiter.MemoryLimiterWorker())
             self._workers[-1].start(self._proc.pid, memory_limit)
 
-        if self._windbg:
-            # launch pykd debugger
-            self._workers.append(debugger_windbg.DebuggerPyKDWorker())
-            self._workers[-1].start(self._proc.pid)
 
         if self._use_valgrind:
             self._abort_tokens.add(re.compile(r"==\d+==\s"))
@@ -746,9 +733,6 @@ def main():
         "-v", "--verbose", action="store_true",
         help="Output includes debug prints")
     parser.add_argument(
-        "--windbg", action="store_true",
-        help="Collect crash log with WinDBG (Windows only)")
-    parser.add_argument(
         "--xvfb", action="store_true",
         help="Use xvfb (Linux only)")
     args = parser.parse_args()
@@ -765,7 +749,6 @@ def main():
     ffp = FFPuppet(
         use_profile=args.profile,
         use_valgrind=args.valgrind,
-        use_windbg=args.windbg,
         use_xvfb=args.xvfb,
         use_gdb=args.gdb)
     try:
