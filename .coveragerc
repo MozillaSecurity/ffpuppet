@@ -8,4 +8,4 @@ omit =
 exclude_lines =
 	except ImportError:
 	if __name__ == .__main__.:
-	raise EnvironmentError("Please install
+	raise EnvironmentError("Please install.+")
