@@ -1,17 +1,28 @@
 language: python
+
+dist: trusty
+sudo: false
+
 python:
     - 2.7
     - 3.3
     - 3.4
     - 3.5
     - 3.6
+
 branches:
     only:
         - master
-before_script:
-    - sudo apt-get install gdb valgrind
+
+install:
+    - sudo apt-get update -qq
+    - sudo apt-get install -y gdb valgrind
+    - gdb --version
+    - valgrind --version
     - if [ $TRAVIS_PYTHON_VERSION == 2.7 -o $TRAVIS_PYTHON_VERSION == 3.5 ]; then pip install pylint pytest-cov python-coveralls; fi
+
 script:
     - if [ $TRAVIS_PYTHON_VERSION == 2.7 -o $TRAVIS_PYTHON_VERSION == 3.5 ]; then py.test tests.py -v --cov . --cov-report term-missing --cov-config .coveragerc && pylint --errors-only --ignore=testff.py,debugger_windbg.py ffpuppet; else py.test tests.py -v; fi
+
 after_success:
     - if [ $TRAVIS_PYTHON_VERSION == 2.7 -o $TRAVIS_PYTHON_VERSION == 3.5 ]; then coveralls; fi
