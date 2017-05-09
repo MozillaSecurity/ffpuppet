@@ -17,6 +17,7 @@ branches:
 install:
     - sudo apt-get update -qq
     - sudo apt-get install -y gdb valgrind
+    - pip install -r requirements.txt 
     - gdb --version
     - valgrind --version
     - if [ $TRAVIS_PYTHON_VERSION == 2.7 -o $TRAVIS_PYTHON_VERSION == 3.5 ]; then pip install pylint pytest-cov python-coveralls; fi
