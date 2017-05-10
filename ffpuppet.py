@@ -526,7 +526,7 @@ class FFPuppet(object):
         if not os.path.isfile(bin_path) or not os.access(bin_path, os.X_OK):
             raise IOError("%s is not an executable" % bin_path)
 
-        log.debug("requested redirect: %r", location)
+        log.debug("requested location: %r", location)
         if location is not None:
             if os.path.isfile(location):
                 location = "file:///%s" % pathname2url(os.path.abspath(location).lstrip('/'))
@@ -617,10 +617,12 @@ class FFPuppet(object):
                     continue
                 raise soc_e
         with open(os.path.join(self._profile, "prefs.js"), "a") as prefs_fp:
+            prefs_fp.write("\n") # make sure there is a newline before appending to prefs.js
             prefs_fp.write("user_pref('capability.policy.policynames', 'localfilelinks');\n")
             prefs_fp.write("user_pref('capability.policy.localfilelinks.sites', "
                            "'http://127.0.0.1:%d');\n" % init_soc.getsockname()[1])
-            prefs_fp.write("user_pref('capability.policy.localfilelinks.checkloaduri.enabled', 'allAccess');\n")
+            prefs_fp.write("user_pref('capability.policy.localfilelinks.checkloaduri.enabled', "
+                           "'allAccess');\n")
         return init_soc
 
 
@@ -648,6 +650,7 @@ class FFPuppet(object):
             while len(conn.recv(4096)) == 4096:
                 pass
 
+            log.debug("redirect url: %r", url)
             response = "<head>" \
                        "<meta http-equiv=\"refresh\" content=\"0; url=%s\"/>" \
                        "</head>" % ("about:blank" if url is None else url)
