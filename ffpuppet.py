@@ -526,6 +526,7 @@ class FFPuppet(object):
         if not os.path.isfile(bin_path) or not os.access(bin_path, os.X_OK):
             raise IOError("%s is not an executable" % bin_path)
 
+        log.debug("requested redirect: %r", location)
         if location is not None:
             if os.path.isfile(location):
                 location = "file:///%s" % pathname2url(os.path.abspath(location).lstrip('/'))
@@ -564,6 +565,7 @@ class FFPuppet(object):
         self._log.flush()
 
         # launch the browser
+        log.debug("launch command: %r", " ".join(cmd))
         self._proc = subprocess.Popen(
             cmd,
             creationflags=subprocess.CREATE_NEW_PROCESS_GROUP if self._platform == "windows" else 0,
@@ -744,7 +746,7 @@ def main(argv=None):
     args = _parse_args(argv)
 
     # set output verbosity
-    if args.verbose:
+    if args.verbose or bool(os.getenv("DEBUG")):
         log_level = logging.DEBUG
         log_fmt = "%(levelname).1s %(name)s [%(asctime)s] %(message)s"
     else:
