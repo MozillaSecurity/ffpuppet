@@ -102,7 +102,7 @@ class PuppetTests(TestCase):
         "test crash on start"
         ffp = FFPuppet()
         with open(self.tmpfn, 'w') as prefs:
-            prefs.write('#fftest_startup_crash\n')
+            prefs.write('//fftest_startup_crash\n')
         try:
             with self.assertRaisesRegex(LaunchError, "Failure during browser startup"):
                 ffp.launch(TESTFF_BIN, prefs_js=self.tmpfn)
@@ -116,7 +116,7 @@ class PuppetTests(TestCase):
         "test hang on start"
         ffp = FFPuppet()
         with open(self.tmpfn, 'w') as prefs:
-            prefs.write('#fftest_hang\n')
+            prefs.write('//fftest_hang\n')
         try:
             start = time.time()
             with self.assertRaisesRegex(LaunchError, "Launching browser timed out"):
@@ -245,7 +245,7 @@ class PuppetTests(TestCase):
         "test hitting memory limit"
         ffp = FFPuppet()
         with open(self.tmpfn, 'w') as prefs:
-            prefs.write('#fftest_memory\n')
+            prefs.write('//fftest_memory\n')
 
         class _req_handler(BaseHTTPRequestHandler):
             def do_GET(self):
@@ -293,7 +293,7 @@ class PuppetTests(TestCase):
     def test_11(self):
         "test abort tokens via detect_soft_assertions"
         with open(self.tmpfn, 'w') as prefs:
-            prefs.write('#fftest_soft_assert\n')
+            prefs.write('//fftest_soft_assert\n')
         ffp = FFPuppet(detect_soft_assertions=True)
 
         class _req_handler(BaseHTTPRequestHandler):
@@ -464,6 +464,25 @@ class PuppetTests(TestCase):
                 self.assertRegexpMatches(log_data, r"\[Exit code: 0\]")
             finally:
                 ffp.clean_up()
+
+    def test_23(self):
+        "test validate_prefs()"
+        self.assertFalse(FFPuppet.validate_prefs("blah"))
+        with open(self.tmpfn, 'w') as prefs:
+            prefs.write('//comment line 1@!@$23fdf //???\n')
+            prefs.write('\n    \n\n \n') # white space and newlines
+            prefs.write('user_pref("somepref1.enabled", false);\n')
+            prefs.write('user_pref(\'somepref2.value\', 1);\n')
+            prefs.write('user_pref("somepref3.foo", \"blah\");\n')
+        self.assertTrue(FFPuppet.validate_prefs(self.tmpfn))
+        # test with junk
+        with open(self.tmpfn, 'w') as prefs:
+            prefs.write('//invaild test\nfail!\n\n')
+        self.assertFalse(FFPuppet.validate_prefs(self.tmpfn))
+        # test with incorrect use of " and '
+        with open(self.tmpfn, 'w') as prefs:
+            prefs.write('user_pref("somepref1.enabled\', false);\n')
+        self.assertFalse(FFPuppet.validate_prefs(self.tmpfn))
 
 
 class ScriptTests(TestCase):

@@ -26,8 +26,8 @@ def main():
             for line in prefs_js:
                 if line.startswith('user_pref'):
                     pass
-                elif line.startswith('#'):
-                    line = line.lstrip('#').strip()
+                elif line.startswith('/'):
+                    line = line.lstrip('/').strip()
                     if line == 'fftest_hang':
                         cmd = 'hang'
                     elif line == 'fftest_startup_crash':

@@ -446,6 +446,27 @@ class FFPuppet(object):
         return cmd
 
 
+    @staticmethod
+    def validate_prefs(prefs_file):
+        if not os.path.isfile(prefs_file):
+            return False
+        invalid_lines = 0
+        re_valid_line = re.compile(r"user_pref\(((\".+\",)|('.+',))\s*.+\);\s*(//.*)?")
+        re_empty_line = re.compile(r"\s*\n")
+        with open(prefs_file, "r") as fp:
+            for line in fp.readlines():
+                if line.startswith("//"): # skip comment lines
+                    continue
+                if re_empty_line.match(line) is not None: # skip empty lines
+                    continue
+                if re_valid_line.match(line) is not None: # skip valid lines
+                    continue
+                invalid_lines += 1
+                log.debug("invalid pref %r in file %r", line, prefs_file)
+
+        return invalid_lines < 1
+
+
     def create_profile(self, extension=None, prefs_js=None):
         """
         Create a profile to be used with Firefox
@@ -554,6 +575,11 @@ class FFPuppet(object):
         cmd = self.build_launch_cmd(
             bin_path,
             additional_args=launch_args)
+
+        if prefs_js is not None and os.path.isfile(prefs_js):
+            # check if prefs.js file is valid
+            if not self.validate_prefs(prefs_js):
+                raise LaunchError("Invalid prefs file: %r" % prefs_js)
 
         # clean up existing log file before creating a new one
         if self._log is not None and os.path.isfile(self._log.name):
