@@ -294,8 +294,8 @@ class PuppetTests(TestCase):
         "test abort tokens via detect_soft_assertions"
         with open(self.tmpfn, 'w') as prefs:
             prefs.write('//fftest_soft_assert\n')
-        ffp = FFPuppet(detect_soft_assertions=True)
-
+        ffp = FFPuppet()
+        ffp.add_abort_token("###!!! ASSERTION:")
         class _req_handler(BaseHTTPRequestHandler):
             def do_GET(self):
                 self.send_response(200)

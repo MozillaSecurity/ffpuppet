@@ -65,8 +65,7 @@ class LaunchError(Exception):
 
 
 class FFPuppet(object):
-    def __init__(self, use_profile=None, use_valgrind=False, use_xvfb=False,
-                 use_gdb=False, detect_soft_assertions=False):
+    def __init__(self, use_profile=None, use_valgrind=False, use_xvfb=False, use_gdb=False):
         self._abort_tokens = set() # tokens used to notify log scanner to kill the browser process
         self._log = None
         self._platform = platform.system().lower()
@@ -121,9 +120,6 @@ class FFPuppet(object):
                         continue
                     raise
                 break
-
-        if detect_soft_assertions:
-            self.add_abort_token("###!!! ASSERTION:")
 
 
     def get_environ(self, target_bin):
@@ -448,6 +444,15 @@ class FFPuppet(object):
 
     @staticmethod
     def validate_prefs(prefs_file):
+        """
+        Check the provided prefs.js file for syntax errors
+
+        @type prefs_file: String
+        @param prefs_file: Path to prefs.js file
+
+        @rtype: bool
+        @return: True if the file appears valid otherwise False
+        """
         if not os.path.isfile(prefs_file):
             return False
         invalid_lines = 0
@@ -512,31 +517,30 @@ class FFPuppet(object):
                prefs_js=None, safe_mode=False, extension=None):
         """
         Launch a new browser process.
-        
+
         @type bin_path: String
         @param bin_path: Path to the Firefox binary
-        
+
         @type launch_timeout: int
         @param launch_timeout: Timeout in seconds for launching the browser
-        
+
         @type location: String
         @param location: URL to navigate to after successfully starting up the browser
-        
+
         @type memory_limit: int
         @param memory_limit: Memory limit in bytes. Browser will be terminated if its memory usage
                              exceeds the amount specified here.
-        
+
         @type prefs_js: String
         @param prefs_js: Path to a prefs.js file to install in the Firefox profile.
-        
+
         @type safe_mode: bool
         @param safe_mode: Launch Firefox in safe mode. WARNING: Launching in safe mode blocks with
                           a dialog that must be dismissed manually.
-        
+
         @type extension: String
         @param extension: Path to an extension (e.g. DOMFuzz fuzzPriv extension) to be installed.
-        
-        
+
         @rtype: None
         @return: None
         """
@@ -728,6 +732,10 @@ def _parse_args(argv=None):
         "binary",
         help="Firefox binary to execute")
     parser.add_argument(
+        "-a", "--abort-token", action="append", default=list(),
+        help="Scan the log for the given value and close browser on detection. " \
+             "For example '-a ###!!! ASSERTION:' would be used to detect soft assertions.")
+    parser.add_argument(
         "-d", "--dump", action="store_true",
         help="Display browser log on process exit")
     parser.add_argument(
@@ -788,6 +796,8 @@ def main(argv=None):
         use_valgrind=args.valgrind,
         use_xvfb=args.xvfb,
         use_gdb=args.gdb)
+    for a_token in args.abort_token:
+        ffp.add_abort_token(a_token)
     try:
         ffp.launch(
             args.binary,
