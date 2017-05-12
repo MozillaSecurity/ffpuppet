@@ -476,7 +476,9 @@ class PuppetTests(TestCase):
             prefs_fp.write('user_pref("a.a", 0);\n')
             prefs_fp.write('user_pref("a.b", "test");\n')
             prefs_fp.write('user_pref("a.c", true);\n')
-        with tempfile.NamedTemporaryFile(mode="w") as prefs_fp:
+        fd, custom_pref = tempfile.mkstemp()
+        os.close(fd)
+        with open(custom_pref, 'w') as prefs_fp: # custom prefs.js
             prefs_fp.write('// comment line\n')
             prefs_fp.write('# comment line\n')
             prefs_fp.write('/* comment block.\n')
@@ -487,11 +489,12 @@ class PuppetTests(TestCase):
             prefs_fp.flush()
             self.assertTrue(FFPuppet.check_prefs(prefs_fp.name, self.tmpfn))
         # test detects missing prefs
-        with tempfile.NamedTemporaryFile(mode="w") as prefs_fp:
+        with open(custom_pref, 'w') as prefs_fp: # custom prefs.js
             prefs_fp.write('user_pref("a.a", 0);\n')
             prefs_fp.write('user_pref("b.a", false);\n')
             prefs_fp.flush()
             self.assertFalse(FFPuppet.check_prefs(prefs_fp.name, self.tmpfn))
+        os.remove(custom_pref)
 
 
 class ScriptTests(TestCase):
