@@ -443,33 +443,45 @@ class FFPuppet(object):
 
 
     @staticmethod
-    def validate_prefs(prefs_file):
+    def check_prefs(input_prefs, current_prefs):
         """
-        Check the provided prefs.js file for syntax errors
+        Check that the current prefs.js file in used by the browser contains all the requested prefs
 
-        @type prefs_file: String
-        @param prefs_file: Path to prefs.js file
+        @type input_prefs: String
+        @param input_prefs: Path to prefs.js file that contains prefs that should be merged
+                            into current_prefs
+
+        @type current_prefs: String
+        @param current_prefs: Path to prefs.js file test the browser is using
 
         @rtype: bool
         @return: True if the file appears valid otherwise False
         """
-        if not os.path.isfile(prefs_file):
-            return False
-        invalid_lines = 0
-        re_valid_line = re.compile(r"user_pref\(((\".+\",)|('.+',))\s*.+\);\s*(//.*)?")
-        re_empty_line = re.compile(r"\s*\n")
-        with open(prefs_file, "r") as fp:
-            for line in fp.readlines():
-                if line.startswith("//"): # skip comment lines
-                    continue
-                if re_empty_line.match(line) is not None: # skip empty lines
-                    continue
-                if re_valid_line.match(line) is not None: # skip valid lines
-                    continue
-                invalid_lines += 1
-                log.debug("invalid pref %r in file %r", line, prefs_file)
 
-        return invalid_lines < 1
+        enabled_prefs = list()
+        with open(current_prefs, "r") as prefs_fp:
+            for e_pref in prefs_fp:
+                e_pref = e_pref.strip()
+                if e_pref.startswith("user_pref("):
+                    enabled_prefs.append(e_pref)
+
+        with open(input_prefs, "r") as prefs_fp:
+            missing_prefs = 0
+            for r_pref in prefs_fp:
+                r_pref = r_pref.strip()
+                if not r_pref.startswith("user_pref("):
+                    continue
+                found = False
+                for e_pref in enabled_prefs:
+                    if r_pref.startswith(e_pref):
+                        found = True
+                        break
+                if found:
+                    continue
+                log.debug("pref not set: %r", r_pref)
+                missing_prefs += 1
+
+        return missing_prefs < 1
 
 
     def create_profile(self, extension=None, prefs_js=None):
@@ -580,11 +592,6 @@ class FFPuppet(object):
             bin_path,
             additional_args=launch_args)
 
-        if prefs_js is not None and os.path.isfile(prefs_js):
-            # check if prefs.js file is valid
-            if not self.validate_prefs(prefs_js):
-                raise LaunchError("Invalid prefs file: %r" % prefs_js)
-
         # clean up existing log file before creating a new one
         if self._log is not None and os.path.isfile(self._log.name):
             os.remove(self._log.name)
@@ -608,11 +615,15 @@ class FFPuppet(object):
         self._bootstrap_finish(init_soc, timeout=launch_timeout, url=location)
         log.debug("bootstrap complete")
 
+        if prefs_js is not None and os.path.isfile(prefs_js):
+            # check if prefs have been set properly
+            if not self.check_prefs(prefs_js, os.path.join(self._profile, "prefs.js")):
+                log.warn("WARNING: prefs.js file %r may contain formatting errors", prefs_js)
+
         if memory_limit is not None:
             # launch memory monitor thread
             self._workers.append(memory_limiter.MemoryLimiterWorker())
             self._workers[-1].start(self._proc.pid, memory_limit)
-
 
         if self._use_valgrind:
             self._abort_tokens.add(re.compile(r"==\d+==\s"))

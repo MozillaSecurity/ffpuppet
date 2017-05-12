@@ -466,23 +466,32 @@ class PuppetTests(TestCase):
                 ffp.clean_up()
 
     def test_23(self):
-        "test validate_prefs()"
-        self.assertFalse(FFPuppet.validate_prefs("blah"))
-        with open(self.tmpfn, 'w') as prefs:
-            prefs.write('//comment line 1@!@$23fdf //???\n')
-            prefs.write('\n    \n\n \n') # white space and newlines
-            prefs.write('user_pref("somepref1.enabled", false);\n')
-            prefs.write('user_pref(\'somepref2.value\', 1);\n')
-            prefs.write('user_pref("somepref3.foo", \"blah\");\n')
-        self.assertTrue(FFPuppet.validate_prefs(self.tmpfn))
-        # test with junk
-        with open(self.tmpfn, 'w') as prefs:
-            prefs.write('//invaild test\nfail!\n\n')
-        self.assertFalse(FFPuppet.validate_prefs(self.tmpfn))
-        # test with incorrect use of " and '
-        with open(self.tmpfn, 'w') as prefs:
-            prefs.write('user_pref("somepref1.enabled\', false);\n')
-        self.assertFalse(FFPuppet.validate_prefs(self.tmpfn))
+        "test check_prefs()"
+        with open(self.tmpfn, 'w') as prefs_fp: # browser prefs.js dummy
+            prefs_fp.write('// comment line\n')
+            prefs_fp.write('# comment line\n')
+            prefs_fp.write('/* comment block.\n')
+            prefs_fp.write('*\n')
+            prefs_fp.write(' \n\n')
+            prefs_fp.write('user_pref("a.a", 0);\n')
+            prefs_fp.write('user_pref("a.b", "test");\n')
+            prefs_fp.write('user_pref("a.c", true);\n')
+        with tempfile.NamedTemporaryFile() as prefs_fp:
+            prefs_fp.write('// comment line\n')
+            prefs_fp.write('# comment line\n')
+            prefs_fp.write('/* comment block.\n')
+            prefs_fp.write('*\n')
+            prefs_fp.write(' \n\n')
+            prefs_fp.write('user_pref("a.a", 0);\n')
+            prefs_fp.write('user_pref("a.c", true);\n')
+            prefs_fp.flush()
+            self.assertTrue(FFPuppet.check_prefs(prefs_fp.name, self.tmpfn))
+        # test detects missing prefs
+        with tempfile.NamedTemporaryFile() as prefs_fp:
+            prefs_fp.write('user_pref("a.a", 0);\n')
+            prefs_fp.write('user_pref("b.a", false);\n')
+            prefs_fp.flush()
+            self.assertFalse(FFPuppet.check_prefs(prefs_fp.name, self.tmpfn))
 
 
 class ScriptTests(TestCase):
