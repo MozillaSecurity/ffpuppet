@@ -445,7 +445,10 @@ class FFPuppet(object):
     @staticmethod
     def check_prefs(input_prefs, current_prefs):
         """
-        Check that the current prefs.js file in used by the browser contains all the requested prefs
+        Check that the current prefs.js file in use by the browser contains all the requested prefs.
+
+        NOTE: There will be false positives if input_prefs does not adhere to the formatting that
+        is used in current_prefs.
 
         @type input_prefs: String
         @param input_prefs: Path to prefs.js file that contains prefs that should be merged
@@ -455,7 +458,7 @@ class FFPuppet(object):
         @param current_prefs: Path to prefs.js file test the browser is using
 
         @rtype: bool
-        @return: True if the file appears valid otherwise False
+        @return: True if current_prefs contains all prefs in input_prefs otherwise False
         """
 
         enabled_prefs = list()
