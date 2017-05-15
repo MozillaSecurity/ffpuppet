@@ -37,6 +37,8 @@ def main():
                     elif line == 'fftest_soft_assert':
                         cmd = 'soft_assert'
                     # don't worry about unknown values
+                elif line.startswith('#'):
+                    pass # skip comments
                 elif line.strip():
                     raise RuntimeError('unknown value in prefs.js: %s' % line)
     #sys.stdout.write('cmd: %s\n' % cmd)

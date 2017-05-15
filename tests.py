@@ -170,10 +170,10 @@ class PuppetTests(TestCase):
         try:
             ffp.launch(TESTFF_BIN)
             self.assertGreater(ffp.get_pid(), 0)
-        finally:
             ffp.close()
+        finally:
             ffp.clean_up()
-            self.assertIsNone(ffp.get_pid())
+        self.assertIsNone(ffp.get_pid())
 
     def test_6(self):
         "test is_running()"
@@ -182,11 +182,11 @@ class PuppetTests(TestCase):
         try:
             ffp.launch(TESTFF_BIN)
             self.assertTrue(ffp.is_running())
-        finally:
             ffp.close()
             self.assertFalse(ffp.is_running())
+        finally:
             ffp.clean_up()
-            self.assertFalse(ffp.is_running())
+        self.assertFalse(ffp.is_running())
 
     def test_7(self):
         "test wait()"
@@ -203,8 +203,8 @@ class PuppetTests(TestCase):
             location = "http://127.0.0.1:%d" % httpd.server_address[1]
             ffp.launch(TESTFF_BIN, location=location)
             self.assertEqual(ffp.wait(5), 0)
-        finally:
             ffp.close()
+        finally:
             ffp.clean_up()
             httpd.shutdown()
         self.assertIsNone(ffp.wait())
@@ -470,32 +470,48 @@ class PuppetTests(TestCase):
         with open(self.tmpfn, 'w') as prefs_fp: # browser prefs.js dummy
             prefs_fp.write('// comment line\n')
             prefs_fp.write('# comment line\n')
-            prefs_fp.write('/* comment block.\n')
-            prefs_fp.write('*\n')
             prefs_fp.write(' \n\n')
             prefs_fp.write('user_pref("a.a", 0);\n')
             prefs_fp.write('user_pref("a.b", "test");\n')
             prefs_fp.write('user_pref("a.c", true);\n')
-        fd, custom_pref = tempfile.mkstemp()
-        os.close(fd)
-        with open(custom_pref, 'w') as prefs_fp: # custom prefs.js
-            prefs_fp.write('// comment line\n')
-            prefs_fp.write('# comment line\n')
-            prefs_fp.write('/* comment block.\n')
-            prefs_fp.write('*\n')
-            prefs_fp.write(' \n\n')
-            prefs_fp.write('user_pref("a.a", 0);\n')
-            prefs_fp.write('user_pref("a.c", true);\n')
-            prefs_fp.flush()
-            self.assertTrue(FFPuppet.check_prefs(prefs_fp.name, self.tmpfn))
-        # test detects missing prefs
-        with open(custom_pref, 'w') as prefs_fp: # custom prefs.js
-            prefs_fp.write('user_pref("a.a", 0);\n')
-            prefs_fp.write('user_pref("b.a", false);\n')
-            prefs_fp.flush()
-            self.assertFalse(FFPuppet.check_prefs(prefs_fp.name, self.tmpfn))
-        os.remove(custom_pref)
+        ffp = FFPuppet()
+        ffp.launch(TESTFF_BIN, prefs_js=self.tmpfn)
+        try:
+            fd, custom_prefs = tempfile.mkstemp()
+            os.close(fd)
+            with open(custom_prefs, 'w') as prefs_fp: # custom prefs.js
+                prefs_fp.write('// comment line\n')
+                prefs_fp.write('# comment line\n')
+                prefs_fp.write('/* comment block.\n')
+                prefs_fp.write('*\n')
+                prefs_fp.write(' \n\n')
+                prefs_fp.write('user_pref("a.a", 0); // test comment\n')
+                prefs_fp.write('user_pref("a.c", true);\n')
+            self.assertTrue(ffp.check_prefs(custom_prefs))
+            # test detects missing prefs
+            with open(custom_prefs, 'w') as prefs_fp: # custom prefs.js
+                prefs_fp.write('user_pref("a.a", 0);\n')
+                prefs_fp.write('user_pref("b.a", false);\n')
+            self.assertFalse(ffp.check_prefs(custom_prefs))
+        finally:
+            ffp.clean_up()
+            os.remove(custom_prefs)
 
+    def test_24(self):
+        "test detecting invalid prefs file"
+        with open(self.tmpfn, 'w') as prefs_fp:
+            prefs_fp.write('// empty\n')
+
+        prf_dir = tempfile.mkdtemp()
+        with open(os.path.join(prf_dir, "Invalidprefs.js"), "w") as prefs_fp:
+            prefs_fp.write("bad")
+        try:
+            ffp = FFPuppet(use_profile=prf_dir)
+            with self.assertRaisesRegex(LaunchError, "'.+?' is invalid"):
+                ffp.launch(TESTFF_BIN, prefs_js=self.tmpfn)
+        finally:
+            ffp.clean_up()
+            shutil.rmtree(prf_dir)
 
 class ScriptTests(TestCase):
     def test_01(self):
@@ -505,12 +521,16 @@ class ScriptTests(TestCase):
 
     def test_02(self):
         "test calling main with test binary/script"
-        fd, tmpfn = tempfile.mkstemp()
+        fd, log = tempfile.mkstemp()
         os.close(fd)
-        os.remove(tmpfn)
+        os.remove(log)
+        fd, prefs = tempfile.mkstemp()
+        os.close(fd)
         try:
-            main([TESTFF_BIN, "-l", tmpfn, "-d"])
-            self.assertTrue(os.path.isfile(tmpfn))
+            main([TESTFF_BIN, "-l", log, "-d", "-p", prefs])
+            self.assertTrue(os.path.isfile(log))
         finally:
-            if os.path.isfile(tmpfn):
-                os.remove(tmpfn)
+            if os.path.isfile(log):
+                os.remove(log)
+            if os.path.isfile(prefs):
+                os.remove(prefs)
