@@ -1,4 +1,8 @@
 #!/usr/bin/env python3
+
+# To create an exe file for testing on Windows (tested with Python 3.4):
+# python -m py2exe.build_exe -O -b 0 -d testff testff.py
+
 import os.path
 import re
 import sys
@@ -22,7 +26,7 @@ def main():
     # read prefs to see how to run
     cmd = None
     if profile is not None:
-        with open(os.path.join(profile, 'prefs.js')) as prefs_js:
+        with open(os.path.join(profile, 'prefs.js'), "r") as prefs_js:
             for line in prefs_js:
                 if line.startswith('user_pref'):
                     pass
@@ -36,6 +40,8 @@ def main():
                         cmd = 'memory'
                     elif line == 'fftest_soft_assert':
                         cmd = 'soft_assert'
+                    elif line == 'fftest_invalid_js':
+                        cmd = 'invalid_js'
                     # don't worry about unknown values
                 elif line.startswith('#'):
                     pass # skip comments
@@ -52,6 +58,9 @@ def main():
         sys.stdout.write('simulating start up crash\n')
         sys.stdout.flush()
         sys.exit(1)
+    elif cmd == 'invalid_js':
+        with open(os.path.join(profile, 'Invalidprefs.js'), "w") as prefs_js:
+            prefs_js.write("bad!")
 
     while url is not None:
         if url.startswith("about"):

@@ -417,9 +417,38 @@ class PuppetTests(TestCase):
                 ffp.clean_up()
 
     def test_20(self):
-        "test passing nonexistent profile directory to launch() via use_profile"
-        with self.assertRaisesRegex(IOError, "Cannot find profile.+"):
-            FFPuppet(use_profile="fake_dir")
+        "test create_profile()"
+        with self.assertRaisesRegex(IOError, "Cannot find template profile: 'fake_dir'"):
+            FFPuppet.create_profile(template="fake_dir")
+
+        with self.assertRaisesRegex(IOError, "prefs.js file does not exist: 'fake_prefs'"):
+            FFPuppet.create_profile(prefs_js="fake_prefs")
+
+        # only the fuzzPriv ext is supported atm and support will be removed in the future
+        with self.assertRaisesRegex(RuntimeError, "Unknown extension: 'fake_ext'"):
+            FFPuppet.create_profile(extension="fake_ext")
+
+        # try creating a profile from scratch, does nothing but create a directory to be populated
+        prof = FFPuppet.create_profile()
+        self.assertTrue(os.path.isdir(prof))
+        contents = os.listdir(prof)
+        shutil.rmtree(prof)
+        self.assertEqual(len(contents), 0)
+
+        # create dummy profile
+        prf_dir = tempfile.mkdtemp()
+        invalid_js = os.path.join(prf_dir, "Invalidprefs.js")
+        with open(invalid_js, "w") as fp:
+            fp.write("blah!")
+        # try creating a profile from a template
+        prof = FFPuppet.create_profile(prefs_js=self.tmpfn, template=prf_dir)
+        shutil.rmtree(prf_dir)
+        self.assertTrue(os.path.isdir(prof))
+        contents = os.listdir(prof)
+        shutil.rmtree(prof)
+        self.assertIn("prefs.js", contents)
+        self.assertIn("times.json", contents)
+        self.assertNotIn("Invalidprefs.js", contents)
 
     def test_21(self):
         "test calling save_log() before close()"
@@ -499,19 +528,22 @@ class PuppetTests(TestCase):
 
     def test_24(self):
         "test detecting invalid prefs file"
+        class _req_handler(BaseHTTPRequestHandler):
+            def do_GET(self):
+                self.send_response(200)
+                self.end_headers()
+                self.wfile.write(b"test")
         with open(self.tmpfn, 'w') as prefs_fp:
-            prefs_fp.write('// empty\n')
-
-        prf_dir = tempfile.mkdtemp()
-        with open(os.path.join(prf_dir, "Invalidprefs.js"), "w") as prefs_fp:
-            prefs_fp.write("bad")
+            prefs_fp.write('//fftest_invalid_js\n')
+        httpd = create_server(_req_handler)
+        ffp = FFPuppet()
         try:
-            ffp = FFPuppet(use_profile=prf_dir)
+            location = "http://127.0.0.1:%d" % httpd.server_address[1]
             with self.assertRaisesRegex(LaunchError, "'.+?' is invalid"):
-                ffp.launch(TESTFF_BIN, prefs_js=self.tmpfn)
+                ffp.launch(TESTFF_BIN, prefs_js=self.tmpfn, location=location)
         finally:
             ffp.clean_up()
-            shutil.rmtree(prf_dir)
+            httpd.shutdown()
 
 class ScriptTests(TestCase):
     def test_01(self):

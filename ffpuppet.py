@@ -70,18 +70,13 @@ class FFPuppet(object):
         self._log = None
         self._platform = platform.system().lower()
         self._proc = None
-        self._profile = use_profile
-        self._remove_profile = None # profile that needs to be removed when complete
+        self._profile = None
+        self._profile_template = use_profile # profile that is used as a template
         self._use_valgrind = use_valgrind
         self._use_gdb = use_gdb
         self._workers = list() # collection of threads and processes
         self._xvfb = None
         self.closed = True # False once launch() is called and True once close() is called
-
-        if self._profile is not None:
-            if not os.path.isdir(self._profile):
-                raise IOError("Cannot find profile %s" % self._profile)
-            self._profile = os.path.abspath(self._profile)
 
         if use_valgrind:
             if self._platform == "windows":
@@ -294,7 +289,7 @@ class FFPuppet(object):
         # at this point everything should be cleaned up
         assert self.closed, "self.closed is not True"
         assert self._proc is None, "self._proc is not None"
-        assert self._remove_profile is None, "self._remove_profile is not None"
+        assert self._profile is None, "self._profile is not None"
         assert not self._workers, "self._workers is not empty"
 
 
@@ -352,10 +347,9 @@ class FFPuppet(object):
             self._log.close()
 
         # remove temporary profile directory if necessary
-        if self._remove_profile and os.path.isdir(self._remove_profile):
-            shutil.rmtree(self._remove_profile)
-            self._profile = None # a temporary profile was use so reset self._profile
-            self._remove_profile = None
+        if self._profile and os.path.isdir(self._profile):
+            shutil.rmtree(self._profile)
+            self._profile = None
 
         self.closed = True
 
@@ -484,7 +478,8 @@ class FFPuppet(object):
         return missing_prefs < 1
 
 
-    def create_profile(self, extension=None, prefs_js=None):
+    @staticmethod
+    def create_profile(extension=None, prefs_js=None, template=None):
         """
         Create a profile to be used with Firefox
 
@@ -494,35 +489,57 @@ class FFPuppet(object):
         @type prefs_js: String
         @param prefs_js: Path to a prefs.js file to install in the Firefox profile.
 
-        @rtype: None
-        @return: None
+        @type template: String
+        @param template: Path to an existing profile directory to use.
+
+        @rtype: String
+        @return: Path to directory to be used as a profile
         """
-        self._profile = tempfile.mkdtemp(prefix="ffprof_")
-        # since this is a temporary profile directory it should be removed later
-        self._remove_profile = self._profile
+
+        profile = tempfile.mkdtemp(prefix="ffprof_")
+        log.debug("profile directory: %r", profile)
+
+        if template is not None:
+            log.debug("using profile template: %r", template)
+            shutil.rmtree(profile) # reuse the directory name
+            if not os.path.isdir(template):
+                raise IOError("Cannot find template profile: %r" % template)
+            shutil.copytree(template, profile)
+            invalid_prefs = os.path.join(profile, "Invalidprefs.js")
+            # if Invalidprefs.js was copied from the template profile remove it
+            if os.path.isfile(invalid_prefs):
+                os.remove(invalid_prefs)
 
         if prefs_js is not None:
+            log.debug("using prefs.js: %r", prefs_js)
             if not os.path.isfile(prefs_js):
+                shutil.rmtree(profile, True) # clean up on failure
                 raise IOError("prefs.js file does not exist: %r" % prefs_js)
-            shutil.copyfile(prefs_js, os.path.join(self._profile, "prefs.js"))
+            shutil.copyfile(prefs_js, os.path.join(profile, "prefs.js"))
 
-        with open(os.path.join(self._profile, "times.json"), "w") as times_fp:
-            times_fp.write('{"created":%d}' % (int(time.time()) * 1000))
+            # times.json only needs to be created when using a custom pref.js
+            times_json = os.path.join(profile, "times.json")
+            if not os.path.isfile(times_json):
+                with open(times_json, "w") as times_fp:
+                    times_fp.write('{"created":%d}' % (int(time.time()) * 1000))
 
         # XXX: fuzzpriv extension support
         # should be removed when bug 1322400 is resolved if it is no longer used
         if extension is not None:
-            os.mkdir(os.path.join(self._profile, "extensions"))
+            os.mkdir(os.path.join(profile, "extensions"))
             if os.path.isfile(extension) and extension.endswith(".xpi"):
                 shutil.copyfile(
                     extension,
-                    os.path.join(self._profile, "extensions", os.path.basename(extension)))
+                    os.path.join(profile, "extensions", os.path.basename(extension)))
             elif os.path.isdir(extension):
                 shutil.copytree(
                     os.path.abspath(extension),
-                    os.path.join(self._profile, "extensions", "domfuzz@squarefree.com"))
+                    os.path.join(profile, "extensions", "domfuzz@squarefree.com"))
             else:
-                raise RuntimeError("Unknown extension: %s" % extension)
+                shutil.rmtree(profile, True) # clean up on failure
+                raise RuntimeError("Unknown extension: %r" % extension)
+
+        return profile
 
 
     def launch(self, bin_path, launch_timeout=300, location=None, memory_limit=None,
@@ -576,9 +593,11 @@ class FFPuppet(object):
         self.closed = False
         launch_timeout = max(launch_timeout, 10) # force 10 seconds minimum launch_timeout
 
-        # create and modify the profile only if one is not specified
-        if self._profile is None:
-            self.create_profile(extension=extension, prefs_js=prefs_js)
+        # create and modify a profile
+        self._profile = self.create_profile(
+            extension=extension,
+            prefs_js=prefs_js,
+            template=self._profile_template)
 
         # performing the bootstrap helps guarantee that the browser
         # will be loaded and ready to accept input when launch() returns
