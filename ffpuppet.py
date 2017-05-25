@@ -70,13 +70,13 @@ class FFPuppet(object):
         self._log = None
         self._platform = platform.system().lower()
         self._proc = None
-        self._profile = None
         self._profile_template = use_profile # profile that is used as a template
         self._use_valgrind = use_valgrind
         self._use_gdb = use_gdb
         self._workers = list() # collection of threads and processes
         self._xvfb = None
         self.closed = True # False once launch() is called and True once close() is called
+        self.profile = None # path to profile
 
         if use_valgrind:
             if self._platform == "windows":
@@ -289,7 +289,7 @@ class FFPuppet(object):
         # at this point everything should be cleaned up
         assert self.closed, "self.closed is not True"
         assert self._proc is None, "self._proc is not None"
-        assert self._profile is None, "self._profile is not None"
+        assert self.profile is None, "self.profile is not None"
         assert not self._workers, "self._workers is not empty"
 
 
@@ -347,9 +347,9 @@ class FFPuppet(object):
             self._log.close()
 
         # remove temporary profile directory if necessary
-        if self._profile and os.path.isdir(self._profile):
-            shutil.rmtree(self._profile)
-            self._profile = None
+        if self.profile is not None and os.path.isdir(self.profile):
+            shutil.rmtree(self.profile)
+            self.profile = None
 
         self.closed = True
 
@@ -381,11 +381,9 @@ class FFPuppet(object):
         if not isinstance(bin_path, str):
             raise TypeError("Expecting 'str' got %r" % type(bin_path).__name__)
 
-        cmd = [
-            bin_path,
-            "-no-remote",
-            "-profile",
-            self._profile]
+        cmd = [bin_path, "-no-remote"]
+        if self.profile is not None:
+            cmd += ["-profile", self.profile]
 
         if additional_args:
             if not isinstance(additional_args, list):
@@ -451,8 +449,12 @@ class FFPuppet(object):
         @return: True if all prefs in input_prefs are merged otherwise False
         """
 
+        if self.profile is None or not os.path.isfile(os.path.join(self.profile, "prefs.js")):
+            log.debug("prefs.js not in profile: %r", self.profile)
+            return False
+
         enabled_prefs = list()
-        with open(os.path.join(self._profile, "prefs.js"), "r") as prefs_fp:
+        with open(os.path.join(self.profile, "prefs.js"), "r") as prefs_fp:
             for e_pref in prefs_fp:
                 e_pref = e_pref.strip()
                 if e_pref.startswith("user_pref("):
@@ -594,7 +596,7 @@ class FFPuppet(object):
         launch_timeout = max(launch_timeout, 10) # force 10 seconds minimum launch_timeout
 
         # create and modify a profile
-        self._profile = self.create_profile(
+        self.profile = self.create_profile(
             extension=extension,
             prefs_js=prefs_js,
             template=self._profile_template)
@@ -634,7 +636,7 @@ class FFPuppet(object):
         self._bootstrap_finish(init_soc, timeout=launch_timeout, url=location)
         log.debug("bootstrap complete")
 
-        if prefs_js is not None and os.path.isfile(os.path.join(self._profile, "Invalidprefs.js")):
+        if prefs_js is not None and os.path.isfile(os.path.join(self.profile, "Invalidprefs.js")):
             raise LaunchError("%r is invalid" % prefs_js)
 
         if memory_limit is not None:
@@ -674,7 +676,7 @@ class FFPuppet(object):
                 if soc_e.errno == errno.EADDRINUSE: # Address already in use
                     continue
                 raise soc_e
-        with open(os.path.join(self._profile, "prefs.js"), "a") as prefs_fp:
+        with open(os.path.join(self.profile, "prefs.js"), "a") as prefs_fp:
             prefs_fp.write("\n") # make sure there is a newline before appending to prefs.js
             prefs_fp.write("user_pref('capability.policy.policynames', 'localfilelinks');\n")
             prefs_fp.write("user_pref('capability.policy.localfilelinks.sites', "

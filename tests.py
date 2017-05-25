@@ -504,7 +504,7 @@ class PuppetTests(TestCase):
             prefs_fp.write('user_pref("a.b", "test");\n')
             prefs_fp.write('user_pref("a.c", true);\n')
         ffp = FFPuppet()
-        ffp.launch(TESTFF_BIN, prefs_js=self.tmpfn)
+        self.assertFalse(ffp.check_prefs(self.tmpfn)) # test with profile == None
         try:
             fd, custom_prefs = tempfile.mkstemp()
             os.close(fd)
@@ -516,6 +516,7 @@ class PuppetTests(TestCase):
                 prefs_fp.write(' \n\n')
                 prefs_fp.write('user_pref("a.a", 0); // test comment\n')
                 prefs_fp.write('user_pref("a.c", true);\n')
+            ffp.launch(TESTFF_BIN, prefs_js=self.tmpfn)
             self.assertTrue(ffp.check_prefs(custom_prefs))
             # test detects missing prefs
             with open(custom_prefs, 'w') as prefs_fp: # custom prefs.js
