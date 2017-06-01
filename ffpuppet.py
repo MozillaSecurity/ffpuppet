@@ -17,9 +17,9 @@ import subprocess
 import tempfile
 import time
 try: # py 2-3 compatibility
-    from urllib import pathname2url # pylint: disable=no-name-in-module,import-error
+    from urllib import pathname2url # pylint: disable=no-name-in-module
 except ImportError:
-    from urllib.request import pathname2url # pylint: disable=no-name-in-module,import-error
+    from urllib.request import pathname2url # pylint: disable=no-name-in-module
 
 try:
     import xvfbwrapper
