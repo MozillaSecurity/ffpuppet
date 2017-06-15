@@ -178,8 +178,8 @@ class FFPuppet(object):
         if "MOZ_SKIA_DISABLE_ASSERTS" not in env:
             env["MOZ_SKIA_DISABLE_ASSERTS"] = "1"
 
-        #if "RUST_BACKTRACE" not in env:
-        #    env["RUST_BACKTRACE"] = "1"
+        if "RUST_BACKTRACE" not in env:
+            env["RUST_BACKTRACE"] = "1"
 
         # setup Undefined Behavior Sanitizer options if not set manually
         if "UBSAN_OPTIONS" not in env:
