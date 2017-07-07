@@ -73,6 +73,7 @@ def _run(puppet, log_file):
             puppet._proc.terminate()
             with open(log_file, "w") as log_fp:
                 log_fp.write("TOKEN_LOCATED: %s\n" % token_found)
+            puppet._proc.wait()
             break
 
         time.sleep(0.05) # don't be a CPU hog

@@ -61,6 +61,7 @@ def _run(process_id, limit, log_file):
             if proc_mem >= limit:
                 process.terminate()
                 log_fp.write("MEMORY_LIMIT_EXCEEDED: %d\n" % proc_mem)
+                process.wait()
                 break
 
             time.sleep(0.1) # check 10x a second
