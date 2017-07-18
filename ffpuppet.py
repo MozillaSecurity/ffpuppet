@@ -27,9 +27,11 @@ except ImportError:
     pass
 
 try: # py 2-3 compatibility
+    import breakpad_syms
     import workers.log_scanner as log_scanner
     import workers.memory_limiter as memory_limiter
 except ImportError:
+    import ffpuppet.breakpad_syms
     import ffpuppet.workers.log_scanner as log_scanner # pylint: disable=no-name-in-module
     import ffpuppet.workers.memory_limiter as memory_limiter # pylint: disable=no-name-in-module
 
@@ -229,7 +231,7 @@ class FFPuppet(object):
             else:
                 cpyfp = open(target_file, "wb")
             try:
-                shutil.copyfileobj(logfp, cpyfp)
+                cpyfp.write(breakpad_syms.addr2line(logfp.read()))
             finally:
                 cpyfp.close()
 
@@ -259,7 +261,8 @@ class FFPuppet(object):
             if not os.path.isdir(dst_path):
                 os.makedirs(dst_path)
             log_file = os.path.join(os.path.abspath(dst_path), log_file)
-            shutil.copy(self._log.name, log_file)
+            with open(self._log.name, "rb") as logfp, open(log_file, "wb") as cpyfp:
+                cpyfp.write(breakpad_syms.addr2line(logfp.read()))
 
 
     def clean_up(self):
