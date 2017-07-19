@@ -3,6 +3,7 @@
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
 import os
+import platform
 import threading
 import time
 
@@ -39,6 +40,7 @@ def _run(process_id, limit, log_file):
     returns None
     """
 
+    plat = platform.system().lower()
     with open(log_file, "w") as log_fp:
         try:
             process = psutil.Process(process_id)
@@ -59,6 +61,10 @@ def _run(process_id, limit, log_file):
 
             # did we hit the memory limit?
             if proc_mem >= limit:
+                if plat == "linux":
+                    log_fp.write(puppet_worker.gdb_log_dumpper(process_id))
+                    log_fp.write("\n")
+
                 process.terminate()
                 log_fp.write("MEMORY_LIMIT_EXCEEDED: %d\n" % proc_mem)
                 process.wait()
