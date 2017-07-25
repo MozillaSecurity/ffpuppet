@@ -204,7 +204,7 @@ class FFPuppet(object):
         self._abort_tokens.add(token)
 
 
-    def clone_log(self, target_file=None, offset=None):
+    def clone_log(self, target_file=None, offset=None, symbolize=False):
         """
         Create a copy of the current browser log.
 
@@ -214,6 +214,10 @@ class FFPuppet(object):
         @type offset: int
         @param offset: Where to begin reading the log from
 
+        @type symbolize: bool
+        @param symbolize: symbolize debug stack trace output. WARNING: calculating a value to be
+            used with offset with this set will cause issues.
+
         @rtype: String or None
         @return: Name of the file containing the cloned log or None on failure
         """
@@ -222,6 +226,7 @@ class FFPuppet(object):
         if self._log is None or not os.path.isfile(self._log.name):
             return None
 
+        self._log.flush()
         with open(self._log.name, "rb") as logfp:
             if offset is not None:
                 logfp.seek(offset)
@@ -231,20 +236,26 @@ class FFPuppet(object):
             else:
                 cpyfp = open(target_file, "wb")
             try:
-                cpyfp.write(breakpad_syms.addr2line(logfp.read()))
+                if symbolize:
+                    cpyfp.write(breakpad_syms.addr2line(logfp.read()))
+                else:
+                    cpyfp.write(logfp.read())
             finally:
                 cpyfp.close()
 
         return target_file
 
 
-    def save_log(self, log_file):
+    def save_log(self, log_file, symbolize=True):
         """
         The browser log will be saved to log_file.
         This should only be called after close().
 
         @type log_file: String
         @param log_file: File to create to contain log data. Existing files will be overwritten.
+
+        @type symbolize: bool
+        @param symbolize: symbolize debug stack trace output
 
         @rtype: None
         @return: None
@@ -262,7 +273,10 @@ class FFPuppet(object):
                 os.makedirs(dst_path)
             log_file = os.path.join(os.path.abspath(dst_path), log_file)
             with open(self._log.name, "rb") as logfp, open(log_file, "wb") as cpyfp:
-                cpyfp.write(breakpad_syms.addr2line(logfp.read()))
+                if symbolize:
+                    cpyfp.write(breakpad_syms.addr2line(logfp.read()))
+                else:
+                    cpyfp.write(logfp.read())
 
 
     def clean_up(self):
@@ -831,6 +845,7 @@ def main(argv=None):
         use_gdb=args.gdb)
     for a_token in args.abort_token:
         ffp.add_abort_token(a_token)
+
     try:
         ffp.launch(
             args.binary,
