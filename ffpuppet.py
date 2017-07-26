@@ -69,6 +69,7 @@ class LaunchError(Exception):
 class FFPuppet(object):
     def __init__(self, use_profile=None, use_valgrind=False, use_xvfb=False, use_gdb=False):
         self._abort_tokens = set() # tokens used to notify log scanner to kill the browser process
+        self._launches = 0 # number of times the browser has successfully been launched
         self._log = None
         self._platform = platform.system().lower()
         self._proc = None
@@ -396,6 +397,16 @@ class FFPuppet(object):
         self.closed = True
 
 
+    def get_launch_count(self):
+        """
+        Get the count of successful launches
+
+        @rtype: int
+        @return: successful launch count
+        """
+        return self._launches
+
+
     def get_pid(self):
         """
         Get the browser process ID
@@ -694,7 +705,7 @@ class FFPuppet(object):
             self._workers.append(log_scanner.LogScannerWorker())
             self._workers[-1].start(self)
 
-        self.launches += 1
+        self._launches += 1
 
 
     def is_running(self):
