@@ -226,7 +226,11 @@ class FFPuppet(object):
         if self._log is None or not os.path.isfile(self._log.name):
             return None
 
-        self._log.flush()
+
+        try:
+            self._log.flush()
+        except ValueError: # ignore exception if file is closed
+            pass
         with open(self._log.name, "rb") as logfp:
             if offset is not None:
                 logfp.seek(offset)
@@ -246,7 +250,27 @@ class FFPuppet(object):
         return target_file
 
 
-    def save_log(self, log_file, symbolize=True):
+
+    def log_length(self):
+        """
+        Get the length of the current browser log.
+
+        @rtype: int
+        @return: length of the current browser log in bytes.
+        """
+        if self._log is None or not os.path.isfile(self._log.name):
+            return 0
+
+        try:
+            self._log.flush()
+        except ValueError: # ignore exception if file is closed
+            pass
+        with open(self._log.name, "rb") as logfp:
+            logfp.seek(0, os.SEEK_END)
+            return logfp.tell()
+
+
+    def save_log(self, log_file):
         """
         The browser log will be saved to log_file.
         This should only be called after close().
