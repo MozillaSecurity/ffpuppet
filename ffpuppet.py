@@ -76,6 +76,7 @@ class FFPuppet(object):
         self._workers = list() # collection of threads and processes
         self._xvfb = None
         self.closed = True # False once launch() is called and True once close() is called
+        self.launches = 0 # number of times the browser has successfully been launched
         self.profile = None # path to profile
 
         if use_valgrind:
@@ -674,6 +675,8 @@ class FFPuppet(object):
             # launch log scanner thread
             self._workers.append(log_scanner.LogScannerWorker())
             self._workers[-1].start(self)
+
+        self.launches += 1
 
 
     def is_running(self):
