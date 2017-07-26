@@ -546,6 +546,21 @@ class PuppetTests(TestCase):
             ffp.clean_up()
             httpd.shutdown()
 
+    def test_25(self):
+        "test log_length()"
+        ffp = FFPuppet()
+        self.assertEqual(ffp.log_length(), 0)
+        try:
+            ffp.launch(TESTFF_BIN)
+            self.assertGreater(ffp.log_length(), 0)
+            ffp.close()
+            self.assertGreater(ffp.log_length(), 0)
+        finally:
+            ffp.clean_up()
+        # verify clean_up() removed the logs
+        self.assertEqual(ffp.log_length(), 0)
+
+
 class ScriptTests(TestCase):
     def test_01(self):
         "test calling main with '-h'"
