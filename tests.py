@@ -79,7 +79,7 @@ class PuppetTests(TestCase):
     def test_1(self):
         "test basic launch and close"
         ffp = FFPuppet()
-        self.assertEqual(ffp.launches, 0)
+        self.assertEqual(ffp.get_launch_count(), 0)
         class _req_handler(BaseHTTPRequestHandler):
             def do_GET(self):
                 self.send_response(200)
@@ -90,7 +90,7 @@ class PuppetTests(TestCase):
         try:
             location = "http://127.0.0.1:%d" % httpd.server_address[1]
             ffp.launch(TESTFF_BIN, location=location)
-            self.assertEqual(ffp.launches, 1)
+            self.assertEqual(ffp.get_launch_count(), 1)
             self.assertEqual(ffp.wait(1), 0) # will close automatically
             ffp.close()
         finally:
