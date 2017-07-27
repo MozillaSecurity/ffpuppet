@@ -272,7 +272,7 @@ class FFPuppet(object):
             return logfp.tell()
 
 
-    def save_log(self, log_file):
+    def save_log(self, log_file, symbolize=True):
         """
         The browser log will be saved to log_file.
         This should only be called after close().
