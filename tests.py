@@ -6,6 +6,7 @@ except ImportError:
     from BaseHTTPServer import HTTPServer, BaseHTTPRequestHandler
 import os
 import random
+import re
 import shutil
 import socket
 import subprocess
@@ -295,6 +296,9 @@ class PuppetTests(TestCase):
         with open(self.tmpfn, 'w') as prefs:
             prefs.write('//fftest_soft_assert\n')
         ffp = FFPuppet()
+        ffp.add_abort_token(re.compile(r"TEST\dREGEX\.+"))
+        with self.assertRaisesRegex(TypeError, "Expecting 'str' or 're._pattern_type' got: 'NoneType'"):
+            ffp.add_abort_token(None)
         ffp.add_abort_token("###!!! ASSERTION:")
         class _req_handler(BaseHTTPRequestHandler):
             def do_GET(self):

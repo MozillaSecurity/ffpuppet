@@ -3,7 +3,6 @@
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
 import os
-import re
 import threading
 import time
 
@@ -26,14 +25,13 @@ class LogScannerWorker(puppet_worker.BaseWorker):
 
 def _run(puppet, log_file):
     """
-    _run(process_id, limit, log_file) -> None
+    _run(puppet, log_file) -> None
 
     returns None
     """
 
     line_buffer = ""
     offset = 0
-    token_found = None
     while puppet.is_running():
         if not os.path.isfile(puppet._log.name):
             return
@@ -63,19 +61,12 @@ def _run(puppet, log_file):
             line_buffer = data
 
         for token in puppet._abort_tokens:
-            if isinstance(token, re._pattern_type):
-                m = token.search(data)
-                if m:
-                    token_found = m.group()
-            elif isinstance(token, str):
-                if data.find(token) > -1:
-                    token_found = token
-
-        if token_found is not None:
-            puppet._proc.terminate()
-            with open(log_file, "w") as log_fp:
-                log_fp.write("TOKEN_LOCATED: %s\n" % token_found)
-            puppet._proc.wait()
-            break
+            match = token.search(data)
+            if match:
+                puppet._proc.terminate()
+                with open(log_file, "w") as log_fp:
+                    log_fp.write("TOKEN_LOCATED: %s\n" % match.group())
+                puppet._proc.wait()
+                break
 
         time.sleep(0.05) # don't be a CPU hog

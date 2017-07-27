@@ -184,13 +184,17 @@ class FFPuppet(object):
         """
         Add a token that when present in the browser log will have the browser process terminated.
 
-        @type token: String
-        @param token: string to search for in the browser log.
+        @type token: String or re._pattern_type
+        @param token: string or compiled RegEx to search for in the browser log.
 
         @rtype: None
         @return: None
         """
 
+        if isinstance(token, str):
+            token = re.compile(re.escape(token))
+        if not isinstance(token, re._pattern_type):
+            raise TypeError("Expecting 'str' or 're._pattern_type' got: %r" % type(token).__name__)
         self._abort_tokens.add(token)
 
 
@@ -216,7 +220,6 @@ class FFPuppet(object):
         if self._log is None or not os.path.isfile(self._log.name):
             return None
 
-
         try:
             self._log.flush()
         except ValueError: # ignore exception if file is closed
@@ -238,7 +241,6 @@ class FFPuppet(object):
                 cpyfp.close()
 
         return target_file
-
 
 
     def log_length(self):
@@ -686,7 +688,7 @@ class FFPuppet(object):
             self._workers[-1].start(self._proc.pid, memory_limit)
 
         if self._use_valgrind:
-            self._abort_tokens.add(re.compile(r"==\d+==\s"))
+            self.add_abort_token(re.compile(r"==\d+==\s"))
 
         if self._abort_tokens:
             # launch log scanner thread
