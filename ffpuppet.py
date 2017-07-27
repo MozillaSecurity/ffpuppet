@@ -26,18 +26,21 @@ try:
 except ImportError:
     pass
 
-try: # py 2-3 compatibility
-    import workers.log_scanner as log_scanner
-    import workers.memory_limiter as memory_limiter
+try:
+    from . import breakpad_syms
+    from .workers import log_scanner, memory_limiter
 except ImportError:
-    import ffpuppet.workers.log_scanner as log_scanner # pylint: disable=no-name-in-module
-    import ffpuppet.workers.memory_limiter as memory_limiter # pylint: disable=no-name-in-module
+    logging.error("Can't use ffpuppet.py as a script with Python 3.")
+    exit(1)
+except ValueError:
+    import breakpad_syms
+    from workers import log_scanner, memory_limiter
+
+log = logging.getLogger("ffpuppet") # pylint: disable=invalid-name
 
 
 __author__ = "Tyson Smith"
 __all__ = ("FFPuppet", "LaunchError")
-
-log = logging.getLogger("ffpuppet") # pylint: disable=invalid-name
 
 
 def open_unique(mode="w"):
@@ -77,6 +80,7 @@ class FFPuppet(object):
         self._workers = list() # collection of threads and processes
         self._xvfb = None
         self.closed = True # False once launch() is called and True once close() is called
+        self.launches = 0 # number of times the browser has successfully been launched
         self.profile = None # path to profile
 
         if use_valgrind:
@@ -203,7 +207,7 @@ class FFPuppet(object):
         self._abort_tokens.add(token)
 
 
-    def clone_log(self, target_file=None, offset=None):
+    def clone_log(self, target_file=None, offset=None, symbolize=False):
         """
         Create a copy of the current browser log.
 
@@ -213,6 +217,10 @@ class FFPuppet(object):
         @type offset: int
         @param offset: Where to begin reading the log from
 
+        @type symbolize: bool
+        @param symbolize: symbolize debug stack trace output. WARNING: calculating a value to be
+            used with offset with this set will cause issues.
+
         @rtype: String or None
         @return: Name of the file containing the cloned log or None on failure
         """
@@ -220,6 +228,7 @@ class FFPuppet(object):
         # check if there is a log to clone
         if self._log is None or not os.path.isfile(self._log.name):
             return None
+
 
         try:
             self._log.flush()
@@ -234,11 +243,15 @@ class FFPuppet(object):
             else:
                 cpyfp = open(target_file, "wb")
             try:
-                shutil.copyfileobj(logfp, cpyfp)
+                if symbolize:
+                    cpyfp.write(breakpad_syms.addr2line(logfp.read()))
+                else:
+                    cpyfp.write(logfp.read())
             finally:
                 cpyfp.close()
 
         return target_file
+
 
 
     def log_length(self):
@@ -260,13 +273,16 @@ class FFPuppet(object):
             return logfp.tell()
 
 
-    def save_log(self, log_file):
+    def save_log(self, log_file, symbolize=True):
         """
         The browser log will be saved to log_file.
         This should only be called after close().
 
         @type log_file: String
         @param log_file: File to create to contain log data. Existing files will be overwritten.
+
+        @type symbolize: bool
+        @param symbolize: symbolize debug stack trace output
 
         @rtype: None
         @return: None
@@ -283,7 +299,11 @@ class FFPuppet(object):
             if not os.path.isdir(dst_path):
                 os.makedirs(dst_path)
             log_file = os.path.join(os.path.abspath(dst_path), log_file)
-            shutil.copy(self._log.name, log_file)
+            with open(self._log.name, "rb") as logfp, open(log_file, "wb") as cpyfp:
+                if symbolize:
+                    cpyfp.write(breakpad_syms.addr2line(logfp.read()))
+                else:
+                    cpyfp.write(logfp.read())
 
 
     def clean_up(self):
@@ -864,6 +884,7 @@ def main(argv=None):
         use_gdb=args.gdb)
     for a_token in args.abort_token:
         ffp.add_abort_token(a_token)
+
     try:
         ffp.launch(
             args.binary,
@@ -886,8 +907,8 @@ def main(argv=None):
         output_log.close()
         ffp.save_log(output_log.name)
         if args.dump:
-            with open(output_log.name, "r") as log_fp:
-                log.info("\n[Browser log start]\n%s\n[Browser log end]", log_fp.read())
+            with open(output_log.name, "rb") as log_fp:
+                log.info("\n[Browser log start]\n%s\n[Browser log end]", log_fp.read().decode("utf-8", errors="ignore"))
         if args.log is not None:
             shutil.move(output_log.name, args.log)
         else:
