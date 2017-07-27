@@ -1,11 +1,10 @@
 import errno
 import logging
-try:
+try: # py 2-3 compatibility
     from http.server import HTTPServer, BaseHTTPRequestHandler
 except ImportError:
     from BaseHTTPServer import HTTPServer, BaseHTTPRequestHandler
 import os
-import platform
 import random
 import shutil
 import socket
@@ -16,7 +15,7 @@ import threading
 import time
 import unittest
 
-from ffpuppet import FFPuppet, LaunchError, main
+from .ffpuppet import FFPuppet, LaunchError, main
 
 
 logging.basicConfig(level=logging.DEBUG if bool(os.getenv("DEBUG")) else logging.INFO)
@@ -66,7 +65,7 @@ class PuppetTests(TestCase):
         if os.path.isfile(self.tmpfn):
             os.unlink(self.tmpfn)
 
-    if sys.platform != 'win32':
+    if not sys.platform.startswith('win'):
         def test_0(self):
             "test that invalid executables raise the right exception"
             ffp = FFPuppet()
@@ -264,8 +263,8 @@ class PuppetTests(TestCase):
             ffp.save_log(self.tmpfn)
             ffp.clean_up()
             httpd.shutdown()
-        with open(self.tmpfn, "r") as fp:
-            self.assertRegex(fp.read(), "MEMORY_LIMIT_EXCEEDED")
+        with open(self.tmpfn, "rb") as fp:
+            self.assertRegex(fp.read(), b"MEMORY_LIMIT_EXCEEDED")
 
     def test_10(self):
         "test calling launch() multiple times"
@@ -313,8 +312,8 @@ class PuppetTests(TestCase):
         finally:
             ffp.clean_up()
             httpd.shutdown()
-        with open(self.tmpfn, "r") as fp:
-            self.assertRegex(fp.read(), "TOKEN_LOCATED")
+        with open(self.tmpfn, "rb") as fp:
+            self.assertRegex(fp.read(), b"TOKEN_LOCATED")
 
     def test_12(self):
         "test using an existing profile directory"
@@ -365,7 +364,7 @@ class PuppetTests(TestCase):
     def test_16(self):
         "test launching under Xvfb"
         ffp = None
-        if platform.system().lower() != "linux":
+        if not sys.platform.startswith("linux"):
             with self.assertRaisesRegex(EnvironmentError, "Xvfb is only supported on Linux"):
                 ffp = FFPuppet(use_xvfb=True)
         else:
@@ -396,7 +395,7 @@ class PuppetTests(TestCase):
         finally:
             ffp.clean_up()
 
-    if sys.platform != 'win32': # GDB work untested on windows
+    if not sys.platform.startswith('win'): # GDB work untested on windows
         def test_19(self):
             "test launching with gdb"
             ffp = FFPuppet(use_gdb=True)
@@ -409,11 +408,11 @@ class PuppetTests(TestCase):
                     self.assertEqual(ffp.launch(bin_path), 0)
                 ffp.close()
                 ffp.save_log(self.tmpfn)
-                with open(self.tmpfn, "r") as log_fp:
+                with open(self.tmpfn, "rb") as log_fp:
                     log_data = log_fp.read()
                 # verify GDB ran and executed the script
-                self.assertRegexpMatches(log_data, r"[Inferior \d+ (process \d+) exited with code \d+]")
-                self.assertRegexpMatches(log_data, r"\+quit_with_code")
+                self.assertRegex(log_data, br"[Inferior \d+ (process \d+) exited with code \d+]")
+                self.assertRegex(log_data, br"\+quit_with_code")
             finally:
                 ffp.clean_up()
 
@@ -487,11 +486,11 @@ class PuppetTests(TestCase):
                     self.assertEqual(ffp.launch(bin_path), 0)
                 ffp.close()
                 ffp.save_log(self.tmpfn)
-                with open(self.tmpfn, "r") as log_fp:
+                with open(self.tmpfn, "rb") as log_fp:
                     log_data = log_fp.read()
                 # verify Valgrind ran and executed the script
-                self.assertRegexpMatches(log_data, r"valgrind -q")
-                self.assertRegexpMatches(log_data, r"\[Exit code: 0\]")
+                self.assertRegex(log_data, br"valgrind -q")
+                self.assertRegex(log_data, br"\[Exit code: 0\]")
             finally:
                 ffp.clean_up()
 

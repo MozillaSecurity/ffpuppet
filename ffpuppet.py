@@ -26,20 +26,21 @@ try:
 except ImportError:
     pass
 
-try: # py 2-3 compatibility
-    import breakpad_syms
-    import workers.log_scanner as log_scanner
-    import workers.memory_limiter as memory_limiter
+try:
+    from . import breakpad_syms
+    from .workers import log_scanner, memory_limiter
 except ImportError:
-    import ffpuppet.breakpad_syms
-    import ffpuppet.workers.log_scanner as log_scanner # pylint: disable=no-name-in-module
-    import ffpuppet.workers.memory_limiter as memory_limiter # pylint: disable=no-name-in-module
+    logging.error("Can't use ffpuppet.py as a script with Python 3.")
+    exit(1)
+except ValueError:
+    import breakpad_syms
+    from workers import log_scanner, memory_limiter
+
+log = logging.getLogger("ffpuppet") # pylint: disable=invalid-name
 
 
 __author__ = "Tyson Smith"
 __all__ = ("FFPuppet", "LaunchError")
-
-log = logging.getLogger("ffpuppet") # pylint: disable=invalid-name
 
 
 def open_unique(mode="w"):
@@ -906,8 +907,8 @@ def main(argv=None):
         output_log.close()
         ffp.save_log(output_log.name)
         if args.dump:
-            with open(output_log.name, "r") as log_fp:
-                log.info("\n[Browser log start]\n%s\n[Browser log end]", log_fp.read())
+            with open(output_log.name, "rb") as log_fp:
+                log.info("\n[Browser log start]\n%s\n[Browser log end]", log_fp.read().decode("utf-8", errors="ignore"))
         if args.log is not None:
             shutil.move(output_log.name, args.log)
         else:

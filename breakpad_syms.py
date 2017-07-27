@@ -1,5 +1,10 @@
 #!/usr/bin/env python
 # coding=utf-8
+
+# This Source Code Form is subject to the terms of the Mozilla Public
+# License, v. 2.0. If a copy of the MPL was not distributed with this
+# file, You can obtain one at http://mozilla.org/MPL/2.0/.
+
 import binascii
 import json
 import logging
@@ -214,7 +219,7 @@ class SymbolsFile(object):
         @return: A SymbolsFile object initialized from the given breakpad symbols.
         """
         with open(input_file, "rb") as exe_fp:
-            if sys.platform == "linux2":
+            if sys.platform.startswith("linux"):
                 hash_ = get_elf_debug_hash(exe_fp)
             elif sys.platform == "darwin":
                 hash_ = get_macho_debug_hash(exe_fp)
@@ -238,7 +243,7 @@ class SymbolsFile(object):
         """
         start_time = time.time()
         result = cls()
-        result.sym_fp = open(input_file)
+        result.sym_fp = open(input_file, "rb")
         cache_ok = False
         try:
             cache_path = "%s.cache" % input_file
@@ -345,21 +350,21 @@ def addr2line(input_log, symbols_path=None):
     """
     Symbolize an input_log using breakpad symbols.
 
-    @type input_log: str
+    @type input_log: bytes
     @param input_log: Crash log to be symbolized.
 
-    @type symbols_path: str
+    @type symbols_path: bytes
     @param symbols_path: Override the path to search for breakpad symbols. By default will look
                          for a folder named 'symbols' in the same folder as the binary.
 
-    @rtype: str
+    @rtype: bytes
     @return: Copy of input crash log with symbols resolved if possible.
     """
     start = time.time()
     output = []
     exes = {}
     pos = 0
-    for match in re.finditer(r"(?m)^#(?P<frame_num>\d+): \?\?\?\[(?P<exe>.*) \+0x(?P<addr>[a-f0-9]+)\]$", input_log):
+    for match in re.finditer(br"(?m)^#(?P<frame_num>\d+): \?\?\?\[(?P<exe>.*) \+0x(?P<addr>[a-f0-9]+)\]$", input_log):
         if match.start(0) > pos:
             output.append(input_log[pos:match.start(0)])
         exe, addr = match.group("exe", "addr")
@@ -375,14 +380,14 @@ def addr2line(input_log, symbols_path=None):
         if exes.get(exe): # don't use 'in' because exe may have been set to None
             resolved = exes[exe].resolve(addr)
         if resolved:
-            output.append("#%s: %s" % (match.group("frame_num"), resolved))
+            output.append(b"#%s: %s" % (match.group("frame_num"), resolved))
         else:
             output.append(match.group(0))
         pos = match.end(0)
     output.append(input_log[pos:])
     elapsed = time.time() - start
     log.debug("addr2line took %0.2fs", elapsed)
-    return "".join(output)
+    return b"".join(output)
 
 
 def main():
@@ -401,7 +406,7 @@ def main():
     args = prs.parse_args()
     if args.verbose:
         logging.getLogger().setLevel(logging.DEBUG)
-    with open(args.input_file) as input_fp:
+    with open(args.input_file, "rb") as input_fp:
         sys.stdout.write(addr2line(input_fp.read(), symbols_path=args.symbols))
 
 
