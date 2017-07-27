@@ -31,34 +31,36 @@ def _run(puppet, log_file):
     returns None
     """
 
-    prev_offset = offset = 0
-    prev_size = 0
+    line_buffer = ""
+    offset = 0
     token_found = None
     while puppet.is_running():
         if not os.path.isfile(puppet._log.name):
             return
 
-        # check if file has new data
-        if prev_size == os.path.getsize(puppet._log.name):
-            time.sleep(0.1)
-            continue
-
         with open(puppet._log.name, "r") as scan_fp:
-            scan_fp.seek(offset, os.SEEK_SET)
-            data = scan_fp.read()
-            prev_size = scan_fp.tell()
+            scan_fp.seek(0, os.SEEK_END)
+            # check if file has new data
+            if scan_fp.tell() > offset:
+                scan_fp.seek(offset, os.SEEK_SET)
+                data = scan_fp.read()
+                offset = scan_fp.tell()
+            else:
+                data = None
 
-        # update offset for next pass
-        last_line_position = data.rfind("\n")
-        if last_line_position > -1:
-            offset += last_line_position
-
-        # don't be a CPU hog if there is nothing to search
-        if prev_offset == offset:
+        # don't be a CPU hog if there is no new data
+        if data is None:
             time.sleep(0.1)
             continue
 
-        prev_offset = offset
+        # prepend chunk of previously read line to data
+        if line_buffer:
+            data = "".join([line_buffer, data])
+
+        try:
+            data, line_buffer = data.rsplit("\n", 1)
+        except ValueError:
+            line_buffer = data
 
         for token in puppet._abort_tokens:
             if isinstance(token, re._pattern_type):

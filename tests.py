@@ -292,7 +292,7 @@ class PuppetTests(TestCase):
             httpd.shutdown()
 
     def test_11(self):
-        "test abort tokens via detect_soft_assertions"
+        "test abort tokens"
         with open(self.tmpfn, 'w') as prefs:
             prefs.write('//fftest_soft_assert\n')
         ffp = FFPuppet()
@@ -308,9 +308,9 @@ class PuppetTests(TestCase):
             location = "http://127.0.0.1:%d" % httpd.server_address[1]
             ffp.launch(TESTFF_BIN, location=location, prefs_js=self.tmpfn)
             self.assertIsNotNone(ffp.wait(5))
-        finally:
             ffp.close()
             ffp.save_log(self.tmpfn)
+        finally:
             ffp.clean_up()
             httpd.shutdown()
         with open(self.tmpfn, "r") as fp:

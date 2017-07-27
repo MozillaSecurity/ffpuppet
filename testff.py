@@ -88,9 +88,16 @@ def main():
         time.sleep(60) # wait to be terminated
     elif cmd == 'soft_assert':
         sys.stdout.write('simulating soft assertion\n')
-        sys.stdout.write('###!!! ASSERTION: test\n')
+        # split '###!!! ASSERTION: tests\n' across multiple reads by the log scanner
+        sys.stdout.write('###!!! ')
         sys.stdout.flush()
-        time.sleep(1) # wait to be terminated
+        time.sleep(0.25)
+        sys.stdout.write('ASSERT')
+        sys.stdout.flush()
+        time.sleep(0.25)
+        sys.stdout.write('ION: test\n\nblah...')
+        sys.stdout.flush()
+        time.sleep(5) # wait to be terminated
         sys.exit(0)
 
 if __name__ == '__main__':
