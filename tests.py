@@ -517,6 +517,35 @@ class PuppetTests(TestCase):
         # verify clean_up() removed the logs
         self.assertEqual(ffp.log_length(), 0)
 
+    def test_26(self):
+        "test parallel launches"
+        # use soft_assert test mode because it hangs around for 5s
+        with open(self.tmpfn, 'w') as prefs:
+            prefs.write('//fftest_soft_assert\n')
+        # use a dummy token to make ffp launch worker threads
+        token = re.compile(r"DUMMY\dREGEX\.+")
+        ffps = list()
+        # use test pool size of 20
+        for _ in range(20):
+            ffps.append(FFPuppet())
+            self.addCleanup(ffps[-1].clean_up)
+            ffps[-1].add_abort_token(token)
+        class _req_handler(BaseHTTPRequestHandler):
+            def do_GET(self):
+                self.send_response(200)
+                self.end_headers()
+                self.wfile.write(b"hello world")
+        httpd = create_server(_req_handler)
+        self.addCleanup(httpd.shutdown)
+        for ffp in ffps:
+            location = "http://127.0.0.1:%d" % httpd.server_address[1]
+            ffp.launch(TESTFF_BIN, location=location, prefs_js=self.tmpfn)
+            self.assertTrue(ffp.is_running())
+        for ffp in ffps:
+            self.assertTrue(ffp.is_running())
+            ffp.close()
+            self.assertFalse(ffp.is_running())
+
 
 class ScriptTests(TestCase):
     def test_01(self):
