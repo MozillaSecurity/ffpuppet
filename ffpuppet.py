@@ -646,7 +646,7 @@ class FFPuppet(object):
 
         # performing the bootstrap helps guarantee that the browser
         # will be loaded and ready to accept input when launch() returns
-        init_soc = self._bootstrap_start(timeout=launch_timeout)
+        init_soc = self._bootstrap_start()
 
         launch_args = ["http://127.0.0.1:%d" % init_soc.getsockname()[1]]
         if safe_mode:
@@ -708,12 +708,12 @@ class FFPuppet(object):
         return self._proc is not None and self._proc.poll() is None
 
 
-    def _bootstrap_start(self, timeout=60):
+    def _bootstrap_start(self):
         while True:
             try:
                 init_soc = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
                 init_soc.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-                init_soc.settimeout(timeout) # don't catch socket.timeout
+                init_soc.settimeout(0.25)
                 init_soc.bind(("127.0.0.1", random.randint(0x2000, 0xFFFF)))
                 init_soc.listen(5)
                 break
@@ -738,7 +738,6 @@ class FFPuppet(object):
             # wait for browser test connection
             while True:
                 try:
-                    init_soc.settimeout(0.1)
                     conn, _ = init_soc.accept()
                     conn.settimeout(timeout)
                 except socket.timeout:
