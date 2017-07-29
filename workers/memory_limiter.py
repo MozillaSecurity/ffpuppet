@@ -74,7 +74,7 @@ def _run(process_id, limit, log_file):
                     log_fp.write("\n")
 
                 try:
-                    process.terminate()
+                    process.kill()
                     process.wait()
                 except psutil.NoSuchProcess:
                     pass # process is dead?
