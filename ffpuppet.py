@@ -637,6 +637,7 @@ class FFPuppet(object):
 
         self.closed = False
         launch_timeout = max(launch_timeout, 10) # force 10 seconds minimum launch_timeout
+        log.debug("launch timeout: %r", launch_timeout)
 
         # create and modify a profile
         self.profile = self.create_profile(
@@ -742,19 +743,16 @@ class FFPuppet(object):
                     conn.settimeout(timeout)
                 except socket.timeout:
                     if (time.time() - timer_start) >= timeout:
-                        # timeout waiting browser connection
-                        raise LaunchError("Launching browser timed out")
+                        raise LaunchError("Launching browser timed out (%ds)" % timeout)
                     elif not self.is_running():
-                        # browser must have died
                         raise LaunchError("Failure during browser startup")
-                    continue # have not received connection
+                    continue # browser is alive but we have not received a connection
                 break # received connection
 
-            # handle browser test connection incoming data
+            log.debug("waiting to receive browser test connection data")
             while len(conn.recv(4096)) == 4096:
                 pass
-
-            log.debug("redirect url: %r", url)
+            log.debug("sending response with redirect url: %r", url)
             response = "<head>" \
                        "<meta http-equiv=\"refresh\" content=\"0; url=%s\"/>" \
                        "</head>" % ("about:blank" if url is None else url)
@@ -762,14 +760,13 @@ class FFPuppet(object):
                        "Content-Length: %d\r\n" \
                        "Content-Type: text/html\r\n" \
                        "Connection: close\r\n\r\n%s" % (len(response), response)
-
             conn.sendall(response.encode("UTF-8"))
 
-        except socket.error:
-            raise LaunchError("Failed to launch browser")
+        except socket.error as soc_e:
+            raise LaunchError("Failed to launch browser: %s" % soc_e)
 
         except socket.timeout:
-            raise LaunchError("Test connection timed out")
+            raise LaunchError("Test connection timed out (%ds)" % timeout)
 
         finally:
             if conn is not None:
