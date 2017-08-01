@@ -193,7 +193,7 @@ class FFPuppet(object):
 
         if isinstance(token, str):
             token = re.compile(re.escape(token))
-        if not isinstance(token, re._pattern_type):
+        if not isinstance(token, re._pattern_type): # pylint: disable=protected-access
             raise TypeError("Expecting 'str' or 're._pattern_type' got: %r" % type(token).__name__)
         self._abort_tokens.add(token)
 
@@ -637,7 +637,7 @@ class FFPuppet(object):
 
         self.closed = False
         launch_timeout = max(launch_timeout, 10) # force 10 seconds minimum launch_timeout
-        log.debug("launch timeout: %r", launch_timeout)
+        log.debug("launch timeout: %d", launch_timeout)
 
         # create and modify a profile
         self.profile = self.create_profile(
@@ -850,7 +850,7 @@ def _parse_args(argv=None):
     return parser.parse_args(argv)
 
 
-def main(argv=None):
+def main(argv=None): # pylint: disable=missing-docstring
     args = _parse_args(argv)
 
     # set output verbosity
@@ -893,7 +893,9 @@ def main(argv=None):
         ffp.save_log(output_log.name)
         if args.dump:
             with open(output_log.name, "rb") as log_fp:
-                log.info("\n[Browser log start]\n%s\n[Browser log end]", log_fp.read().decode("utf-8", errors="ignore"))
+                log.info(
+                    "\n[Browser log start]\n%s\n[Browser log end]",
+                    log_fp.read().decode("utf-8", errors="ignore"))
         if args.log is not None:
             shutil.move(output_log.name, args.log)
         else:
