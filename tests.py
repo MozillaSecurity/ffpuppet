@@ -24,6 +24,8 @@ log = logging.getLogger("ffp_test")
 
 TESTFF_BIN = os.path.join("testff", "testff.exe") if sys.platform.startswith('win') else "testff.py"
 
+FFPuppet.LOG_POLL_RATE = 0.01 # reduce this for testing
+
 class TestCase(unittest.TestCase):
 
     if sys.version_info.major == 2:
@@ -142,8 +144,8 @@ class PuppetTests(TestCase):
         self.assertTrue(os.path.isfile(log_file))
         with open(log_file) as log_fp:
             out_log = log_fp.read().splitlines()
-        self.assertTrue(out_log[0].startswith('Launch command'))
-        self.assertEqual(out_log[1:], ['', "hello world", "[Exit code: 0]"])
+        self.assertTrue(out_log[0].startswith('[ffpuppet] Launch command'))
+        self.assertEqual(out_log[1:], ['', "hello world", "[ffpuppet] Exit code: 0"])
         log_file = "rel_test_path.txt" # save to cwd
         ffp.save_log(log_file)
         self.assertTrue(os.path.isfile(log_file))
@@ -452,7 +454,7 @@ class PuppetTests(TestCase):
                 log_data = log_fp.read()
             # verify Valgrind ran and executed the script
             self.assertRegex(log_data, br"valgrind -q")
-            self.assertRegex(log_data, br"\[Exit code: 0\]")
+            self.assertRegex(log_data, br"\[ffpuppet\] Exit code: 0")
 
     def test_23(self):
         "test check_prefs()"
@@ -545,6 +547,34 @@ class PuppetTests(TestCase):
             self.assertTrue(ffp.is_running())
             ffp.close()
             self.assertFalse(ffp.is_running())
+
+    def test_27(self):
+        "test collecting log data that is dumped after parent process is closed"
+        FFPuppet.LOG_POLL_RATE = 0.2
+        FFPuppet.LOG_CLOSE_TIMEOUT = 1
+        try:
+            ffp = FFPuppet()
+            self.addCleanup(ffp.clean_up)
+            ffp.launch(TESTFF_BIN)
+            ffp._log.write("blah\n")
+            def _spam_thread():
+                while not ffp._log.closed:
+                    ffp._log.write("blah\n")
+                    time.sleep(0.1)
+            spam_thread = threading.Thread(target=_spam_thread)
+            try:
+                spam_thread.start()
+                ffp.close()
+            finally:
+                spam_thread.join()
+            self.assertFalse(ffp.is_running())
+            self.assertIsNone(ffp.wait())
+            ffp.save_log(self.tmpfn)
+            with open(self.tmpfn, "rb") as log_fp:
+                self.assertIn(b"[ffpuppet] WARNING! Log may be incomplete!", log_fp.read())
+        finally:
+            FFPuppet.LOG_POLL_RATE = 0.001
+            FFPuppet.LOG_CLOSE_TIMEOUT = 10
 
 
 class ScriptTests(TestCase):

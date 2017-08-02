@@ -68,6 +68,9 @@ class LaunchError(Exception):
 
 
 class FFPuppet(object):
+    LOG_CLOSE_TIMEOUT = 10
+    LOG_POLL_RATE = 1
+
     def __init__(self, use_profile=None, use_valgrind=False, use_xvfb=False, use_gdb=False):
         self._abort_tokens = set() # tokens used to notify log scanner to kill the browser process
         self._launches = 0 # number of times the browser has successfully been launched
@@ -349,12 +352,24 @@ class FFPuppet(object):
                     self._proc.kill()
                 else:
                     self._proc.terminate()
-
             self._proc.wait()
+
             if self._log is not None and not self._log.closed:
+                log.debug("wait for browser log dump to complete")
+                time_limit = time.time() + self.LOG_CLOSE_TIMEOUT
+                while True:
+                    log_pos = self._log.tell()
+                    time.sleep(self.LOG_POLL_RATE)
+                    self._log.flush()
+                    if log_pos == self._log.tell(): # this isn't bullet proof but it works
+                        break
+                    if time_limit < time.time():
+                        log.warning("Log may be incomplete!")
+                        self._log.write("[ffpuppet] WARNING! Log may be incomplete!\n")
+                        break
                 if still_running:
-                    self._log.write("[Process was closed by ffpuppet]\n")
-                self._log.write("[Exit code: %r]\n" % self._proc.returncode)
+                    self._log.write("[ffpuppet] Process was closed by ffpuppet\n")
+                self._log.write("[ffpuppet] Exit code: %r\n" % self._proc.returncode)
             log.debug("exit code: %r", self._proc.returncode)
             self._proc = None
 
@@ -367,7 +382,7 @@ class FFPuppet(object):
             worker_log = None if self._log.closed else worker.collect_log()
             if worker_log:
                 self._log.write("\n")
-                self._log.write("[Worker: %s]\n" % worker.name)
+                self._log.write("[ffpuppet] Worker: %s\n" % worker.name)
                 self._log.write(worker_log)
                 self._log.write("\n")
             worker.clean_up()
@@ -663,7 +678,7 @@ class FFPuppet(object):
 
         # open log
         self._log = open_unique()
-        self._log.write("Launch command: %s\n\n" % " ".join(cmd))
+        self._log.write("[ffpuppet] Launch command: %s\n\n" % " ".join(cmd))
         self._log.flush()
 
         # launch the browser
@@ -894,7 +909,7 @@ def main(argv=None): # pylint: disable=missing-docstring
         if args.dump:
             with open(output_log.name, "rb") as log_fp:
                 log.info(
-                    "\n[Browser log start]\n%s\n[Browser log end]",
+                    "\n===Browser log start===\n%s\n===Browser log end===",
                     log_fp.read().decode("utf-8", errors="ignore"))
         if args.log is not None:
             shutil.move(output_log.name, args.log)
