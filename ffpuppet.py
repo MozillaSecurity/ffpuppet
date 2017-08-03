@@ -83,7 +83,6 @@ class FFPuppet(object):
         self._workers = list() # collection of threads and processes
         self._xvfb = None
         self.closed = True # False once launch() is called and True once close() is called
-        self.launches = 0 # number of times the browser has successfully been launched
         self.profile = None # path to profile
 
         if use_valgrind:
@@ -354,31 +353,34 @@ class FFPuppet(object):
                     self._proc.terminate()
             self._proc.wait()
 
-            if self._log is not None and not self._log.closed:
-                log.debug("wait for browser log dump to complete")
-                time_limit = time.time() + self.LOG_CLOSE_TIMEOUT
-                while True:
-                    log_pos = self._log.tell()
-                    time.sleep(self.LOG_POLL_RATE)
-                    self._log.flush()
-                    if log_pos == self._log.tell(): # this isn't bullet proof but it works
-                        break
-                    if time_limit < time.time():
-                        log.warning("Log may be incomplete!")
-                        self._log.write("[ffpuppet] WARNING! Log may be incomplete!\n")
-                        break
-                if still_running:
-                    self._log.write("[ffpuppet] Process was closed by ffpuppet\n")
-                self._log.write("[ffpuppet] Exit code: %r\n" % self._proc.returncode)
-            log.debug("exit code: %r", self._proc.returncode)
-            self._proc = None
-
         # join worker threads and processes
         log.debug("joining %d worker(s)...", len(self._workers))
         for worker in self._workers:
             worker.join()
 
-            # copy worker logs to main log if is exists and contains data
+        # collect browser log data
+        if self._proc is not None and self._log is not None and not self._log.closed:
+            log.debug("wait for browser log dump to complete")
+            time_limit = time.time() + self.LOG_CLOSE_TIMEOUT
+            while True:
+                log_pos = self._log.tell()
+                time.sleep(self.LOG_POLL_RATE)
+                self._log.flush()
+                if log_pos == self._log.tell(): # this isn't bullet proof but it works
+                    break
+                if time_limit < time.time():
+                    log.warning("Log may be incomplete!")
+                    self._log.write("[ffpuppet] WARNING! Log may be incomplete!\n")
+                    break
+            if still_running:
+                self._log.write("[ffpuppet] Process was closed by ffpuppet\n")
+            self._log.write("[ffpuppet] Exit code: %r\n" % self._proc.returncode)
+            log.debug("exit code: %r", self._proc.returncode)
+            self._proc = None
+
+        # appended worker logs to the end of the main log
+        log.debug("copying worker logs to main log and cleaning up")
+        for worker in self._workers:
             worker_log = None if self._log.closed else worker.collect_log()
             if worker_log:
                 self._log.write("\n")
@@ -386,8 +388,6 @@ class FFPuppet(object):
                 self._log.write(worker_log)
                 self._log.write("\n")
             worker.clean_up()
-
-        # clear out old workers
         self._workers = list()
 
         # close log

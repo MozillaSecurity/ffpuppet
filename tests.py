@@ -93,6 +93,7 @@ class PuppetTests(TestCase):
         self.assertEqual(ffp.get_launch_count(), 1)
         self.assertEqual(ffp.wait(1), 0) # will close automatically
         ffp.close()
+        self.assertIsNone(ffp._proc)
         self.assertFalse(ffp.is_running())
         self.assertIsNone(ffp.wait())
 
@@ -152,6 +153,12 @@ class PuppetTests(TestCase):
         os.remove(log_file)
         if os.path.isdir(log_dir):
             shutil.rmtree(log_dir)
+        self.assertIsNotNone(ffp._log.name)
+        tmp_log_file = ffp._log.name
+        self.assertTrue(os.path.isfile(tmp_log_file))
+        ffp.clean_up()
+        self.assertFalse(os.path.isfile(tmp_log_file))
+        self.assertIsNone(ffp._log)
 
     def test_5(self):
         "test get_pid()"
@@ -236,7 +243,7 @@ class PuppetTests(TestCase):
         httpd = create_server(_req_handler)
         self.addCleanup(httpd.shutdown)
         location = "http://127.0.0.1:%d" % httpd.server_address[1]
-        ffp.launch(TESTFF_BIN, location=location, prefs_js=self.tmpfn, memory_limit=100)
+        ffp.launch(TESTFF_BIN, location=location, prefs_js=self.tmpfn, memory_limit=0x100000) # 1MB
         self.assertIsNotNone(ffp.wait(60))
         ffp.close()
         ffp.save_log(self.tmpfn)
@@ -575,6 +582,23 @@ class PuppetTests(TestCase):
         finally:
             FFPuppet.LOG_POLL_RATE = 0.001
             FFPuppet.LOG_CLOSE_TIMEOUT = 10
+
+    def test_28(self):
+        "test worker log clean up"
+        ffp = FFPuppet()
+        self.addCleanup(ffp.clean_up)
+        ffp.add_abort_token("test_blah")
+        ffp.launch(TESTFF_BIN)
+        self.assertEqual(len(ffp._workers), 1)
+        w_logs = list()
+        for worker in ffp._workers:
+            w_logs.append(worker._log)
+            self.assertTrue(os.path.isfile(w_logs[-1]))
+        ffp.close()
+        self.assertEqual(len(ffp._workers), 0)
+        self.assertEqual(len(w_logs), 1)
+        for log in w_logs:
+            self.assertFalse(os.path.isfile(log))
 
 
 class ScriptTests(TestCase):
