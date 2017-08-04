@@ -41,30 +41,36 @@ def _run(process_id, limit, log_file):
     """
 
     plat = platform.system().lower()
-    with open(log_file, "w") as log_fp:
+    try:
+        process = psutil.Process(process_id)
+    except psutil.NoSuchProcess:
+        return
+
+    while process.is_running():
+        proc_info = list()
+        total_usage = 0
         try:
-            process = psutil.Process(process_id)
+            cur_rss = process.memory_info().rss
+            total_usage += cur_rss
+            proc_info.append((process.pid, cur_rss))
+            for child in process.children(recursive=True):
+                try:
+                    cur_rss = child.memory_info().rss
+                    total_usage += cur_rss
+                    proc_info.append((child.pid, cur_rss))
+                except psutil.NoSuchProcess:
+                    pass
         except psutil.NoSuchProcess:
-            return
+            break # process is dead?
 
-        while process.is_running():
-            proc_info = list()
-            total_usage = 0
+        if total_usage >= limit:
             try:
-                cur_rss = process.memory_info().rss
-                total_usage += cur_rss
-                proc_info.append((process.pid, cur_rss))
-                for child in process.children(recursive=True):
-                    try:
-                        cur_rss = child.memory_info().rss
-                        total_usage += cur_rss
-                        proc_info.append((child.pid, cur_rss))
-                    except psutil.NoSuchProcess:
-                        pass
+                process.kill()
+                process.wait()
             except psutil.NoSuchProcess:
-                break # process is dead?
+                pass # process is dead?
 
-            if total_usage >= limit:
+            with open(log_file, "w") as log_fp:
                 if plat == "linux":
                     mem_hog = (0, 0) # process using the most memory
                     for pid, proc_usage in proc_info:
@@ -72,19 +78,11 @@ def _run(process_id, limit, log_file):
                             mem_hog = (pid, proc_usage)
                     log_fp.write(puppet_worker.gdb_log_dumpper(mem_hog[0]))
                     log_fp.write("\n")
-
-                try:
-                    process.kill()
-                    process.wait()
-                except psutil.NoSuchProcess:
-                    pass # process is dead?
-
                 log_fp.write("MEMORY_LIMIT_EXCEEDED: %d\n" % total_usage)
                 log_fp.write("Current Limit: %d (%dMB)\n" % (limit, limit/1048576))
                 log_fp.write("Parent PID: %d\n" % process_id)
                 for pid, proc_usage in proc_info:
                     log_fp.write("-> PID %6d: %10d\n" % (pid, proc_usage))
+            break
 
-                break
-
-            time.sleep(0.1) # check 10x a second
+        time.sleep(0.1) # check 10x a second
