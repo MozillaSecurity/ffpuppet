@@ -28,13 +28,13 @@ except ImportError:
 
 try:
     from . import breakpad_syms
-    from .workers import log_scanner, memory_limiter
+    from .workers import log_scanner, log_size_limiter, memory_limiter
 except ImportError:
     logging.error("Can't use ffpuppet.py as a script with Python 3.")
     exit(1)
 except ValueError:
     import breakpad_syms
-    from workers import log_scanner, memory_limiter
+    from workers import log_scanner, log_size_limiter, memory_limiter
 
 log = logging.getLogger("ffpuppet") # pylint: disable=invalid-name
 
@@ -68,6 +68,7 @@ class LaunchError(Exception):
 
 
 class FFPuppet(object):
+    LOG_BUF_SIZE = 0x10000 # buffer size used to copy logs
     LOG_CLOSE_TIMEOUT = 10
     LOG_POLL_RATE = 1
 
@@ -236,9 +237,14 @@ class FFPuppet(object):
                 cpyfp = open(target_file, "wb")
             try:
                 if symbolize:
+                    # TODO: this needs to change to handle large logs
                     cpyfp.write(breakpad_syms.addr2line(logfp.read()))
                 else:
-                    cpyfp.write(logfp.read())
+                    while True:
+                        buf = logfp.read(self.LOG_BUF_SIZE)
+                        cpyfp.write(buf)
+                        if not buf:
+                            break
             finally:
                 cpyfp.close()
 
@@ -290,11 +296,13 @@ class FFPuppet(object):
             if not os.path.isdir(dst_path):
                 os.makedirs(dst_path)
             log_file = os.path.join(os.path.abspath(dst_path), log_file)
-            with open(self._log.name, "rb") as logfp, open(log_file, "wb") as cpyfp:
-                if symbolize:
+            if symbolize:
+                # TODO: this needs to change to handle large logs
+                with open(self._log.name, "rb") as logfp, open(log_file, "wb") as cpyfp:
                     cpyfp.write(breakpad_syms.addr2line(logfp.read()))
-                else:
-                    cpyfp.write(logfp.read())
+            else:
+                shutil.copy(self._log.name, log_file)
+
 
 
     def clean_up(self):
@@ -612,7 +620,7 @@ class FFPuppet(object):
         return profile
 
 
-    def launch(self, bin_path, launch_timeout=300, location=None, memory_limit=None,
+    def launch(self, bin_path, launch_timeout=300, location=None, log_limit=0, memory_limit=0,
                prefs_js=None, safe_mode=False, extension=None):
         """
         Launch a new browser process.
@@ -657,7 +665,10 @@ class FFPuppet(object):
             elif re.match(r"http(s)?://", location, re.IGNORECASE) is None:
                 raise IOError("Cannot find %s" % os.path.abspath(location))
 
-        if memory_limit is not None and not memory_limiter.MemoryLimiterWorker.available:
+        log_limit = max(log_limit, 0)
+        memory_limit = max(memory_limit, 0)
+
+        if memory_limit and not memory_limiter.MemoryLimiterWorker.available:
             raise EnvironmentError("Please install psutil")
 
         self.closed = False
@@ -708,7 +719,12 @@ class FFPuppet(object):
         if prefs_js is not None and os.path.isfile(os.path.join(self.profile, "Invalidprefs.js")):
             raise LaunchError("%r is invalid" % prefs_js)
 
-        if memory_limit is not None:
+        if log_limit:
+            # launch log size monitor thread
+            self._workers.append(log_size_limiter.LogSizeLimiterWorker())
+            self._workers[-1].start(self, log_limit)
+
+        if memory_limit:
             # launch memory monitor thread
             self._workers.append(memory_limiter.MemoryLimiterWorker())
             self._workers[-1].start(self._proc.pid, memory_limit)
@@ -900,7 +916,7 @@ def main(argv=None): # pylint: disable=missing-docstring
             args.binary,
             location=args.url,
             launch_timeout=args.timeout,
-            memory_limit=args.memory * 1024 * 1024 if args.memory else None,
+            memory_limit=args.memory * 1024 * 1024 if args.memory else 0,
             prefs_js=args.prefs,
             safe_mode=args.safe_mode,
             extension=args.extension)
@@ -909,8 +925,9 @@ def main(argv=None): # pylint: disable=missing-docstring
         log.info("Running Firefox (pid: %d)...", ffp.get_pid())
         ffp.wait()
     except KeyboardInterrupt:
-        log.info("Ctrl+C detected. Shutting down...")
+        log.info("Ctrl+C detected.")
     finally:
+        log.info("Shutting down...")
         ffp.close()
         log.info("Firefox process closed")
         output_log = open_unique()

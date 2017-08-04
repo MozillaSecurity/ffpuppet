@@ -42,6 +42,8 @@ def main():
                         cmd = 'soft_assert'
                     elif line == 'fftest_invalid_js':
                         cmd = 'invalid_js'
+                    elif line == 'fftest_big_log':
+                        cmd = 'big_log'
                     # don't worry about unknown values
                 elif line.startswith('#'):
                     pass # skip comments
@@ -99,6 +101,13 @@ def main():
         sys.stdout.flush()
         time.sleep(5) # wait to be terminated
         sys.exit(0)
+    elif cmd == 'big_log':
+        sys.stdout.write('simulating big logs\n')
+        buf = "A" * (1024*1024) # 1MB
+        for _ in range(25):
+            sys.stdout.write(buf)
+            sys.stdout.flush()
+        time.sleep(20) # wait to be terminated
 
 if __name__ == '__main__':
     main()

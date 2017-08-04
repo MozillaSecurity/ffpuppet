@@ -90,6 +90,7 @@ class PuppetTests(TestCase):
         self.addCleanup(httpd.shutdown)
         location = "http://127.0.0.1:%d" % httpd.server_address[1]
         ffp.launch(TESTFF_BIN, location=location)
+        self.assertEqual(len(ffp._workers), 0)
         self.assertEqual(ffp.get_launch_count(), 1)
         self.assertEqual(ffp.wait(1), 0) # will close automatically
         ffp.close()
@@ -599,6 +600,29 @@ class PuppetTests(TestCase):
         self.assertEqual(len(w_logs), 1)
         for log in w_logs:
             self.assertFalse(os.path.isfile(log))
+
+    def test_29(self):
+        "test hitting log size limit"
+        ffp = FFPuppet()
+        self.addCleanup(ffp.clean_up)
+        with open(self.tmpfn, 'w') as prefs:
+            prefs.write('//fftest_big_log\n')
+        class _req_handler(BaseHTTPRequestHandler):
+            def do_GET(self):
+                self.send_response(200)
+                self.end_headers()
+                self.wfile.write(b"hello world")
+        httpd = create_server(_req_handler)
+        self.addCleanup(httpd.shutdown)
+        location = "http://127.0.0.1:%d" % httpd.server_address[1]
+        limit = 0x100000 # 1MB
+        ffp.launch(TESTFF_BIN, location=location, prefs_js=self.tmpfn, log_limit=limit)
+        self.assertIsNotNone(ffp.wait(60))
+        ffp.close()
+        ffp.save_log(self.tmpfn)
+        self.assertLess(limit, os.stat(self.tmpfn).st_size)
+        with open(self.tmpfn, "rb") as fp:
+            self.assertRegex(fp.read(), b"LOG_SIZE_LIMIT_EXCEEDED")
 
 
 class ScriptTests(TestCase):
