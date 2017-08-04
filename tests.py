@@ -113,17 +113,22 @@ class PuppetTests(TestCase):
     def test_3(self):
         "test hang on start"
         ffp = FFPuppet()
-        self.addCleanup(ffp.clean_up)
-        with open(self.tmpfn, 'w') as prefs:
-            prefs.write('//fftest_hang\n')
-        start = time.time()
-        with self.assertRaisesRegex(LaunchError, "Launching browser timed out"):
-            ffp.launch(TESTFF_BIN, prefs_js=self.tmpfn, launch_timeout=1)
-        duration = time.time() - start
-        ffp.close()
-        ffp.save_log(self.tmpfn)
-        self.assertGreater(duration, 9) # min launch_timeout is 10
-        self.assertLess(duration, 60)
+        default_timeout = ffp.LAUNCH_TIMEOUT_MIN
+        try:
+            ffp.LAUNCH_TIMEOUT_MIN = 1
+            self.addCleanup(ffp.clean_up)
+            with open(self.tmpfn, 'w') as prefs:
+                prefs.write('//fftest_hang\n')
+            start = time.time()
+            with self.assertRaisesRegex(LaunchError, "Launching browser timed out"):
+                ffp.launch(TESTFF_BIN, prefs_js=self.tmpfn, launch_timeout=1)
+            duration = time.time() - start
+            ffp.close()
+            ffp.save_log(self.tmpfn)
+            self.assertGreater(duration, ffp.LAUNCH_TIMEOUT_MIN)
+            self.assertLess(duration, 30)
+        finally:
+            ffp.LAUNCH_TIMEOUT_MIN = default_timeout
 
     def test_4(self):
         "test logging"

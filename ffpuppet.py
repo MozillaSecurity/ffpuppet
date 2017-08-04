@@ -68,6 +68,7 @@ class LaunchError(Exception):
 
 
 class FFPuppet(object):
+    LAUNCH_TIMEOUT_MIN = 10 # minimum amount of time to wait for the browser to launch
     LOG_BUF_SIZE = 0x10000 # buffer size used to copy logs
     LOG_CLOSE_TIMEOUT = 10
     LOG_POLL_RATE = 1
@@ -672,7 +673,7 @@ class FFPuppet(object):
             raise EnvironmentError("Please install psutil")
 
         self.closed = False
-        launch_timeout = max(launch_timeout, 10) # force 10 seconds minimum launch_timeout
+        launch_timeout = max(launch_timeout, self.LAUNCH_TIMEOUT_MIN) # force minimum launch timeout
         log.debug("launch timeout: %d", launch_timeout)
 
         # create and modify a profile
