@@ -310,7 +310,7 @@ class FFPuppet(object):
 
         log.debug("clean_up() called")
 
-        self.close()
+        self.close(ignore_logs=True)
 
         if self._log is not None and os.path.isfile(self._log.name):
             os.remove(self._log.name)
@@ -328,7 +328,40 @@ class FFPuppet(object):
         assert not self._workers, "self._workers is not empty"
 
 
-    def close(self):
+    def _merge_logs(self, close_needed=False):
+        log.debug("merge logs")
+
+        # collect browser log data
+        if self._proc is not None and self._log is not None and not self._log.closed:
+            log.debug("wait for browser log dump to complete")
+            time_limit = time.time() + self.LOG_CLOSE_TIMEOUT
+            # this helps collect complete logs from multiprocess targets
+            while True:
+                log_pos = self._log.tell()
+                time.sleep(self.LOG_POLL_RATE)
+                self._log.flush()
+                if log_pos == self._log.tell(): # this isn't bullet proof but it works
+                    break
+                if time_limit < time.time():
+                    log.warning("Log may be incomplete!")
+                    self._log.write("[ffpuppet] WARNING! Log may be incomplete!\n")
+                    break
+            if close_needed:
+                self._log.write("[ffpuppet] Process was closed by ffpuppet\n")
+            self._log.write("[ffpuppet] Exit code: %r\n" % self._proc.returncode)
+            log.debug("exit code: %r", self._proc.returncode)
+
+        log.debug("copying worker logs to main log")
+        for worker in self._workers:
+            worker_log = None if self._log.closed else worker.collect_log()
+            if worker_log:
+                self._log.write("\n")
+                self._log.write("[ffpuppet worker]: %s\n" % worker.name)
+                self._log.write(worker_log)
+                self._log.write("\n")
+
+
+    def close(self, ignore_logs=False):
         """
         Terminate the browser process and clean up all processes.
 
@@ -339,9 +372,9 @@ class FFPuppet(object):
         log.debug("close() called")
 
         # terminate the browser process
+        still_running = self._proc is not None and self._proc.poll() is None
         if self._proc is not None:
             log.debug("firefox pid: %r", self._proc.pid)
-            still_running = self._proc.poll() is None
             if still_running:
                 log.debug("process needs to be closed")
                 if self._use_valgrind:
@@ -358,35 +391,12 @@ class FFPuppet(object):
         for worker in self._workers:
             worker.join()
 
-        # collect browser log data
-        if self._proc is not None and self._log is not None and not self._log.closed:
-            log.debug("wait for browser log dump to complete")
-            time_limit = time.time() + self.LOG_CLOSE_TIMEOUT
-            while True:
-                log_pos = self._log.tell()
-                time.sleep(self.LOG_POLL_RATE)
-                self._log.flush()
-                if log_pos == self._log.tell(): # this isn't bullet proof but it works
-                    break
-                if time_limit < time.time():
-                    log.warning("Log may be incomplete!")
-                    self._log.write("[ffpuppet] WARNING! Log may be incomplete!\n")
-                    break
-            if still_running:
-                self._log.write("[ffpuppet] Process was closed by ffpuppet\n")
-            self._log.write("[ffpuppet] Exit code: %r\n" % self._proc.returncode)
-            log.debug("exit code: %r", self._proc.returncode)
-            self._proc = None
+        if not ignore_logs:
+            self._merge_logs(close_needed=still_running)
+        self._proc = None
 
-        # appended worker logs to the end of the main log
-        log.debug("copying worker logs to main log and cleaning up")
+        log.debug("cleaning up workers...")
         for worker in self._workers:
-            worker_log = None if self._log.closed else worker.collect_log()
-            if worker_log:
-                self._log.write("\n")
-                self._log.write("[ffpuppet] Worker: %s\n" % worker.name)
-                self._log.write(worker_log)
-                self._log.write("\n")
             worker.clean_up()
         self._workers = list()
 
