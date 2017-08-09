@@ -41,7 +41,7 @@ def _run(puppet, log_file):
             # check if file has new data
             if scan_fp.tell() > offset:
                 scan_fp.seek(offset, os.SEEK_SET)
-                data = scan_fp.read()
+                data = scan_fp.read(0x10000) # 64KB
                 offset = scan_fp.tell()
             else:
                 data = None
@@ -64,9 +64,9 @@ def _run(puppet, log_file):
             match = token.search(data)
             if match:
                 puppet._proc.terminate()
+                puppet._proc.wait()
                 with open(log_file, "w") as log_fp:
                     log_fp.write("TOKEN_LOCATED: %s\n" % match.group())
-                puppet._proc.wait()
                 break
 
         time.sleep(0.05) # don't be a CPU hog
