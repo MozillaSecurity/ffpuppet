@@ -55,11 +55,6 @@ def _run(puppet, log_file):
         if line_buffer:
             data = "".join([line_buffer, data])
 
-        try:
-            data, line_buffer = data.rsplit("\n", 1)
-        except ValueError:
-            line_buffer = data
-
         for token in puppet._abort_tokens:
             match = token.search(data)
             if match:
@@ -67,6 +62,11 @@ def _run(puppet, log_file):
                 puppet._proc.wait()
                 with open(log_file, "w") as log_fp:
                     log_fp.write("TOKEN_LOCATED: %s\n" % match.group())
-                break
+                return
+
+        try:
+            line_buffer = data.rsplit("\n", 1)[1]
+        except IndexError:
+            line_buffer = data
 
         time.sleep(0.05) # don't be a CPU hog
