@@ -948,6 +948,8 @@ def _parse_args(argv=None):
         "-l", "--log",
         help="log file name")
     parser.add_argument(
+        "--log-limit", type=int, help="Log file size limit in MBs")
+    parser.add_argument(
         "-m", "--memory", type=int,
         help="Process memory limit in MBs (Requires psutil)")
     parser.add_argument(
@@ -1004,6 +1006,7 @@ def main(argv=None): # pylint: disable=missing-docstring
             args.binary,
             location=args.url,
             launch_timeout=args.timeout,
+            log_limit=args.log_limit * 1024 * 1024 if args.log_limit else 0,
             memory_limit=args.memory * 1024 * 1024 if args.memory else 0,
             prefs_js=args.prefs,
             safe_mode=args.safe_mode,
