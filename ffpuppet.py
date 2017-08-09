@@ -360,25 +360,42 @@ class FFPuppet(object):
             log.debug("exit code: %r", self._proc.returncode)
 
         log.debug("copying ASan logs")
+        # this is a HACK to try to order ASan logs
+        # It attempts to locate the null deref in the child process (MOZ_CRASH)
+        # triggered by closing the parent process (when e10s is enabled) and place it
+        # at the bottom of the merged log.
+        # This is done to allow FuzzManager to bucket the results properly
+        asan_logs = list()
+        re_asan_null = re.compile(r"ERROR:\.+?SEGV\son\sunknown\saddress\s0x[0]+\s\(.+?T2\)")
         for tmp_file in os.listdir(tempfile.gettempdir()):
             tmp_file = os.path.join(tempfile.gettempdir(), tmp_file)
-            if tmp_file.startswith(self._asan_log):
-                self._log.write("\n")
-                self._log.write("[ffpuppet] Read from %s:\n" % tmp_file)
-                with open(tmp_file, "r") as log_fp:
-                    while True:
-                        buf = log_fp.read(self.LOG_BUF_SIZE)
-                        if not buf:
-                            break
-                        self._log.write(buf)
-                self._log.write("\n")
+            if not tmp_file.startswith(self._asan_log):
+                continue
+            with open(tmp_file, "r") as log_fp:
+                lines = log_fp.readlines(1024)[:7] # don't bother reading more than 1KB
+                if len(lines) < 6 or re.match(re_asan_null, lines[1]):
+                    asan_logs.append(tmp_file)
+                else:
+                    asan_logs.insert(0, tmp_file)
+        for asan_log in asan_logs:
+            self._log.write("\n")
+            self._log.write("[ffpuppet] Read from %s:\n" % asan_log)
+            with open(asan_log, "r") as log_fp:
+                while True:
+                    buf = log_fp.read(self.LOG_BUF_SIZE)
+                    if not buf:
+                        break
+                    self._log.write(buf)
+            self._log.write("\n")
 
         log.debug("copying worker logs to main log")
         for worker in self._workers:
-            self._log.write("\n")
-            self._log.write("[ffpuppet worker]: %s\n" % worker.name)
-            self._log.write(worker.collect_log())
-            self._log.write("\n")
+            worker_log = worker.collect_log()
+            if worker_log:
+                self._log.write("\n")
+                self._log.write("[ffpuppet worker]: %s\n" % worker.name)
+                self._log.write(worker_log)
+                self._log.write("\n")
 
 
     def close(self, ignore_logs=False):
