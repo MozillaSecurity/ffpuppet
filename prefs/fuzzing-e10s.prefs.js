@@ -43,9 +43,6 @@ user_pref("browser.ssl_override_behavior", 1); // domfuzz
 user_pref("browser.startup.homepage", "about:blank");
 user_pref("browser.startup.homepage_override.mstone", "ignore");
 user_pref("browser.startup.page", 0); // use about:blank
-user_pref("browser.tabs.remote.autostart", false); // disable e10s
-user_pref("browser.tabs.remote.autostart.1", false); // disable e10s
-user_pref("browser.tabs.remote.autostart.2", false); // disable e10s
 user_pref("browser.tabs.warnOnClose", false);
 user_pref("browser.tabs.warnOnCloseOtherTabs", false);
 user_pref("browser.urlbar.userMadeSearchSuggestionsChoice", true); // domfuzz
