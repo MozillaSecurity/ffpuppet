@@ -75,6 +75,7 @@ class FFPuppet(object):
 
     def __init__(self, use_profile=None, use_valgrind=False, use_xvfb=False, use_gdb=False):
         self._abort_tokens = set() # tokens used to notify log scanner to kill the browser process
+        self._asan_log = os.path.join(tempfile.gettempdir(), "ffp_asan_%d.log" % os.getpid())
         self._launches = 0 # number of times the browser has successfully been launched
         self._log = None
         self._platform = platform.system().lower()
@@ -147,20 +148,19 @@ class FFPuppet(object):
                 #"check_malloc_usable_size=false", # defaults True
                 #"detect_stack_use_after_return=true", # can't launch firefox with this enabled
                 "disable_coredump=true",
+                "log_path=%s" % self._asan_log,
                 "sleep_before_dying=0",
                 "strict_init_order=true",
                 #"strict_memcmp=false", # defaults True
                 "symbolize=true"))
 
         # default to environment definition
-        if "ASAN_SYMBOLIZER_PATH" in os.environ:
+        if "ASAN_SYMBOLIZER_PATH" in env:
             env["ASAN_SYMBOLIZER_PATH"] = os.environ["ASAN_SYMBOLIZER_PATH"]
             env["MSAN_SYMBOLIZER_PATH"] = os.environ["ASAN_SYMBOLIZER_PATH"]
             if not os.path.isfile(env["ASAN_SYMBOLIZER_PATH"]):
                 log.warning("Invalid ASAN_SYMBOLIZER_PATH (%s)", env["ASAN_SYMBOLIZER_PATH"])
-
-        # look for llvm-symbolizer bundled with firefox build
-        if "ASAN_SYMBOLIZER_PATH" not in env:
+        else: # look for llvm-symbolizer bundled with firefox build
             if self._platform == "windows":
                 symbolizer_bin = os.path.join(os.path.dirname(target_bin), "llvm-symbolizer.exe")
             else:
@@ -213,8 +213,8 @@ class FFPuppet(object):
         @param offset: Where to begin reading the log from
 
         @type symbolize: bool
-        @param symbolize: symbolize debug stack trace output. WARNING: calculating a value to be
-            used with offset with this set will cause issues.
+        @param symbolize: symbolize debug stack trace output.
+            WARNING: calculating a value to be used with offset with this set will cause issues.
 
         @rtype: String or None
         @return: Name of the file containing the cloned log or None on failure
@@ -243,9 +243,9 @@ class FFPuppet(object):
                 else:
                     while True:
                         buf = logfp.read(self.LOG_BUF_SIZE)
-                        cpyfp.write(buf)
                         if not buf:
                             break
+                        cpyfp.write(buf)
             finally:
                 cpyfp.close()
 
@@ -341,7 +341,7 @@ class FFPuppet(object):
         log.debug("merge logs")
 
         # collect browser log data
-        if self._proc is not None and self._log is not None and not self._log.closed:
+        if self._proc is not None:
             log.debug("wait for browser log dump to complete")
             time_limit = time.time() + self.LOG_CLOSE_TIMEOUT
             # this helps collect complete logs from multiprocess targets
@@ -357,17 +357,28 @@ class FFPuppet(object):
                     break
             if close_needed:
                 self._log.write("[ffpuppet] Process was closed by ffpuppet\n")
-            self._log.write("[ffpuppet] Exit code: %r\n" % self._proc.returncode)
             log.debug("exit code: %r", self._proc.returncode)
+
+        log.debug("copying ASan logs")
+        for tmp_file in os.listdir(tempfile.gettempdir()):
+            tmp_file = os.path.join(tempfile.gettempdir(), tmp_file)
+            if tmp_file.startswith(self._asan_log):
+                self._log.write("\n")
+                self._log.write("[ffpuppet] Read from %s:\n" % tmp_file)
+                with open(tmp_file, "r") as log_fp:
+                    while True:
+                        buf = log_fp.read(self.LOG_BUF_SIZE)
+                        if not buf:
+                            break
+                        self._log.write(buf)
+                self._log.write("\n")
 
         log.debug("copying worker logs to main log")
         for worker in self._workers:
-            worker_log = None if self._log.closed else worker.collect_log()
-            if worker_log:
-                self._log.write("\n")
-                self._log.write("[ffpuppet worker]: %s\n" % worker.name)
-                self._log.write(worker_log)
-                self._log.write("\n")
+            self._log.write("\n")
+            self._log.write("[ffpuppet worker]: %s\n" % worker.name)
+            self._log.write(worker.collect_log())
+            self._log.write("\n")
 
 
     def close(self, ignore_logs=False):
@@ -400,18 +411,27 @@ class FFPuppet(object):
         for worker in self._workers:
             worker.join()
 
-        if not ignore_logs:
+        if not ignore_logs and self._log is not None and not self._log.closed:
             self._merge_logs(close_needed=still_running)
-        self._proc = None
+
+        if self._proc is not None:
+            self._log.write("[ffpuppet] Exit code: %r\n" % self._proc.returncode)
+            self._proc = None
 
         log.debug("cleaning up workers...")
         for worker in self._workers:
             worker.clean_up()
         self._workers = list()
 
-        # close log
+        # close browser log
         if self._log is not None and not self._log.closed:
             self._log.close()
+
+        # remove ASan logs
+        for tmp_file in os.listdir(tempfile.gettempdir()):
+            tmp_file = os.path.join(tempfile.gettempdir(), tmp_file)
+            if tmp_file.startswith(self._asan_log):
+                os.remove(tmp_file)
 
         # remove temporary profile directory if necessary
         if self.profile is not None and os.path.isdir(self.profile):

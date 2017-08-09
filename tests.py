@@ -268,8 +268,12 @@ class PuppetTests(TestCase):
         httpd = create_server(_req_handler)
         self.addCleanup(httpd.shutdown)
         location = "http://127.0.0.1:%d" % httpd.server_address[1]
+        prev_log = None
         for _ in range(10):
             ffp.launch(TESTFF_BIN, location=location)
+            if prev_log is not None:
+                self.assertFalse(os.path.isfile(prev_log))
+            prev_log = ffp._log.name
             ffp.close()
         # call 2x without calling launch
         ffp.launch(TESTFF_BIN, location=location)
@@ -628,6 +632,25 @@ class PuppetTests(TestCase):
         self.assertLess(limit, os.stat(self.tmpfn).st_size)
         with open(self.tmpfn, "rb") as fp:
             self.assertRegex(fp.read(), b"LOG_SIZE_LIMIT_EXCEEDED")
+
+    def test_30(self):
+        "test merging and cleaning up ASan logs"
+        ffp = FFPuppet()
+        self.addCleanup(ffp.clean_up)
+        ffp.launch(TESTFF_BIN)
+        asan_log = ".".join([ffp._asan_log, "5422"]) # add a PID
+        with open(asan_log, "w") as fp:
+            fp.write("first line\n")
+            fp.write("middle test line\n")
+            fp.write("final line!")
+        ffp.close()
+        ffp.save_log(self.tmpfn)
+        with open(self.tmpfn, "r") as fp:
+            log_data = fp.read()
+        self.assertRegex(log_data, "first line\n")
+        self.assertRegex(log_data, "final line!")
+        ffp.clean_up()
+        self.assertFalse(os.path.isfile(asan_log))
 
 
 class ScriptTests(TestCase):
