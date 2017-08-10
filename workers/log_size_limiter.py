@@ -36,11 +36,15 @@ def _run(puppet, max_size, log_file):
 
         current_size = os.stat(puppet._log.name).st_size
         if current_size > max_size:
-            puppet._proc.terminate()
+            try:
+                puppet._proc.terminate()
+                if puppet.wait(5) is None:
+                    puppet._proc.kill()
+                    puppet._proc.wait()
+            except AttributeError:
+                pass
             with open(log_file, "w") as log_fp:
                 log_fp.write("LOG_SIZE_LIMIT_EXCEEDED: %d\n" % current_size)
                 log_fp.write("Current Limit: %d (%dMB)\n" % (max_size, max_size/1048576))
-            puppet._proc.wait()
             break
-        else:
-            time.sleep(0.1) # don't be a CPU hog
+        time.sleep(0.1) # don't be a CPU hog

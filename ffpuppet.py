@@ -414,13 +414,11 @@ class FFPuppet(object):
             log.debug("firefox pid: %r", self._proc.pid)
             if still_running:
                 log.debug("process needs to be closed")
-                if self._use_valgrind:
-                    # XXX: hack to prevent the browser from hanging when
-                    # running under Valgrind and pressing ctrl+c...
-                    # psutil's terminate() does work though
+                self._proc.terminate()
+                # call kill() immediately if Valgrind is used otherwise wait 30 sec max
+                if self.wait(30 if not self._use_valgrind else 0) is None:
+                    log.debug("calling kill()")
                     self._proc.kill()
-                else:
-                    self._proc.terminate()
             self._proc.wait()
 
         # join worker threads and processes
@@ -865,14 +863,15 @@ class FFPuppet(object):
         @rtype: int or None
         @return: exit code if process exits and None if timeout expired
         """
+        timeout = max(timeout, 0)
         timer_exp = time.time() + timeout
         while self._proc is not None:
-            if timeout > 0 and timer_exp <= time.time():
+            retval = self._proc.poll()
+            if retval is not None:
+                return retval
+            if timeout > 0 and time.time() >= timer_exp:
                 break
-            if self._proc.poll() is not None:
-                return self._proc.poll()
             time.sleep(0.1)
-
         return None
 
 
