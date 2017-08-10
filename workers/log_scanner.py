@@ -58,13 +58,7 @@ def _run(puppet, log_file):
         for token in puppet._abort_tokens:
             match = token.search(data)
             if match:
-                try:
-                    puppet._proc.terminate()
-                    if puppet.wait(5) is None:
-                        puppet._proc.kill()
-                        puppet._proc.wait()
-                except AttributeError:
-                    pass
+                puppet._terminate(5)
                 with open(log_file, "w") as log_fp:
                     log_fp.write("TOKEN_LOCATED: %s\n" % match.group())
                 return

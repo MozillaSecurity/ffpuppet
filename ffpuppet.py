@@ -398,6 +398,19 @@ class FFPuppet(object):
                 self._log.write("\n")
 
 
+    def _terminate(self, kill_delay=30):
+        kill_delay = max(kill_delay, 0)
+        try:
+            log.debug("calling terminate()")
+            self._proc.terminate()
+            # call kill() immediately if Valgrind is used otherwise wait for "kill_delay"
+            if self.wait(kill_delay if not self._use_valgrind else 0.1) is None:
+                log.debug("calling kill()")
+                self._proc.kill()
+        except AttributeError:
+            pass # in case self._proc is None
+
+
     def close(self, ignore_logs=False):
         """
         Terminate the browser process and clean up all processes.
@@ -414,11 +427,7 @@ class FFPuppet(object):
             log.debug("firefox pid: %r", self._proc.pid)
             if still_running:
                 log.debug("process needs to be closed")
-                self._proc.terminate()
-                # call kill() immediately if Valgrind is used otherwise wait 30 sec max
-                if self.wait(30 if not self._use_valgrind else 0) is None:
-                    log.debug("calling kill()")
-                    self._proc.kill()
+                self._terminate()
             self._proc.wait()
 
         # join worker threads and processes
@@ -851,25 +860,30 @@ class FFPuppet(object):
             init_soc.close()
 
 
-    def wait(self, timeout=0):
+    def wait(self, timeout=None):
         """
         Wait for process to terminate. This call will block until the process exits unless
         a timeout is specified. If a timeout greater than zero is specified the call will
         only block until the timeout expires.
 
-        @type timeout: float
+        @type timeout: float or None
         @param timeout: maximum amount of time to wait for process to terminate
+                        or None (wait indefinitely)
 
         @rtype: int or None
         @return: exit code if process exits and None if timeout expired
         """
-        timeout = max(timeout, 0)
-        timer_exp = time.time() + timeout
+        if timeout is not None:
+            timeout = max(timeout, 0)
+            timer_exp = time.time() + timeout
+        else:
+            timer_exp = 0
         while self._proc is not None:
             retval = self._proc.poll()
             if retval is not None:
                 return retval
-            if timeout > 0 and time.time() >= timer_exp:
+            if timeout is not None and time.time() >= timer_exp:
+                log.debug("wait() timed out (%0.2fs)", timeout)
                 break
             time.sleep(0.1)
         return None
