@@ -25,6 +25,7 @@ def main():
     assert url is not None
     # read prefs to see how to run
     cmd = None
+    exit_code = 0
     if profile is not None:
         with open(os.path.join(profile, 'prefs.js'), "r") as prefs_js:
             for line in prefs_js:
@@ -44,6 +45,9 @@ def main():
                         cmd = 'invalid_js'
                     elif line == 'fftest_big_log':
                         cmd = 'big_log'
+                    elif line.startswith('fftest_exit_code_'):
+                        cmd = 'exit_code'
+                        exit_code = int(line.split('fftest_exit_code_')[-1])
                     # don't worry about unknown values
                 elif line.startswith('#'):
                     pass # skip comments
@@ -87,7 +91,6 @@ def main():
         with open(os.devnull, "r") as r_fp:
             for _ in range(200):
                 blob.append(r_fp.read(1024*1024))
-        time.sleep(60) # wait to be terminated
     elif cmd == 'soft_assert':
         sys.stdout.write('simulating soft assertion\n')
         # split '###!!! ASSERTION: tests\n' across multiple reads by the log scanner
@@ -99,15 +102,18 @@ def main():
         time.sleep(0.25)
         sys.stdout.write('ION: test\n\nblah...')
         sys.stdout.flush()
-        time.sleep(5) # wait to be terminated
-        sys.exit(0)
     elif cmd == 'big_log':
         sys.stdout.write('simulating big logs\n')
         buf = "A" * (1024*1024) # 1MB
         for _ in range(25):
             sys.stdout.write(buf)
             sys.stdout.flush()
-        time.sleep(20) # wait to be terminated
+    elif cmd == 'exit_code':
+        sys.stdout.write('exit code test\n')
+        sys.exit(exit_code)
+
+    time.sleep(45) # wait before closing (should be terminated before elapse)
+    sys.exit(0)
 
 if __name__ == '__main__':
     main()

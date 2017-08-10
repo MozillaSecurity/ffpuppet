@@ -58,6 +58,13 @@ def create_server(handler):
     return httpd
 
 
+class ReqHandler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        self.send_response(200)
+        self.end_headers()
+        self.wfile.write(b"hello world")
+
+
 class PuppetTests(TestCase):
 
     def setUp(self):
@@ -81,22 +88,17 @@ class PuppetTests(TestCase):
         ffp = FFPuppet()
         self.addCleanup(ffp.clean_up)
         self.assertEqual(ffp.get_launch_count(), 0)
-        class _req_handler(BaseHTTPRequestHandler):
-            def do_GET(self):
-                self.send_response(200)
-                self.end_headers()
-                self.wfile.write(b"test")
-        httpd = create_server(_req_handler)
+        httpd = create_server(ReqHandler)
         self.addCleanup(httpd.shutdown)
         location = "http://127.0.0.1:%d" % httpd.server_address[1]
         ffp.launch(TESTFF_BIN, location=location)
         self.assertEqual(len(ffp._workers), 0)
         self.assertEqual(ffp.get_launch_count(), 1)
-        self.assertEqual(ffp.wait(1), 0) # will close automatically
+        self.assertIsNone(ffp.wait(0))
         ffp.close()
         self.assertIsNone(ffp._proc)
         self.assertFalse(ffp.is_running())
-        self.assertIsNone(ffp.wait())
+        self.assertIsNone(ffp.wait(10))
 
     def test_2(self):
         "test crash on start"
@@ -106,7 +108,7 @@ class PuppetTests(TestCase):
             prefs.write('//fftest_startup_crash\n')
         with self.assertRaisesRegex(LaunchError, "Failure during browser startup"):
             ffp.launch(TESTFF_BIN, prefs_js=self.tmpfn)
-        self.assertEqual(ffp.wait(1), 1) # test crash returns 1
+        self.assertEqual(ffp.wait(10), 1) # test crash returns 1
         ffp.close()
         ffp.save_log(self.tmpfn)
 
@@ -134,25 +136,22 @@ class PuppetTests(TestCase):
         "test logging"
         ffp = FFPuppet()
         self.addCleanup(ffp.clean_up)
-        class _req_handler(BaseHTTPRequestHandler):
-            def do_GET(self):
-                self.send_response(200)
-                self.end_headers()
-                self.wfile.write(b"hello world")
-        httpd = create_server(_req_handler)
+        httpd = create_server(ReqHandler)
         self.addCleanup(httpd.shutdown)
         log_dir = tempfile.mkdtemp()
         location = "http://127.0.0.1:%d" % httpd.server_address[1]
         ffp.launch(TESTFF_BIN, location=location)
-        ffp.wait()
+        ffp.wait(0.25) # wait for log prints
         ffp.close()
         log_file = os.path.join(log_dir, "some_dir", "test_log.txt") # nonexistent directory
         ffp.save_log(log_file)
         self.assertTrue(os.path.isfile(log_file))
         with open(log_file) as log_fp:
             out_log = log_fp.read().splitlines()
+        self.assertEqual(len(out_log), 5)
         self.assertTrue(out_log[0].startswith('[ffpuppet] Launch command'))
-        self.assertEqual(out_log[1:], ['', "hello world", "[ffpuppet] Exit code: 0"])
+        self.assertEqual(out_log[2:4], ["hello world", "[ffpuppet] Process was closed by ffpuppet"])
+        self.assertTrue(out_log[-1].startswith('[ffpuppet] Exit code:')) # exit code differs between platforms
         log_file = "rel_test_path.txt" # save to cwd
         ffp.save_log(log_file)
         self.assertTrue(os.path.isfile(log_file))
@@ -192,19 +191,17 @@ class PuppetTests(TestCase):
         ffp = FFPuppet()
         self.addCleanup(ffp.clean_up)
         self.assertIsNone(ffp.wait())
-        class _req_handler(BaseHTTPRequestHandler):
-            def do_GET(self):
-                self.send_response(200)
-                self.end_headers()
-                self.wfile.write(b"test")
-        httpd = create_server(_req_handler)
+        httpd = create_server(ReqHandler)
         self.addCleanup(httpd.shutdown)
-        location = "http://127.0.0.1:%d" % httpd.server_address[1]
-        ffp.launch(TESTFF_BIN, location=location)
-        self.assertEqual(ffp.wait(5), 0)
+        ffp.launch(TESTFF_BIN, location="http://127.0.0.1:%d" % httpd.server_address[1])
+        self.assertIsNone(ffp.wait(0))
+        ffp._terminate()
+        self.assertFalse(ffp.is_running())
+        self.assertIsNotNone(ffp.wait())
+        self.assertNotEqual(ffp.wait(), 0)
         ffp.close()
-        self.assertIsNone(ffp.wait())
-
+        ffp._terminate() # should not raise
+        self.assertIsNone(ffp.wait(None))
 
     def test_8(self):
         "test clone_log()"
@@ -241,12 +238,7 @@ class PuppetTests(TestCase):
         self.addCleanup(ffp.clean_up)
         with open(self.tmpfn, 'w') as prefs:
             prefs.write('//fftest_memory\n')
-        class _req_handler(BaseHTTPRequestHandler):
-            def do_GET(self):
-                self.send_response(200)
-                self.end_headers()
-                self.wfile.write(b"hello world")
-        httpd = create_server(_req_handler)
+        httpd = create_server(ReqHandler)
         self.addCleanup(httpd.shutdown)
         location = "http://127.0.0.1:%d" % httpd.server_address[1]
         ffp.launch(TESTFF_BIN, location=location, prefs_js=self.tmpfn, memory_limit=0x100000) # 1MB
@@ -260,12 +252,7 @@ class PuppetTests(TestCase):
         "test calling launch() multiple times"
         ffp = FFPuppet()
         self.addCleanup(ffp.clean_up)
-        class _req_handler(BaseHTTPRequestHandler):
-            def do_GET(self):
-                self.send_response(200)
-                self.end_headers()
-                self.wfile.write(b"hello world")
-        httpd = create_server(_req_handler)
+        httpd = create_server(ReqHandler)
         self.addCleanup(httpd.shutdown)
         location = "http://127.0.0.1:%d" % httpd.server_address[1]
         prev_log = None
@@ -291,16 +278,11 @@ class PuppetTests(TestCase):
         with self.assertRaisesRegex(TypeError, "Expecting 'str' or 're._pattern_type' got: 'NoneType'"):
             ffp.add_abort_token(None)
         ffp.add_abort_token("###!!! ASSERTION:")
-        class _req_handler(BaseHTTPRequestHandler):
-            def do_GET(self):
-                self.send_response(200)
-                self.end_headers()
-                self.wfile.write(b"hello world")
-        httpd = create_server(_req_handler)
+        httpd = create_server(ReqHandler)
         self.addCleanup(httpd.shutdown)
         location = "http://127.0.0.1:%d" % httpd.server_address[1]
         ffp.launch(TESTFF_BIN, location=location, prefs_js=self.tmpfn)
-        self.assertIsNotNone(ffp.wait(5))
+        self.assertIsNotNone(ffp.wait(10))
         ffp.close()
         ffp.save_log(self.tmpfn)
         with open(self.tmpfn, "rb") as fp:
@@ -438,12 +420,7 @@ class PuppetTests(TestCase):
         "test calling save_log() before close()"
         ffp = FFPuppet()
         self.addCleanup(ffp.clean_up)
-        class _req_handler(BaseHTTPRequestHandler):
-            def do_GET(self):
-                self.send_response(200)
-                self.end_headers()
-                self.wfile.write(b"hello world")
-        httpd = create_server(_req_handler)
+        httpd = create_server(ReqHandler)
         self.addCleanup(httpd.shutdown)
         location = "http://127.0.0.1:%d" % httpd.server_address[1]
         ffp.launch(TESTFF_BIN, location=location)
@@ -508,14 +485,9 @@ class PuppetTests(TestCase):
 
     def test_24(self):
         "test detecting invalid prefs file"
-        class _req_handler(BaseHTTPRequestHandler):
-            def do_GET(self):
-                self.send_response(200)
-                self.end_headers()
-                self.wfile.write(b"test")
         with open(self.tmpfn, 'w') as prefs_fp:
             prefs_fp.write('//fftest_invalid_js\n')
-        httpd = create_server(_req_handler)
+        httpd = create_server(ReqHandler)
         self.addCleanup(httpd.shutdown)
         ffp = FFPuppet()
         self.addCleanup(ffp.clean_up)
@@ -549,12 +521,7 @@ class PuppetTests(TestCase):
             ffps.append(FFPuppet())
             self.addCleanup(ffps[-1].clean_up)
             ffps[-1].add_abort_token(token)
-        class _req_handler(BaseHTTPRequestHandler):
-            def do_GET(self):
-                self.send_response(200)
-                self.end_headers()
-                self.wfile.write(b"hello world")
-        httpd = create_server(_req_handler)
+        httpd = create_server(ReqHandler)
         self.addCleanup(httpd.shutdown)
         for ffp in ffps:
             location = "http://127.0.0.1:%d" % httpd.server_address[1]
@@ -616,12 +583,7 @@ class PuppetTests(TestCase):
         self.addCleanup(ffp.clean_up)
         with open(self.tmpfn, 'w') as prefs:
             prefs.write('//fftest_big_log\n')
-        class _req_handler(BaseHTTPRequestHandler):
-            def do_GET(self):
-                self.send_response(200)
-                self.end_headers()
-                self.wfile.write(b"hello world")
-        httpd = create_server(_req_handler)
+        httpd = create_server(ReqHandler)
         self.addCleanup(httpd.shutdown)
         location = "http://127.0.0.1:%d" % httpd.server_address[1]
         limit = 0x100000 # 1MB
@@ -638,19 +600,29 @@ class PuppetTests(TestCase):
         ffp = FFPuppet()
         self.addCleanup(ffp.clean_up)
         ffp.launch(TESTFF_BIN)
-        asan_log = ".".join([ffp._asan_log, "5422"]) # add a PID
-        with open(asan_log, "w") as fp:
-            fp.write("first line\n")
-            fp.write("middle test line\n")
-            fp.write("final line!")
+        asan_log_botton = ".".join([ffp._asan_log, str(random.randint(1000, 4000))]) # add a PID
+        with open(asan_log_botton, "w") as fp:
+            fp.write("BOTTOM LOG\n")
+            fp.write("2 middle test line\n")
+            fp.write("2 final line!")
+        asan_log_top = ".".join([ffp._asan_log, str(random.randint(1000, 4000))]) # add a PID
+        with open(asan_log_top, "w") as fp:
+            fp.write("TOP LOG\n")
+            for _ in range(6):
+                fp.write("1 middle test line\n")
+            fp.write("1 final line!")
         ffp.close()
         ffp.save_log(self.tmpfn)
         with open(self.tmpfn, "r") as fp:
             log_data = fp.read()
-        self.assertRegex(log_data, "first line\n")
-        self.assertRegex(log_data, "final line!")
+        self.assertIn("BOTTOM LOG\n", log_data)
+        self.assertIn("TOP LOG\n", log_data)
+        self.assertIn("1 final line!", log_data)
+        self.assertIn("2 final line!", log_data)
+        self.assertLess(log_data.find("TOP LOG"), log_data.find("BOTTOM LOG"))
         ffp.clean_up()
-        self.assertFalse(os.path.isfile(asan_log))
+        self.assertFalse(os.path.isfile(asan_log_botton))
+        self.assertFalse(os.path.isfile(asan_log_top))
 
 
 class ScriptTests(TestCase):
@@ -666,6 +638,8 @@ class ScriptTests(TestCase):
         os.remove(out_log)
         fd, prefs = tempfile.mkstemp()
         os.close(fd)
+        with open(prefs, "w") as prefs_fp:
+            prefs_fp.write("//fftest_exit_code_0\n")
         try:
             main([TESTFF_BIN, "-l", out_log, "-d", "-p", prefs])
             self.assertTrue(os.path.isfile(out_log))
