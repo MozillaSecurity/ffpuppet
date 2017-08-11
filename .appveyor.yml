@@ -8,9 +8,6 @@ environment:
         - PYTHON: "C:\\Python27-x64"
         - PYTHON: "C:\\Python35-x64"
         - PYTHON: "C:\\Python36-x64"
-branches:
-    only:
-        - master
 install:
     - "%PYTHON%\\python.exe -m pip install -r requirements.txt"
     - "%PYTHON%\\python.exe -m pip install pylint pytest"
