@@ -81,6 +81,7 @@ user_pref("extensions.blocklist.enabled", false);
 user_pref("extensions.enabledScopes", 5); // domfuzz
 user_pref("extensions.getAddons.cache.enabled", false); // domfuzz
 user_pref("extensions.installDistroAddons", false); // domfuzz
+user_pref("extensions.legacy.enabled", true); // Required to load fuzzPriv
 user_pref("extensions.showMismatchUI", false); // domfuzz
 user_pref("extensions.testpilot.runStudies", false);
 user_pref("extensions.update.enabled", false);
