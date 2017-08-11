@@ -67,6 +67,11 @@ class ReqHandler(BaseHTTPRequestHandler):
 
 class PuppetTests(TestCase):
 
+    @classmethod
+    def setUpClass(cls):
+        if sys.platform.startswith('win') and not os.path.isfile(os.path.join("testff", "testff.exe")):
+            raise EnvironmentError("testff.exe is missing see testff.py for build instructions")
+
     def setUp(self):
         fd, self.tmpfn = tempfile.mkstemp()
         os.close(fd)
@@ -626,6 +631,11 @@ class PuppetTests(TestCase):
 
 
 class ScriptTests(TestCase):
+    @classmethod
+    def setUpClass(cls):
+        if sys.platform.startswith('win') and not os.path.isfile(os.path.join("testff", "testff.exe")):
+            raise EnvironmentError("testff.exe is missing see testff.py for build instructions")
+
     def test_01(self):
         "test calling main with '-h'"
         with self.assertRaisesRegex(SystemExit, "0"):
