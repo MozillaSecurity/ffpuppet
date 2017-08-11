@@ -14,6 +14,8 @@ branches:
 install:
     - "%PYTHON%\\python.exe -m pip install -r requirements.txt"
     - "%PYTHON%\\python.exe -m pip install pylint pytest"
+    - py -3.4 -m pip install py2exe
+    - py -3.4 -m py2exe.build_exe -O -b 0 -d testff testff.py
 build: off
 test_script:
     - "%PYTHON%\\python.exe -m pytest tests.py -v && %PYTHON%\\python.exe -m pylint --errors-only --ignore=testff.py,debugger_windbg.py ffpuppet"
