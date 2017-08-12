@@ -14,7 +14,7 @@ At this time no modules are required to run FFPuppet however some features may n
 
 ##### Installing python modules
   
-    pip install requirements.txt
+    pip install -r requirements.txt
 
 Linux requires xvfb in order to run headless.
 
