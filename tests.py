@@ -655,10 +655,22 @@ class ScriptTests(TestCase):
         with open(prefs, "w") as prefs_fp:
             prefs_fp.write("//fftest_exit_code_0\n")
         try:
-            main([TESTFF_BIN, "-l", out_log, "-d", "-p", prefs])
+            main([TESTFF_BIN, "-d", "-l", out_log, "-p", prefs])
             self.assertTrue(os.path.isfile(out_log))
         finally:
             if os.path.isfile(out_log):
                 os.remove(out_log)
+            if os.path.isfile(prefs):
+                os.remove(prefs)
+
+    def test_03(self):
+        "test calling main with test binary/script"
+        fd, prefs = tempfile.mkstemp()
+        os.close(fd)
+        with open(prefs, "w") as prefs_fp:
+            prefs_fp.write("//fftest_big_log\n")
+        try:
+            main([TESTFF_BIN, "-v", "-d", "-p", prefs, "--log-limit", "1", "-a", "blah_test"])
+        finally:
             if os.path.isfile(prefs):
                 os.remove(prefs)
