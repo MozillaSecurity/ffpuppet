@@ -414,11 +414,7 @@ class FFPuppet(object):
             self._log.write("\n")
             self._log.write("[ffpuppet] Read from %s:\n" % asan_log)
             with open(asan_log, "r") as log_fp:
-                while True:
-                    buf = log_fp.read(self.LOG_BUF_SIZE)
-                    if not buf:
-                        break
-                    self._log.write(buf)
+                shutil.copyfileobj(log_fp, self._log, self.LOG_BUF_SIZE)
             self._log.write("\n")
 
         log.debug("copying worker logs to main log")
@@ -715,6 +711,10 @@ class FFPuppet(object):
         @type location: String
         @param location: URL to navigate to after successfully starting up the browser
 
+        @type log_limit: int
+        @param log_limit: Log file size limit in bytes. Browser will be terminated if the log file
+                          exceeds the amount specified here.
+
         @type memory_limit: int
         @param memory_limit: Memory limit in bytes. Browser will be terminated if its memory usage
                              exceeds the amount specified here.
@@ -948,7 +948,8 @@ def _parse_args(argv=None):
         "-l", "--log",
         help="log file name")
     parser.add_argument(
-        "--log-limit", type=int, help="Log file size limit in MBs")
+        "--log-limit", type=int,
+        help="Log file size limit in MBs (default: 'no limit')")
     parser.add_argument(
         "-m", "--memory", type=int,
         help="Process memory limit in MBs (Requires psutil)")
@@ -1025,10 +1026,17 @@ def main(argv=None): # pylint: disable=missing-docstring
         output_log.close()
         ffp.save_log(output_log.name)
         if args.dump:
+            dump_limit = 131072 # limit max console dump size to 128KB
             with open(output_log.name, "rb") as log_fp:
-                log.info(
-                    "\n===Browser log start===\n%s\n===Browser log end===",
+                log_fp.seek(0, os.SEEK_END)
+                if log_fp.tell() > dump_limit:
+                    log_fp.seek(dump_limit * -1, 2)
+                else:
+                    log_fp.seek(0)
+                log.info("Dumping browser log...\n%s\n",
                     log_fp.read().decode("utf-8", errors="ignore"))
+                if log_fp.tell() > dump_limit:
+                    log.warning("Output exceeds 128KB! Use '--log' to capture full log.")
         if args.log is not None:
             shutil.move(output_log.name, args.log)
         else:
