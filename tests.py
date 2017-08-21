@@ -368,9 +368,12 @@ class PuppetTests(TestCase):
         with self.assertRaisesRegex(IOError, "prefs.js file does not exist"):
             ffp.launch(TESTFF_BIN, prefs_js="fake_file.js")
 
-    if not sys.platform.startswith('win'): # GDB work untested on windows
-        def test_19(self):
-            "test launching with gdb"
+    def test_19(self):
+        "test launching with gdb"
+        if not sys.platform.startswith("linux"):
+            with self.assertRaisesRegex(EnvironmentError, "GDB is only supported on Linux"):
+                FFPuppet(use_gdb=True)
+        else:
             ffp = FFPuppet(use_gdb=True)
             self.addCleanup(ffp.clean_up)
             bin_path = subprocess.check_output(["which", "echo"]).strip()
@@ -435,8 +438,8 @@ class PuppetTests(TestCase):
 
     def test_22(self):
         "test launching with Valgrind"
-        if sys.platform.startswith('win'):
-            with self.assertRaisesRegex(EnvironmentError, "Valgrind is not supported on Windows"):
+        if not sys.platform.startswith("linux"):
+            with self.assertRaisesRegex(EnvironmentError, "Valgrind is only supported on Linux"):
                 FFPuppet(use_valgrind=True)
         else:
             ffp = FFPuppet(use_valgrind=True)
@@ -616,6 +619,7 @@ class PuppetTests(TestCase):
             for _ in range(6):
                 fp.write("1 middle test line\n")
             fp.write("1 final line!")
+        self.assertTrue(ffp.is_running())
         ffp.close()
         ffp.save_log(self.tmpfn)
         with open(self.tmpfn, "r") as fp:

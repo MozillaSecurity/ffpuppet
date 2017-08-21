@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python
 
 # To create an exe file for testing on Windows (tested with Python 3.4):
 # python -m py2exe.build_exe -O -b 0 -d testff testff.py
@@ -7,7 +7,10 @@ import os.path
 import re
 import sys
 import time
-import urllib.request
+try:
+    from urllib.request import urlopen
+except ImportError:
+    from urllib2 import urlopen
 
 
 def main():
@@ -71,7 +74,8 @@ def main():
     while url is not None:
         if url.startswith("about"):
             break
-        with urllib.request.urlopen(url) as conn:
+        conn = urlopen(url)
+        try:
             data = conn.read().decode('utf-8')
             # check for redirects
             redirect = re.search(r"content=\"0;\surl=([^\"]+)\"", data)
@@ -81,6 +85,8 @@ def main():
             sys.stdout.write(data)
             sys.stdout.write('\n')
             sys.stdout.flush()
+        finally:
+            conn.close()
         break
 
 

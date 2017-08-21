@@ -1,29 +1,40 @@
 language: python
 
-dist: trusty
-sudo: required
-
-python:
-    - 2.7
-    - 3.3
-    - 3.4
-    - 3.5
-    - 3.6
-
-branches:
-    only:
-        - master
+matrix:
+    include:
+        - os: linux
+          dist: trusty
+          python: 2.7
+          sudo: required
+        - os: linux
+          dist: trusty
+          python: 3.3
+          sudo: required
+        - os: linux
+          dist: trusty
+          python: 3.4
+          sudo: required
+        - os: linux
+          dist: trusty
+          python: 3.5
+        - os: linux
+          dist: trusty
+          python: 3.6
+          sudo: required
+        - os: osx
+          language: generic
 
 install:
-    - sudo apt-get update -qq
-    - sudo apt-get install -y gdb valgrind
-    - pip install -r requirements.txt 
-    - gdb --version
-    - valgrind --version
-    - if [ $TRAVIS_PYTHON_VERSION == 2.7 -o $TRAVIS_PYTHON_VERSION == 3.5 ]; then pip install pylint pytest-cov python-coveralls; fi
+    - if [[ $TRAVIS_OS_NAME == "linux" ]]; then sudo apt-get update -qq; fi
+    - if [[ $TRAVIS_OS_NAME == "linux" ]]; then sudo apt-get install -y gdb valgrind; fi
+    - if [[ $TRAVIS_OS_NAME == "linux" ]]; then gdb --version; fi
+    - if [[ $TRAVIS_OS_NAME == "linux" ]]; then valgrind --version; fi
+    - if [[ $TRAVIS_OS_NAME == "osx" ]]; then python -m pip install pytest; fi
+    - python -m pip install -r requirements.txt
+    - if [[ $TRAVIS_OS_NAME == "linux" ]] && [ $TRAVIS_PYTHON_VERSION == 2.7 -o $TRAVIS_PYTHON_VERSION == 3.5 ]; then pip install pylint pytest-cov python-coveralls; fi
 
 script:
-    - if [ $TRAVIS_PYTHON_VERSION == 2.7 -o $TRAVIS_PYTHON_VERSION == 3.5 ]; then py.test tests.py -v --cov . --cov-report term-missing --cov-config .coveragerc && pylint --errors-only --ignore=testff.py,debugger_windbg.py ffpuppet; else py.test tests.py -v; fi
+    - if [[ $TRAVIS_OS_NAME == "linux" ]] && [ $TRAVIS_PYTHON_VERSION == 2.7 -o $TRAVIS_PYTHON_VERSION == 3.5 ]; then py.test tests.py -v --cov . --cov-report term-missing --cov-config .coveragerc && pylint --errors-only --ignore=testff.py,debugger_windbg.py ffpuppet; else py.test tests.py -v; fi
 
 after_success:
-    - if [ $TRAVIS_PYTHON_VERSION == 2.7 -o $TRAVIS_PYTHON_VERSION == 3.5 ]; then coveralls; fi
+    - if [[ $TRAVIS_OS_NAME == "linux" ]] && [ $TRAVIS_PYTHON_VERSION == 2.7 -o $TRAVIS_PYTHON_VERSION == 3.5 ]; then coveralls; fi

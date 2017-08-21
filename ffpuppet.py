@@ -88,8 +88,8 @@ class FFPuppet(object):
         self.profile = None # path to profile
 
         if use_valgrind:
-            if self._platform == "windows":
-                raise EnvironmentError("Valgrind is not supported on Windows")
+            if not self._platform.startswith("linux"):
+                raise EnvironmentError("Valgrind is only supported on Linux")
             try:
                 with open(os.devnull, "w") as null_fp:
                     subprocess.call(["valgrind", "--version"], stdout=null_fp, stderr=null_fp)
@@ -97,6 +97,8 @@ class FFPuppet(object):
                 raise EnvironmentError("Please install Valgrind")
 
         if use_gdb:
+            if not self._platform.startswith("linux"):
+                raise EnvironmentError("GDB is only supported on Linux")
             try:
                 with open(os.devnull, "w") as null_fp:
                     subprocess.call(["gdb", "--version"], stdout=null_fp, stderr=null_fp)
@@ -104,7 +106,7 @@ class FFPuppet(object):
                 raise EnvironmentError("Please install GDB")
 
         if use_xvfb:
-            if self._platform != "linux":
+            if not self._platform.startswith("linux"):
                 raise EnvironmentError("Xvfb is only supported on Linux")
             try:
                 self._xvfb = xvfbwrapper.Xvfb(width=1280, height=1024)
@@ -941,7 +943,7 @@ def _parse_args(argv=None):
         help="Install the fuzzPriv extension (specify path to funfuzz/dom/extension)")
     parser.add_argument(
         "-g", "--gdb", action="store_true",
-        help="Use GDB")
+        help="Use GDB (Linux only)")
     parser.add_argument(
         "-l", "--log",
         help="log file name")
@@ -967,13 +969,13 @@ def _parse_args(argv=None):
         help="Server URL or local file to load.")
     parser.add_argument(
         "--valgrind", action="store_true",
-        help="Use valgrind")
+        help="Use Valgrind (Linux only)")
     parser.add_argument(
         "-v", "--verbose", action="store_true",
         help="Output includes debug prints")
     parser.add_argument(
         "--xvfb", action="store_true",
-        help="Use xvfb (Linux only)")
+        help="Use Xvfb (Linux only)")
     return parser.parse_args(argv)
 
 
