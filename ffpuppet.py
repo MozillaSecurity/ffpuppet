@@ -286,7 +286,8 @@ class FFPuppet(object):
                     subprocess.check_call(["minidump_stackwalk", "-m", dump_path, symbols_path],
                                           stdout=self._log, stderr=null_fp)
             else:
-                log.warning("Found a minidump, but can't process it without minidump_stackwalk")
+                log.warning("Found a minidump, but can't process it without minidump_stackwalk."
+                            " See README.md for how to obtain it.")
         if found > 1:
             log.warning("Found %d minidumps! Expecting 0 or 1", found)
 
