@@ -27,13 +27,11 @@ except ImportError:
     pass
 
 try:
-    from . import breakpad_syms
     from .workers import log_scanner, log_size_limiter, memory_limiter
 except ImportError:
     logging.error("Can't use ffpuppet.py as a script with Python 3.")
     exit(1)
 except ValueError:
-    import breakpad_syms
     from workers import log_scanner, log_size_limiter, memory_limiter
 
 log = logging.getLogger("ffpuppet") # pylint: disable=invalid-name
@@ -76,6 +74,7 @@ class FFPuppet(object):
     def __init__(self, use_profile=None, use_valgrind=False, use_xvfb=False, use_gdb=False):
         self._abort_tokens = set() # tokens used to notify log scanner to kill the browser process
         self._asan_log = os.path.join(tempfile.gettempdir(), "ffp_asan_%d.log" % os.getpid())
+        self._last_bin_path = None
         self._launches = 0 # number of times the browser has successfully been launched
         self._log = None
         self._platform = platform.system().lower()
@@ -113,6 +112,14 @@ class FFPuppet(object):
                 raise EnvironmentError("Please install xvfbwrapper")
             self._xvfb.start()
 
+        # check for minidump_stackwalk binary
+        try:
+            with open(os.devnull, "w") as null_fp:
+                subprocess.call(["minidump_stackwalk"], stdout=null_fp, stderr=null_fp)
+            self._have_mdsw = True
+        except OSError:
+            self._have_mdsw = False
+
 
     def get_environ(self, target_bin):
         """
@@ -132,7 +139,8 @@ class FFPuppet(object):
         # https://developer.gimp.org/api/2.0/glib/glib-running.html#G_SLICE
         env["G_SLICE"] = "always-malloc"
         env["MOZ_CC_RUN_DURING_SHUTDOWN"] = "1"
-        env["MOZ_CRASHREPORTER_DISABLE"] = "1"
+        env["MOZ_CRASHREPORTER"] = "1"
+        env["MOZ_CRASHREPORTER_NO_REPORT"] = "1"
         env["MOZ_GDB_SLEEP"] = "0"
         env["XRE_NO_WINDOWS_CRASH_DIALOG"] = "1"
         env["XPCOM_DEBUG_BREAK"] = "warn"
@@ -202,7 +210,7 @@ class FFPuppet(object):
         self._abort_tokens.add(token)
 
 
-    def clone_log(self, target_file=None, offset=None, symbolize=False):
+    def clone_log(self, target_file=None, offset=None):
         """
         Create a copy of the current browser log.
 
@@ -211,10 +219,6 @@ class FFPuppet(object):
 
         @type offset: int
         @param offset: Where to begin reading the log from
-
-        @type symbolize: bool
-        @param symbolize: symbolize debug stack trace output.
-            WARNING: calculating a value to be used with offset with this set will cause issues.
 
         @rtype: String or None
         @return: Name of the file containing the cloned log or None on failure
@@ -237,19 +241,55 @@ class FFPuppet(object):
             else:
                 cpyfp = open(target_file, "wb")
             try:
-                if symbolize:
-                    # TODO: this needs to change to handle large logs
-                    cpyfp.write(breakpad_syms.addr2line(logfp.read()))
-                else:
-                    while True:
-                        buf = logfp.read(self.LOG_BUF_SIZE)
-                        if not buf:
-                            break
-                        cpyfp.write(buf)
+                shutil.copyfileobj(logfp, cpyfp, self.LOG_BUF_SIZE)
             finally:
                 cpyfp.close()
 
         return target_file
+
+
+    def _dump_minidump_stacks(self):
+        log.debug("symbolize minidumps")
+
+        if self._log is None or self._log.closed:
+            log.debug("can't symbolize: no log handle")
+            return
+
+        if self.profile is None:
+            log.debug("can't symbolize: profile is None")
+            return
+
+        minidumps_path = os.path.join(self.profile, "minidumps")
+        if not os.path.isdir(minidumps_path):
+            log.debug("can't symbolize: no minidumps folder in profile")
+            return
+
+        if self._last_bin_path is None:
+            log.debug("can't symbolize: no value for bin_path")
+            return
+
+        symbols_path = os.path.join(self._last_bin_path, "symbols")
+
+        if not os.path.isdir(symbols_path):
+            log.debug("can't symbolize: no symbols at: %s", symbols_path)
+            return
+
+        found = 0
+        for dumpfile in os.listdir(minidumps_path):
+            if not dumpfile.endswith(".dmp"):
+                continue
+            found += 1
+            if self._have_mdsw:
+                dump_path = os.path.join(minidumps_path, dumpfile)
+                log.debug("calling minidump_stackwalk on %s", dump_path)
+                with open(os.devnull, "w") as null_fp:
+                    subprocess.check_call(["minidump_stackwalk", "-m", dump_path, symbols_path],
+                                          stdout=self._log, stderr=null_fp)
+            else:
+                log.warning("Found a minidump, but can't process it without minidump_stackwalk."
+                            " See README.md for how to obtain it.")
+        if found > 1:
+            log.warning("Found %d minidumps! Expecting 0 or 1", found)
 
 
     def log_length(self):
@@ -271,16 +311,13 @@ class FFPuppet(object):
             return logfp.tell()
 
 
-    def save_log(self, log_file, symbolize=True):
+    def save_log(self, log_file):
         """
         The browser log will be saved to log_file.
         This should only be called after close().
 
         @type log_file: String
         @param log_file: File to create to contain log data. Existing files will be overwritten.
-
-        @type symbolize: bool
-        @param symbolize: symbolize debug stack trace output
 
         @rtype: None
         @return: None
@@ -297,13 +334,7 @@ class FFPuppet(object):
             if not os.path.isdir(dst_path):
                 os.makedirs(dst_path)
             log_file = os.path.join(os.path.abspath(dst_path), log_file)
-            if symbolize:
-                # TODO: this needs to change to handle large logs
-                with open(self._log.name, "rb") as logfp, open(log_file, "wb") as cpyfp:
-                    cpyfp.write(breakpad_syms.addr2line(logfp.read()))
-            else:
-                shutil.copy(self._log.name, log_file)
-
+            shutil.copy(self._log.name, log_file)
 
 
     def clean_up(self):
@@ -446,6 +477,9 @@ class FFPuppet(object):
         for worker in self._workers:
             worker.clean_up()
         self._workers = list()
+
+        # check for minidumps in the profile and dump them if possible
+        self._dump_minidump_stacks()
 
         # close browser log
         if self._log is not None and not self._log.closed:
@@ -702,6 +736,7 @@ class FFPuppet(object):
         bin_path = os.path.abspath(bin_path)
         if not os.path.isfile(bin_path) or not os.access(bin_path, os.X_OK):
             raise IOError("%s is not an executable" % bin_path)
+        self._last_bin_path = os.path.dirname(bin_path)  # need the path for minidump_stackwalk
 
         log.debug("requested location: %r", location)
         if location is not None:

@@ -22,6 +22,17 @@ Linux requires xvfb in order to run headless.
 
     apt-get install xvfb
 
+##### Installing minidump_stackwalk
+
+`minidump_stackwalk` is used to extract a crash report when the browser crashes without a debugger (GDB) or
+instrumentation (Valgrind/Asan). If desired, `minidump_stackwalk` should be installed in the users path after obtaining
+it from [tooltool](https://wiki.mozilla.org/ReleaseEngineering/Applications/Tooltool). Choose the appropriate platform
+from [tooltool-manifests](https://hg.mozilla.org/mozilla-central/file/tip/testing/config/tooltool-manifests) in the
+mozilla-central tree, then open or download `releng.manifest`. Either use `tooltool.py fetch -m releng.manifest` or
+copy the digest from the file and download it from `https://api.pub.build.mozilla.org/tooltool/sha512/<digest>`.
+In either case, the file should be renamed to `minidump_stackwalk` and marked executable (or `minidump_stackwalk.exe`
+on Windows).
+
 
 Usage
 -----
