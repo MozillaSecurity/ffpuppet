@@ -37,27 +37,6 @@ class TestCase(unittest.TestCase):
             return self.assertRaisesRegexp(*args, **kwds)
 
 
-def create_server(handler):
-    "returns a server object, call shutdown when done"
-    while True:
-        try:
-            httpd = HTTPServer(('127.0.0.1', random.randint(0x800, 0xFFFF)), handler)
-        except socket.error as soc_e:
-            if soc_e.errno == errno.EADDRINUSE: # Address already in use
-                continue
-            raise
-        break
-    def _srv_thread():
-        try:
-            httpd.serve_forever()
-        finally:
-            httpd.socket.close()
-    thread = threading.Thread(target=_srv_thread)
-    thread.start()
-    # XXX: join the thread on shutdown() .. somehow
-    return httpd
-
-
 class ReqHandler(BaseHTTPRequestHandler):
     def do_GET(self):
         self.send_response(200)
@@ -65,14 +44,46 @@ class ReqHandler(BaseHTTPRequestHandler):
         self.wfile.write(b"hello world")
 
 
+class HTTPTestServer(object):
+    def __init__(self, handler=None):
+        self._handler = handler if handler is not None else ReqHandler
+        while True:
+            try:
+                self._httpd = HTTPServer(('127.0.0.1', random.randint(0x800, 0xFFFF)), self._handler)
+            except socket.error as soc_e: # pragma: no cover
+                if soc_e.errno == errno.EADDRINUSE: # Address already in use
+                    continue
+                raise
+            break
+        self._thread = threading.Thread(target=HTTPTestServer._srv_thread, args=(self._httpd,))
+        self._thread.start()
+
+    def get_addr(self):
+        return "http://127.0.0.1:%d" % self._httpd.server_address[1]
+
+    def shutdown(self):
+        if self._httpd is not None:
+            self._httpd.shutdown()
+        if self._thread is not None:
+            self._thread.join()
+
+    @staticmethod
+    def _srv_thread(httpd):
+        try:
+            httpd.serve_forever()
+        finally:
+            httpd.socket.close()
+
+
 class PuppetTests(TestCase):
 
     @classmethod
     def setUpClass(cls):
         if sys.platform.startswith('win') and not os.path.isfile(os.path.join("testff", "testff.exe")):
-            raise EnvironmentError("testff.exe is missing see testff.py for build instructions")
+            raise EnvironmentError("testff.exe is missing see testff.py for build instructions") # pragma: no cover
 
     def setUp(self):
+
         fd, self.tmpfn = tempfile.mkstemp()
         os.close(fd)
 
@@ -93,10 +104,9 @@ class PuppetTests(TestCase):
         ffp = FFPuppet()
         self.addCleanup(ffp.clean_up)
         self.assertEqual(ffp.get_launch_count(), 0)
-        httpd = create_server(ReqHandler)
-        self.addCleanup(httpd.shutdown)
-        location = "http://127.0.0.1:%d" % httpd.server_address[1]
-        ffp.launch(TESTFF_BIN, location=location)
+        tsrv = HTTPTestServer()
+        self.addCleanup(tsrv.shutdown)
+        ffp.launch(TESTFF_BIN, location=tsrv.get_addr())
         self.assertEqual(len(ffp._workers), 0)
         self.assertEqual(ffp.get_launch_count(), 1)
         self.assertIsNone(ffp.wait(0))
@@ -141,13 +151,12 @@ class PuppetTests(TestCase):
         "test logging"
         ffp = FFPuppet()
         self.addCleanup(ffp.clean_up)
-        httpd = create_server(ReqHandler)
-        self.addCleanup(httpd.shutdown)
-        log_dir = tempfile.mkdtemp()
-        location = "http://127.0.0.1:%d" % httpd.server_address[1]
-        ffp.launch(TESTFF_BIN, location=location)
+        tsrv = HTTPTestServer()
+        self.addCleanup(tsrv.shutdown)
+        ffp.launch(TESTFF_BIN, location=tsrv.get_addr())
         ffp.wait(0.25) # wait for log prints
         ffp.close()
+        log_dir = tempfile.mkdtemp()
         log_file = os.path.join(log_dir, "some_dir", "test_log.txt") # nonexistent directory
         ffp.save_log(log_file)
         self.assertTrue(os.path.isfile(log_file))
@@ -196,9 +205,9 @@ class PuppetTests(TestCase):
         ffp = FFPuppet()
         self.addCleanup(ffp.clean_up)
         self.assertIsNone(ffp.wait())
-        httpd = create_server(ReqHandler)
-        self.addCleanup(httpd.shutdown)
-        ffp.launch(TESTFF_BIN, location="http://127.0.0.1:%d" % httpd.server_address[1])
+        tsrv = HTTPTestServer()
+        self.addCleanup(tsrv.shutdown)
+        ffp.launch(TESTFF_BIN, location=tsrv.get_addr())
         self.assertIsNone(ffp.wait(0))
         ffp._terminate()
         self.assertFalse(ffp.is_running())
@@ -243,10 +252,9 @@ class PuppetTests(TestCase):
         self.addCleanup(ffp.clean_up)
         with open(self.tmpfn, 'w') as prefs:
             prefs.write('//fftest_memory\n')
-        httpd = create_server(ReqHandler)
-        self.addCleanup(httpd.shutdown)
-        location = "http://127.0.0.1:%d" % httpd.server_address[1]
-        ffp.launch(TESTFF_BIN, location=location, prefs_js=self.tmpfn, memory_limit=0x100000) # 1MB
+        tsrv = HTTPTestServer()
+        self.addCleanup(tsrv.shutdown)
+        ffp.launch(TESTFF_BIN, location=tsrv.get_addr(), prefs_js=self.tmpfn, memory_limit=0x100000) # 1MB
         self.assertIsNotNone(ffp.wait(60))
         ffp.close()
         ffp.save_log(self.tmpfn)
@@ -257,20 +265,19 @@ class PuppetTests(TestCase):
         "test calling launch() multiple times"
         ffp = FFPuppet()
         self.addCleanup(ffp.clean_up)
-        httpd = create_server(ReqHandler)
-        self.addCleanup(httpd.shutdown)
-        location = "http://127.0.0.1:%d" % httpd.server_address[1]
+        tsrv = HTTPTestServer()
+        self.addCleanup(tsrv.shutdown)
         prev_log = None
         for _ in range(10):
-            ffp.launch(TESTFF_BIN, location=location)
+            ffp.launch(TESTFF_BIN, location=tsrv.get_addr())
             if prev_log is not None:
                 self.assertFalse(os.path.isfile(prev_log))
             prev_log = ffp._log.name
             ffp.close()
         # call 2x without calling launch
-        ffp.launch(TESTFF_BIN, location=location)
+        ffp.launch(TESTFF_BIN, location=tsrv.get_addr())
         with self.assertRaisesRegex(LaunchError, "Process is already running"):
-            ffp.launch(TESTFF_BIN, location=location)
+            ffp.launch(TESTFF_BIN, location=tsrv.get_addr())
         ffp.close()
 
     def test_11(self):
@@ -283,10 +290,9 @@ class PuppetTests(TestCase):
         with self.assertRaisesRegex(TypeError, "Expecting 'str' or 're._pattern_type' got: 'NoneType'"):
             ffp.add_abort_token(None)
         ffp.add_abort_token("###!!! ASSERTION:")
-        httpd = create_server(ReqHandler)
-        self.addCleanup(httpd.shutdown)
-        location = "http://127.0.0.1:%d" % httpd.server_address[1]
-        ffp.launch(TESTFF_BIN, location=location, prefs_js=self.tmpfn)
+        tsrv = HTTPTestServer()
+        self.addCleanup(tsrv.shutdown)
+        ffp.launch(TESTFF_BIN, location=tsrv.get_addr(), prefs_js=self.tmpfn)
         self.assertIsNotNone(ffp.wait(10))
         ffp.close()
         ffp.save_log(self.tmpfn)
@@ -428,10 +434,9 @@ class PuppetTests(TestCase):
         "test calling save_log() before close()"
         ffp = FFPuppet()
         self.addCleanup(ffp.clean_up)
-        httpd = create_server(ReqHandler)
-        self.addCleanup(httpd.shutdown)
-        location = "http://127.0.0.1:%d" % httpd.server_address[1]
-        ffp.launch(TESTFF_BIN, location=location)
+        tsrv = HTTPTestServer()
+        self.addCleanup(tsrv.shutdown)
+        ffp.launch(TESTFF_BIN, location=tsrv.get_addr())
         with self.assertRaisesRegex(RuntimeError, "Log is still in use.+"):
             ffp.save_log(self.tmpfn)
         ffp.close()
@@ -495,13 +500,12 @@ class PuppetTests(TestCase):
         "test detecting invalid prefs file"
         with open(self.tmpfn, 'w') as prefs_fp:
             prefs_fp.write('//fftest_invalid_js\n')
-        httpd = create_server(ReqHandler)
-        self.addCleanup(httpd.shutdown)
+        tsrv = HTTPTestServer()
+        self.addCleanup(tsrv.shutdown)
         ffp = FFPuppet()
         self.addCleanup(ffp.clean_up)
-        location = "http://127.0.0.1:%d" % httpd.server_address[1]
         with self.assertRaisesRegex(LaunchError, "'.+?' is invalid"):
-            ffp.launch(TESTFF_BIN, prefs_js=self.tmpfn, location=location)
+            ffp.launch(TESTFF_BIN, location=tsrv.get_addr(), prefs_js=self.tmpfn)
 
     def test_25(self):
         "test log_length()"
@@ -529,11 +533,10 @@ class PuppetTests(TestCase):
             ffps.append(FFPuppet())
             self.addCleanup(ffps[-1].clean_up)
             ffps[-1].add_abort_token(token)
-        httpd = create_server(ReqHandler)
-        self.addCleanup(httpd.shutdown)
+        tsrv = HTTPTestServer()
+        self.addCleanup(tsrv.shutdown)
         for ffp in ffps:
-            location = "http://127.0.0.1:%d" % httpd.server_address[1]
-            ffp.launch(TESTFF_BIN, location=location, prefs_js=self.tmpfn)
+            ffp.launch(TESTFF_BIN, location=tsrv.get_addr(), prefs_js=self.tmpfn)
             self.assertTrue(ffp.is_running())
         for ffp in ffps:
             self.assertTrue(ffp.is_running())
@@ -591,11 +594,10 @@ class PuppetTests(TestCase):
         self.addCleanup(ffp.clean_up)
         with open(self.tmpfn, 'w') as prefs:
             prefs.write('//fftest_big_log\n')
-        httpd = create_server(ReqHandler)
-        self.addCleanup(httpd.shutdown)
-        location = "http://127.0.0.1:%d" % httpd.server_address[1]
         limit = 0x100000 # 1MB
-        ffp.launch(TESTFF_BIN, location=location, prefs_js=self.tmpfn, log_limit=limit)
+        tsrv = HTTPTestServer()
+        self.addCleanup(tsrv.shutdown)
+        ffp.launch(TESTFF_BIN, location=tsrv.get_addr(), prefs_js=self.tmpfn, log_limit=limit)
         self.assertIsNotNone(ffp.wait(60))
         ffp.close()
         ffp.save_log(self.tmpfn)
@@ -638,7 +640,7 @@ class ScriptTests(TestCase):
     @classmethod
     def setUpClass(cls):
         if sys.platform.startswith('win') and not os.path.isfile(os.path.join("testff", "testff.exe")):
-            raise EnvironmentError("testff.exe is missing see testff.py for build instructions")
+            raise EnvironmentError("testff.exe is missing see testff.py for build instructions") # pragma: no cover
 
     def test_01(self):
         "test calling main with '-h'"
