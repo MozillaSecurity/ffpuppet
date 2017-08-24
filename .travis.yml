@@ -8,10 +8,6 @@ matrix:
           sudo: required
         - os: linux
           dist: trusty
-          python: 3.3
-          sudo: required
-        - os: linux
-          dist: trusty
           python: 3.4
           sudo: required
         - os: linux
