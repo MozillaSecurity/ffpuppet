@@ -26,13 +26,7 @@ try:
 except ImportError:
     pass
 
-try:
-    from .workers import log_scanner, log_size_limiter, memory_limiter
-except ImportError:
-    logging.error("Can't use ffpuppet.py as a script with Python 3.")
-    exit(1)
-except ValueError:
-    from workers import log_scanner, log_size_limiter, memory_limiter
+from .workers import log_scanner, log_size_limiter, memory_limiter
 
 log = logging.getLogger("ffpuppet") # pylint: disable=invalid-name
 
@@ -1042,7 +1036,3 @@ def main(argv=None): # pylint: disable=missing-docstring
         else:
             os.remove(output_log.name)
         ffp.clean_up()
-
-
-if __name__ == "__main__":
-    main()
