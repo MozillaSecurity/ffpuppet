@@ -7,4 +7,9 @@ if __name__ == '__main__':
     setup(name="ffpuppet",
           version="0.0.1",
           install_requires=requires,
+          url='https://github.com/MozillaSecurity/ffpuppet',
+          license='MPL 2.0',
+          author='Tyson Smith',
+          description='A python module that aids in the automation of Firefox at the process level',
+          entry_points={"console_scripts": ["ffpuppet = ffpuppet:main"]},
           packages=['ffpuppet', 'ffpuppet.workers'])
