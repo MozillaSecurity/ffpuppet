@@ -16,13 +16,14 @@ import threading
 import time
 import unittest
 
-from .ffpuppet import FFPuppet, LaunchError, main
+from ffpuppet import FFPuppet, LaunchError, main
 
 
 logging.basicConfig(level=logging.DEBUG if bool(os.getenv("DEBUG")) else logging.INFO)
 log = logging.getLogger("ffp_test")
 
-TESTFF_BIN = os.path.join("testff", "testff.exe") if sys.platform.startswith('win') else "testff.py"
+CWD = os.path.realpath(os.path.dirname(__file__))
+TESTFF_BIN = os.path.join(CWD, os.pardir, "testff", "testff.exe") if sys.platform.startswith('win') else os.path.join(CWD, "testff.py")
 
 FFPuppet.LOG_POLL_RATE = 0.01 # reduce this for testing
 
