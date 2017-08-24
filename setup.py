@@ -10,6 +10,7 @@ if __name__ == '__main__':
           url='https://github.com/MozillaSecurity/ffpuppet',
           license='MPL 2.0',
           author='Tyson Smith',
+          package_data={'': ['cmds.gdb']},
           description='A python module that aids in the automation of Firefox at the process level',
           entry_points={"console_scripts": ["ffpuppet = ffpuppet:main"]},
           packages=['ffpuppet', 'ffpuppet.workers'])
