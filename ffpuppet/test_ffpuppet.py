@@ -607,7 +607,7 @@ class PuppetTests(TestCase):
             self.assertRegex(fp.read(), b"LOG_SIZE_LIMIT_EXCEEDED")
 
     def test_30(self):
-        "test merging and cleaning up ASan logs"
+        "test merging and cleaning up ASan logs (order by size)"
         ffp = FFPuppet()
         self.addCleanup(ffp.clean_up)
         ffp.launch(TESTFF_BIN)
@@ -625,6 +625,7 @@ class PuppetTests(TestCase):
         self.assertTrue(ffp.is_running())
         ffp.close()
         ffp.save_log(self.tmpfn)
+        ffp.clean_up()
         with open(self.tmpfn, "r") as fp:
             log_data = fp.read()
         self.assertIn("BOTTOM LOG\n", log_data)
@@ -632,9 +633,44 @@ class PuppetTests(TestCase):
         self.assertIn("1 final line!", log_data)
         self.assertIn("2 final line!", log_data)
         self.assertLess(log_data.find("TOP LOG"), log_data.find("BOTTOM LOG"))
-        ffp.clean_up()
         self.assertFalse(os.path.isfile(asan_log_botton))
         self.assertFalse(os.path.isfile(asan_log_top))
+
+    def test_31(self):
+        "test merging and cleaning up ASan logs (order by error)"
+        ffp = FFPuppet()
+        self.addCleanup(ffp.clean_up)
+        ffp.launch(TESTFF_BIN)
+        test_logs = list()
+        for _ in range(2):
+            test_logs.append(".".join([ffp._asan_log, str(random.randint(1000, 4000))]))
+        # null deref on another thread
+        with open(test_logs[0], "w") as fp:
+            fp.write("LOG 0\n")
+            fp.write("==70811==ERROR: AddressSanitizer: SEGV on unknown address 0x00000BADF00D")
+            fp.write(" (pc 0x7f4c0bb54c67 bp 0x7f4c07bea380 sp 0x7f4c07bea360 T0)\n") # must be 2nd line
+            for _ in range(4):
+                fp.write("filler line\n")
+        # child log that should be ignored (created when parent crashes)
+        with open(test_logs[1], "w") as fp:
+            fp.write("LOG 1\n")
+            fp.write("==70811==ERROR: AddressSanitizer: SEGV on unknown address 0x000000000000")
+            fp.write(" (pc 0x7f4c0bb54c67 bp 0x7f4c07bea380 sp 0x7f4c07bea360 T2)\n") # must be 2nd line
+            fp.write("BOTTOM LOG\n")
+            for _ in range(4):
+                fp.write("filler line\n")
+        self.assertTrue(ffp.is_running())
+        ffp.close()
+        ffp.save_log(self.tmpfn)
+        ffp.clean_up()
+        with open(self.tmpfn, "r") as fp:
+            log_data = fp.read()
+        self.assertIn("BOTTOM LOG\n", log_data)
+        for idx, _ in enumerate(test_logs):
+            self.assertIn("LOG %d\n" % idx, log_data)
+            self.assertLess(log_data.find("LOG %d\n" % idx), log_data.find("BOTTOM LOG"))
+        for t_log in test_logs:
+            self.assertFalse(os.path.isfile(t_log))
 
 
 class ScriptTests(TestCase):

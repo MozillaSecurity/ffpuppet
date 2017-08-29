@@ -393,13 +393,13 @@ class FFPuppet(object):
         # at the bottom of the merged log.
         # This is done to allow FuzzManager to bucket the results properly
         asan_logs = list()
-        re_asan_null = re.compile(r"ERROR:\.+?SEGV\son\sunknown\saddress\s0x[0]+\s\(.+?T2\)")
+        re_asan_null = re.compile(r"==\d+==ERROR:.+?SEGV\son\sunknown\saddress\s0x[0]+\s\(.+?T2\)")
         for tmp_file in os.listdir(tempfile.gettempdir()):
             tmp_file = os.path.join(tempfile.gettempdir(), tmp_file)
             if not tmp_file.startswith(self._asan_log):
                 continue
             with open(tmp_file, "r") as log_fp:
-                lines = log_fp.readlines(1024)[:7] # don't bother reading more than 1KB
+                lines = log_fp.readlines(4096)[:7] # don't bother reading more than 4KB
                 if len(lines) < 6 or re.match(re_asan_null, lines[1]):
                     asan_logs.append(tmp_file)
                 else:
