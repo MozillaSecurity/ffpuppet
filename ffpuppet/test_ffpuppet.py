@@ -1,9 +1,5 @@
 import errno
 import logging
-try: # py 2-3 compatibility
-    from http.server import HTTPServer, BaseHTTPRequestHandler
-except ImportError:
-    from BaseHTTPServer import HTTPServer, BaseHTTPRequestHandler
 import os
 import random
 import re
@@ -15,6 +11,10 @@ import tempfile
 import threading
 import time
 import unittest
+try: # py 2-3 compatibility
+    from BaseHTTPServer import HTTPServer, BaseHTTPRequestHandler # pylint: disable=import-error
+except ImportError:
+    from http.server import HTTPServer, BaseHTTPRequestHandler # pylint: disable=import-error
 
 from ffpuppet import FFPuppet, LaunchError, main
 
@@ -76,7 +76,7 @@ class HTTPTestServer(object):
             httpd.socket.close()
 
 
-class PuppetTests(TestCase):
+class PuppetTests(TestCase): # pylint: disable=too-many-public-methods
 
     @classmethod
     def setUpClass(cls):
@@ -84,7 +84,6 @@ class PuppetTests(TestCase):
             raise EnvironmentError("testff.exe is missing see testff.py for build instructions") # pragma: no cover
 
     def setUp(self):
-
         fd, self.tmpfn = tempfile.mkstemp()
         os.close(fd)
 
@@ -383,9 +382,7 @@ class PuppetTests(TestCase):
         else:
             ffp = FFPuppet(use_gdb=True)
             self.addCleanup(ffp.clean_up)
-            bin_path = subprocess.check_output(["which", "echo"]).strip()
-            if not isinstance(bin_path, str):
-                bin_path = bin_path.decode() # python 3 compatibility
+            bin_path = str(subprocess.check_output(["which", "echo"]).strip().decode("ascii"))
             # launch will fail b/c 'echo' will exit right away but that's fine
             with self.assertRaisesRegex(LaunchError, "Failure during browser startup"):
                 self.assertEqual(ffp.launch(bin_path), 0)
@@ -450,9 +447,7 @@ class PuppetTests(TestCase):
         else:
             ffp = FFPuppet(use_valgrind=True)
             self.addCleanup(ffp.clean_up)
-            bin_path = subprocess.check_output(["which", "echo"]).strip()
-            if not isinstance(bin_path, str):
-                bin_path = bin_path.decode() # python 3 compatibility
+            bin_path = str(subprocess.check_output(["which", "echo"]).strip().decode("ascii"))
             # launch will fail b/c 'echo' will exit right away but that's fine
             with self.assertRaisesRegex(LaunchError, "Failure during browser startup"):
                 self.assertEqual(ffp.launch(bin_path), 0)
@@ -474,6 +469,7 @@ class PuppetTests(TestCase):
             prefs_fp.write('user_pref("a.b", "test");\n')
             prefs_fp.write('user_pref("a.c", true);\n')
         ffp = FFPuppet()
+        self.addCleanup(ffp.clean_up)
         self.assertFalse(ffp.check_prefs(self.tmpfn)) # test with profile == None
         try:
             fd, custom_prefs = tempfile.mkstemp()
@@ -494,7 +490,6 @@ class PuppetTests(TestCase):
                 prefs_fp.write('user_pref("b.a", false);\n')
             self.assertFalse(ffp.check_prefs(custom_prefs))
         finally:
-            ffp.clean_up()
             os.remove(custom_prefs)
 
     def test_24(self):
@@ -586,8 +581,8 @@ class PuppetTests(TestCase):
         ffp.close()
         self.assertEqual(len(ffp._workers), 0)
         self.assertEqual(len(w_logs), 1)
-        for log in w_logs:
-            self.assertFalse(os.path.isfile(log))
+        for w_log in w_logs:
+            self.assertFalse(os.path.isfile(w_log))
 
     def test_29(self):
         "test hitting log size limit"
@@ -653,6 +648,13 @@ class ScriptTests(TestCase):
         if sys.platform.startswith('win') and not os.path.isfile(os.path.join("testff", "testff.exe")):
             raise EnvironmentError("testff.exe is missing see testff.py for build instructions") # pragma: no cover
 
+    def setUp(self):
+        self.tmpdir = tempfile.mkdtemp(prefix="ffp_test")
+
+    def tearDown(self):
+        if os.path.isdir(self.tmpdir):
+            shutil.rmtree(self.tmpdir)
+
     def test_01(self):
         "test calling main with '-h'"
         with self.assertRaisesRegex(SystemExit, "0"):
@@ -660,30 +662,16 @@ class ScriptTests(TestCase):
 
     def test_02(self):
         "test calling main with test binary/script"
-        fd, out_log = tempfile.mkstemp()
-        os.close(fd)
-        os.remove(out_log)
-        fd, prefs = tempfile.mkstemp()
-        os.close(fd)
+        out_log = os.path.join(self.tmpdir, "out_log.txt")
+        prefs = os.path.join(self.tmpdir, "pref.js")
         with open(prefs, "w") as prefs_fp:
             prefs_fp.write("//fftest_exit_code_0\n")
-        try:
-            main([TESTFF_BIN, "-d", "-l", out_log, "-p", prefs])
-            self.assertTrue(os.path.isfile(out_log))
-        finally:
-            if os.path.isfile(out_log):
-                os.remove(out_log)
-            if os.path.isfile(prefs):
-                os.remove(prefs)
+        main([TESTFF_BIN, "-d", "-l", out_log, "-p", prefs])
+        self.assertTrue(os.path.isfile(out_log))
 
     def test_03(self):
         "test calling main with test binary/script"
-        fd, prefs = tempfile.mkstemp()
-        os.close(fd)
+        prefs = os.path.join(self.tmpdir, "pref.js")
         with open(prefs, "w") as prefs_fp:
             prefs_fp.write("//fftest_big_log\n")
-        try:
-            main([TESTFF_BIN, "-v", "-d", "-p", prefs, "--log-limit", "1", "-a", "blah_test"])
-        finally:
-            if os.path.isfile(prefs):
-                os.remove(prefs)
+        main([TESTFF_BIN, "-v", "-d", "-p", prefs, "--log-limit", "1", "-a", "blah_test"])
