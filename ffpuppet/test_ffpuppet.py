@@ -93,14 +93,14 @@ class PuppetTests(TestCase):
             os.unlink(self.tmpfn)
 
     if not sys.platform.startswith('win'):
-        def test_0(self):
+        def test_00(self):
             "test that invalid executables raise the right exception"
             ffp = FFPuppet()
             self.addCleanup(ffp.clean_up)
             with self.assertRaisesRegex(IOError, "is not an executable"):
                 ffp.launch(self.tmpfn)
 
-    def test_1(self):
+    def test_01(self):
         "test basic launch and close"
         ffp = FFPuppet()
         self.addCleanup(ffp.clean_up)
@@ -116,7 +116,7 @@ class PuppetTests(TestCase):
         self.assertFalse(ffp.is_running())
         self.assertIsNone(ffp.wait(10))
 
-    def test_2(self):
+    def test_02(self):
         "test crash on start"
         ffp = FFPuppet()
         self.addCleanup(ffp.clean_up)
@@ -128,7 +128,7 @@ class PuppetTests(TestCase):
         ffp.close()
         ffp.save_log(self.tmpfn)
 
-    def test_3(self):
+    def test_03(self):
         "test hang on start"
         ffp = FFPuppet()
         default_timeout = ffp.LAUNCH_TIMEOUT_MIN
@@ -148,7 +148,7 @@ class PuppetTests(TestCase):
         finally:
             ffp.LAUNCH_TIMEOUT_MIN = default_timeout
 
-    def test_4(self):
+    def test_04(self):
         "test logging"
         ffp = FFPuppet()
         self.addCleanup(ffp.clean_up)
@@ -180,7 +180,7 @@ class PuppetTests(TestCase):
         self.assertFalse(os.path.isfile(tmp_log_file))
         self.assertIsNone(ffp._log)
 
-    def test_5(self):
+    def test_05(self):
         "test get_pid()"
         ffp = FFPuppet()
         self.addCleanup(ffp.clean_up)
@@ -190,7 +190,7 @@ class PuppetTests(TestCase):
         ffp.close()
         self.assertIsNone(ffp.get_pid())
 
-    def test_6(self):
+    def test_06(self):
         "test is_running()"
         ffp = FFPuppet()
         self.addCleanup(ffp.clean_up)
@@ -201,7 +201,7 @@ class PuppetTests(TestCase):
         self.assertFalse(ffp.is_running())
         self.assertFalse(ffp.is_running())
 
-    def test_7(self):
+    def test_07(self):
         "test wait()"
         ffp = FFPuppet()
         self.addCleanup(ffp.clean_up)
@@ -218,7 +218,7 @@ class PuppetTests(TestCase):
         ffp._terminate() # should not raise
         self.assertIsNone(ffp.wait(None))
 
-    def test_8(self):
+    def test_08(self):
         "test clone_log()"
         ffp = FFPuppet()
         self.addCleanup(ffp.clean_up)
@@ -247,7 +247,7 @@ class PuppetTests(TestCase):
         # verify clean_up() removed the logs
         self.assertIsNone(ffp.clone_log(target_file=self.tmpfn))
 
-    def test_9(self):
+    def test_09(self):
         "test hitting memory limit"
         ffp = FFPuppet()
         self.addCleanup(ffp.clean_up)
@@ -607,57 +607,30 @@ class PuppetTests(TestCase):
             self.assertRegex(fp.read(), b"LOG_SIZE_LIMIT_EXCEEDED")
 
     def test_30(self):
-        "test merging and cleaning up ASan logs (order by size)"
-        ffp = FFPuppet()
-        self.addCleanup(ffp.clean_up)
-        ffp.launch(TESTFF_BIN)
-        asan_log_botton = ".".join([ffp._asan_log, str(random.randint(1000, 4000))]) # add a PID
-        with open(asan_log_botton, "w") as fp:
-            fp.write("BOTTOM LOG\n")
-            fp.write("2 middle test line\n")
-            fp.write("2 final line!")
-        asan_log_top = ".".join([ffp._asan_log, str(random.randint(1000, 4000))]) # add a PID
-        with open(asan_log_top, "w") as fp:
-            fp.write("TOP LOG\n")
-            for _ in range(6):
-                fp.write("1 middle test line\n")
-            fp.write("1 final line!")
-        self.assertTrue(ffp.is_running())
-        ffp.close()
-        ffp.save_log(self.tmpfn)
-        ffp.clean_up()
-        with open(self.tmpfn, "r") as fp:
-            log_data = fp.read()
-        self.assertIn("BOTTOM LOG\n", log_data)
-        self.assertIn("TOP LOG\n", log_data)
-        self.assertIn("1 final line!", log_data)
-        self.assertIn("2 final line!", log_data)
-        self.assertLess(log_data.find("TOP LOG"), log_data.find("BOTTOM LOG"))
-        self.assertFalse(os.path.isfile(asan_log_botton))
-        self.assertFalse(os.path.isfile(asan_log_top))
-
-    def test_31(self):
-        "test merging and cleaning up ASan logs (order by error)"
+        "test merging and cleaning up ASan logs"
         ffp = FFPuppet()
         self.addCleanup(ffp.clean_up)
         ffp.launch(TESTFF_BIN)
         test_logs = list()
-        for _ in range(2):
+        for _ in range(3):
             test_logs.append(".".join([ffp._asan_log, str(random.randint(1000, 4000))]))
-        # null deref on another thread
+        # small log with nothing interesting
         with open(test_logs[0], "w") as fp:
-            fp.write("LOG 0\n")
+            fp.write("SHORT LOG\n")
+            fp.write("filler line")
+        # crash on another thread
+        with open(test_logs[1], "w") as fp:
+            fp.write("GOOD LOG\n")
             fp.write("==70811==ERROR: AddressSanitizer: SEGV on unknown address 0x00000BADF00D")
             fp.write(" (pc 0x7f4c0bb54c67 bp 0x7f4c07bea380 sp 0x7f4c07bea360 T0)\n") # must be 2nd line
-            for _ in range(4):
+            for _ in range(4): # pad out to 6 lines
                 fp.write("filler line\n")
         # child log that should be ignored (created when parent crashes)
-        with open(test_logs[1], "w") as fp:
-            fp.write("LOG 1\n")
+        with open(test_logs[2], "w") as fp:
+            fp.write("BAD LOG\n")
             fp.write("==70811==ERROR: AddressSanitizer: SEGV on unknown address 0x000000000000")
             fp.write(" (pc 0x7f4c0bb54c67 bp 0x7f4c07bea380 sp 0x7f4c07bea360 T2)\n") # must be 2nd line
-            fp.write("BOTTOM LOG\n")
-            for _ in range(4):
+            for _ in range(4): # pad out to 6 lines
                 fp.write("filler line\n")
         self.assertTrue(ffp.is_running())
         ffp.close()
@@ -665,10 +638,11 @@ class PuppetTests(TestCase):
         ffp.clean_up()
         with open(self.tmpfn, "r") as fp:
             log_data = fp.read()
-        self.assertIn("BOTTOM LOG\n", log_data)
-        for idx, _ in enumerate(test_logs):
-            self.assertIn("LOG %d\n" % idx, log_data)
-            self.assertLess(log_data.find("LOG %d\n" % idx), log_data.find("BOTTOM LOG"))
+        self.assertIn("BAD LOG\n", log_data)
+        self.assertIn("GOOD LOG\n", log_data)
+        self.assertIn("SHORT LOG\n", log_data)
+        self.assertLess(log_data.find("GOOD LOG"), log_data.find("BAD LOG"))
+        self.assertLess(log_data.find("GOOD LOG"), log_data.find("SHORT LOG"))
         for t_log in test_logs:
             self.assertFalse(os.path.isfile(t_log))
 
