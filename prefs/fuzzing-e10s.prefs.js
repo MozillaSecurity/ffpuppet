@@ -54,6 +54,7 @@ user_pref("canvas.focusring.enabled", true);
 user_pref("canvas.hitregions.enabled", true);
 user_pref("canvas.imagebitmap_extensions.enabled", true);
 user_pref("captivedetect.canonicalURL", "");
+user_pref("clipboard.autocopy", true); // Ensures pref is enabled on Windows and OSX
 user_pref("datareporting.healthreport.service.enabled", false);
 user_pref("datareporting.healthreport.service.firstRun", false);
 user_pref("datareporting.healthreport.uploadEnabled", false);
