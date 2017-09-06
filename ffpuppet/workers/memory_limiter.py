@@ -26,16 +26,16 @@ class MemoryLimiterWorker(puppet_worker.BaseWorker):
     name = os.path.splitext(os.path.basename(__file__))[0]
 
     def start(self, process_id, memory_limit):
-        self._worker = threading.Thread(target=_run, args=(process_id, memory_limit, self._log))
+        self._worker = threading.Thread(target=_run, args=(process_id, memory_limit, self.log_fp))
         self._worker.start()
 
 
-def _run(process_id, limit, log_file):
+def _run(process_id, limit, log_fp):
     """
-    _run(process_id, limit, log_file) -> None
+    _run(process_id, limit, log_fp) -> None
     Use psutil to actively monitor the amount of memory in use by the process with the
     matching process_id. If that amount exceeds limit the process will be terminated.
-    Information is collected and stored in log_file.
+    Information is collected and stored to log_fp.
 
     returns None
     """
@@ -70,19 +70,18 @@ def _run(process_id, limit, log_file):
             except psutil.NoSuchProcess:
                 pass # process is dead?
 
-            with open(log_file, "w") as log_fp:
-                if plat == "linux":
-                    mem_hog = (0, 0) # process using the most memory
-                    for pid, proc_usage in proc_info:
-                        if mem_hog[1] < proc_usage:
-                            mem_hog = (pid, proc_usage)
-                    log_fp.write(puppet_worker.gdb_log_dumpper(mem_hog[0]))
-                    log_fp.write("\n")
-                log_fp.write("MEMORY_LIMIT_EXCEEDED: %d\n" % total_usage)
-                log_fp.write("Current Limit: %d (%dMB)\n" % (limit, limit/1048576))
-                log_fp.write("Parent PID: %d\n" % process_id)
+            if plat == "linux":
+                mem_hog = (0, 0) # process using the most memory
                 for pid, proc_usage in proc_info:
-                    log_fp.write("-> PID %6d: %10d\n" % (pid, proc_usage))
+                    if mem_hog[1] < proc_usage:
+                        mem_hog = (pid, proc_usage)
+                log_fp.write(puppet_worker.gdb_log_dumpper(mem_hog[0]))
+                log_fp.write("\n")
+            log_fp.write("MEMORY_LIMIT_EXCEEDED: %d\n" % total_usage)
+            log_fp.write("Current Limit: %d (%dMB)\n" % (limit, limit/1048576))
+            log_fp.write("Parent PID: %d\n" % process_id)
+            for pid, proc_usage in proc_info:
+                log_fp.write("-> PID %6d: %10d\n" % (pid, proc_usage))
             break
 
         time.sleep(0.1) # check 10x a second

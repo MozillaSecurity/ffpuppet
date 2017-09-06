@@ -413,11 +413,10 @@ class FFPuppet(object):
 
         log.debug("copying worker logs to main log")
         for worker in self._workers:
-            worker_log = worker.collect_log()
-            if worker_log:
+            if worker.log_available():
                 self._log.write("\n")
                 self._log.write("[ffpuppet worker]: %s\n" % worker.name)
-                self._log.write(worker_log)
+                worker.collect_log(dst_fp=self._log)
                 self._log.write("\n")
 
 

@@ -568,23 +568,6 @@ class PuppetTests(TestCase): # pylint: disable=too-many-public-methods
             FFPuppet.LOG_CLOSE_TIMEOUT = 10
 
     def test_28(self):
-        "test worker log clean up"
-        ffp = FFPuppet()
-        self.addCleanup(ffp.clean_up)
-        ffp.add_abort_token("test_blah")
-        ffp.launch(TESTFF_BIN)
-        self.assertEqual(len(ffp._workers), 1)
-        w_logs = list()
-        for worker in ffp._workers:
-            w_logs.append(worker._log)
-            self.assertTrue(os.path.isfile(w_logs[-1]))
-        ffp.close()
-        self.assertEqual(len(ffp._workers), 0)
-        self.assertEqual(len(w_logs), 1)
-        for w_log in w_logs:
-            self.assertFalse(os.path.isfile(w_log))
-
-    def test_29(self):
         "test hitting log size limit"
         ffp = FFPuppet()
         self.addCleanup(ffp.clean_up)
@@ -601,7 +584,7 @@ class PuppetTests(TestCase): # pylint: disable=too-many-public-methods
         with open(self.tmpfn, "rb") as fp:
             self.assertRegex(fp.read(), b"LOG_SIZE_LIMIT_EXCEEDED")
 
-    def test_30(self):
+    def test_29(self):
         "test merging and cleaning up ASan logs"
         ffp = FFPuppet()
         self.addCleanup(ffp.clean_up)

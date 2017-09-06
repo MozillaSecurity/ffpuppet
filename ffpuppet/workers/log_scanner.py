@@ -19,13 +19,13 @@ class LogScannerWorker(puppet_worker.BaseWorker):
     name = os.path.splitext(os.path.basename(__file__))[0]
 
     def start(self, puppet):
-        self._worker = threading.Thread(target=_run, args=(puppet, self._log))
+        self._worker = threading.Thread(target=_run, args=(puppet, self.log_fp))
         self._worker.start()
 
 
-def _run(puppet, log_file):
+def _run(puppet, log_fp):
     """
-    _run(puppet, log_file) -> None
+    _run(puppet, log_fp) -> None
 
     returns None
     """
@@ -59,8 +59,7 @@ def _run(puppet, log_file):
             match = token.search(data)
             if match:
                 puppet._terminate(5)
-                with open(log_file, "w") as log_fp:
-                    log_fp.write("TOKEN_LOCATED: %s\n" % match.group())
+                log_fp.write("TOKEN_LOCATED: %s\n" % match.group())
                 return
 
         try:

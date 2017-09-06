@@ -4,6 +4,7 @@
 
 import os
 import re
+import shutil
 import subprocess
 import tempfile
 import time
@@ -17,45 +18,36 @@ class BaseWorker(object):
     BaseWorker is the base class that is to be used to create workers to perform
     asynchronous tasks related to FFPuppet or the browser process.
     """
+    READ_BUF = 0x10000 # 64KB
+    SPOOL_LIMIT = 0x10000 # 64KB
+
     available = True
     name = "BaseWorker" # override in subclass
 
     def __init__(self):
-        self._log = self._create_logfile()
+        self.log_fp = tempfile.SpooledTemporaryFile(max_size=self.SPOOL_LIMIT, mode="w+")
         self._worker = None
 
 
-    @staticmethod
-    def _create_logfile():
-        tmp_fd, log = tempfile.mkstemp(
-            suffix="_log.txt",
-            prefix=time.strftime("ffpworker_%m-%d_%H-%M-%S_"))
-        os.close(tmp_fd)
-
-        return log
-
-
     def clean_up(self):
-        if os.path.isfile(self._log):
-            os.remove(self._log)
+        self.log_fp.close()
 
 
-    def collect_log(self):
+    def collect_log(self, dst_fp):
         if self._worker is not None and self._worker.is_alive():
             raise RuntimeError("Worker must exit before collecting log")
 
-        if not os.path.isfile(self._log):
-            return None
-
-        with open(self._log, "r") as log_fp:
-            log_data = log_fp.read()
-
-        return log_data.strip()
+        self.log_fp.seek(0)
+        shutil.copyfileobj(self.log_fp, dst_fp, self.READ_BUF)
 
 
     def join(self):
         if self._worker is not None:
             self._worker.join()
+
+
+    def log_available(self):
+        return self.log_fp.tell() > 0
 
 
 def gdb_log_dumpper(pid):
