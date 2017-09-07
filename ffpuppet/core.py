@@ -736,7 +736,7 @@ class FFPuppet(object):
         log.debug("requested location: %r", location)
         if location is not None:
             if os.path.isfile(location):
-                location = "file:///%s" % pathname2url(os.path.abspath(location).lstrip('/'))
+                location = "file:%s" % pathname2url(os.path.realpath(location))
             elif re.match(r"http(s)?://", location, re.IGNORECASE) is None:
                 raise IOError("Cannot find %s" % os.path.abspath(location))
 
