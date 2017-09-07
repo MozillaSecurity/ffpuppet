@@ -13,6 +13,7 @@ import random
 import re
 import shutil
 import socket
+import stat
 import subprocess
 import tempfile
 import time
@@ -53,6 +54,29 @@ def open_unique(mode="w"):
 
     # open with 'open' so the file object 'name' attribute is correct
     return open(log_file, mode)
+
+
+def onerror(func, path, exc_info):
+    """
+    Error handler for `shutil.rmtree`.
+
+    If the error is due to an access error (read only file)
+    it attempts to add write permission and then retries.
+
+    If the error is for another reason it re-raises the error.
+
+    Copyright Michael Foord 2004
+    Released subject to the BSD License
+    ref: http://www.voidspace.org.uk/python/recipebook.shtml#utils
+
+    Usage : `shutil.rmtree(path, onerror=onerror)`
+    """
+    if not os.access(path, os.W_OK):
+        # Is the error an access error?
+        os.chmod(path, stat.S_IWUSR)
+        func(path)
+    else:
+        raise
 
 
 class LaunchError(Exception):
@@ -484,7 +508,7 @@ class FFPuppet(object):
 
         # remove temporary profile directory if necessary
         if self.profile is not None and os.path.isdir(self.profile):
-            shutil.rmtree(self.profile)
+            shutil.rmtree(self.profile, onerror=onerror)
             self.profile = None
 
         self.closed = True
@@ -649,7 +673,7 @@ class FFPuppet(object):
 
         if template is not None:
             log.debug("using profile template: %r", template)
-            shutil.rmtree(profile) # reuse the directory name
+            shutil.rmtree(profile, onerror=onerror)  # reuse the directory name
             if not os.path.isdir(template):
                 raise IOError("Cannot find template profile: %r" % template)
             shutil.copytree(template, profile)
@@ -661,7 +685,7 @@ class FFPuppet(object):
         if prefs_js is not None:
             log.debug("using prefs.js: %r", prefs_js)
             if not os.path.isfile(prefs_js):
-                shutil.rmtree(profile, True) # clean up on failure
+                shutil.rmtree(profile, True, onerror=onerror)  # clean up on failure
                 raise IOError("prefs.js file does not exist: %r" % prefs_js)
             shutil.copyfile(prefs_js, os.path.join(profile, "prefs.js"))
 
@@ -684,7 +708,7 @@ class FFPuppet(object):
                     os.path.abspath(extension),
                     os.path.join(profile, "extensions", "domfuzz@squarefree.com"))
             else:
-                shutil.rmtree(profile, True) # clean up on failure
+                shutil.rmtree(profile, True, onerror=onerror)  # clean up on failure
                 raise RuntimeError("Unknown extension: %r" % extension)
 
         return profile
