@@ -669,7 +669,9 @@ class FFPuppet(object):
         self._logs.add_log("stderr")
         self._logs.add_log("stdout")
         stderr = self._logs.get_fp("stderr")
-        stderr.write(b"[ffpuppet] Launch command: %s\n\n" % (" ".join(cmd)).encode("utf-8"))
+        stderr.write(b"[ffpuppet] Launch command: ")
+        stderr.write(" ".join(cmd).encode("utf-8"))
+        stderr.write(b"\n\n")
         stderr.flush()
 
         # launch the browser
