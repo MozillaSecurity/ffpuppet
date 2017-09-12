@@ -355,7 +355,7 @@ class FFPuppet(object):
         for worker in self._workers:
             if worker.log_available():
                 stderr_log_fp.write(b"\n")
-                stderr_log_fp.write(b"[ffpuppet worker]: %s\n" % worker.name.encode("utf-8"))
+                stderr_log_fp.write(("[ffpuppet worker]: %s\n" % worker.name).encode("utf-8"))
                 worker.collect_log(dst_fp=stderr_log_fp)
                 stderr_log_fp.write(b"\n")
             worker.clean_up()
@@ -372,7 +372,8 @@ class FFPuppet(object):
         self._dump_minidump_stacks()
 
         if self._proc is not None:
-            self._logs.get_fp("stderr").write(b"[ffpuppet] Exit code: %r\n" % self._proc.returncode)
+            self._logs.get_fp("stderr").write(
+                ("[ffpuppet] Exit code: %r\n" % self._proc.returncode).encode("utf-8"))
             self._proc = None
 
         # close browser logger
@@ -888,16 +889,21 @@ def _dump_to_console(log_dir, dump_limit=0x20000):
             log_list.remove(found)
             log_list.append(found)
 
-    with tempfile.SpooledTemporaryFile(max_size=0x40000) as out_fp:
+    with tempfile.SpooledTemporaryFile(max_size=0x40000, mode="w+") as out_fp:
         for fname in log_list:
-            out_fp.write(b"\n[Dumping log %r]\n" % fname)
-            with open(os.path.join(log_dir, fname), "rb") as log_fp:
-                out_fp.write(log_fp.read(dump_limit))
+            full_path = os.path.join(log_dir, fname)
+            fsize = os.stat(full_path).st_size / 1024.0
+            out_fp.write("\n[Dumping log %r (%0.2fKB)]\n" % (fname, fsize))
+            with open(full_path, "rb") as log_fp:
+                out_fp.write(log_fp.read(dump_limit).decode("utf-8", errors="ignore"))
             if out_fp.tell() > dump_limit:
-                out_fp.write(b"Output exceeds 128KB! Use '--log' to capture full log.\n")
+                out_fp.write("\nOutput exceeds %dKB! Log tailed. " % (dump_limit / 1024))
+                out_fp.write("Use '--log' to capture full log.")
                 break
-        out_fp.seek(0)
-        return out_fp.read(dump_limit)
+        # python 3.2 and up only supports seeking from the start unless in binary mode
+        dump_pos = max((out_fp.tell() - dump_limit), 0)
+        out_fp.seek(dump_pos)
+        return out_fp.read()
 
 
 def main(argv=None): # pylint: disable=missing-docstring
@@ -943,11 +949,10 @@ def main(argv=None): # pylint: disable=missing-docstring
         if args.log is not None:
             ffp.save_logs(args.log)
         if args.dump:
-            log_dir = tempfile.mkdtemp()
+            log_dir = tempfile.mkdtemp(prefix="ffp_log_")
             try:
                 ffp.save_logs(log_dir)
-                log.info("Dumping browser log...\n%s\n",
-                         _dump_to_console(log_dir).decode("utf-8", errors="ignore"))
+                log.info("Dumping browser log...\n%s" % _dump_to_console(log_dir))
             finally:
                 if os.path.isdir(log_dir):
                     shutil.rmtree(log_dir)

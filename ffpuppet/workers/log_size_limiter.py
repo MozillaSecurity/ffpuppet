@@ -38,9 +38,9 @@ def _run(puppet, max_size, log_fp):
         current_size = err_size + out_size
         if current_size > max_size:
             puppet._terminate(5)
-            log_fp.write(b"LOG_SIZE_LIMIT_EXCEEDED: %d\n" % current_size)
-            log_fp.write(b"Current Limit: %d (%dMB)\n" % (max_size, max_size/1048576))
-            log_fp.write(b"stderr log: %d (%dMB)\n" % (err_size, err_size/1048576))
-            log_fp.write(b"stdout log: %d (%dMB)\n" % (out_size, out_size/1048576))
+            log_fp.write(("LOG_SIZE_LIMIT_EXCEEDED: %d\n" % current_size).encode("utf-8"))
+            log_fp.write(("Current Limit: %d (%dMB)\n" % (max_size, max_size/1048576)).encode("utf-8"))
+            log_fp.write(("stderr log: %d (%dMB)\n" % (err_size, err_size/1048576)).encode("utf-8"))
+            log_fp.write(("stdout log: %d (%dMB)\n" % (out_size, out_size/1048576)).encode("utf-8"))
             break
         time.sleep(0.1) # don't be a CPU hog

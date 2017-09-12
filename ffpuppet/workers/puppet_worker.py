@@ -77,19 +77,19 @@ def gdb_log_dumpper(pid):
         # on Ubuntu run "sudo sysctl kernel.yama.ptrace_scope=0"
         gdb_cmd = [gdb_bin, "-q", "-batch", "-x", cmd_file, "-p", "%d" % pid]
 
-        with tempfile.TemporaryFile(mode="w+b") as log_fp:
+        with tempfile.TemporaryFile(mode="w+") as log_fp:
             try:
                 subprocess.check_call(gdb_cmd, shell=False, stderr=log_fp, stdout=log_fp)
             except subprocess.CalledProcessError:
                 log_fp.seek(0)
-                return b"Error executing: %s\n%s" % (" ".join(gdb_cmd).encode("utf-8"), log_fp.read())
+                return ("Error executing: %s\n%s" % (" ".join(gdb_cmd), log_fp.read())).encode("utf-8")
             log_fp.seek(0)
 
             flt = re.compile(
                 r"(\[New LWP \d+\]|" \
                 r"No locals\.|" \
                 r"Quit anyway\? \(y or n\) \[answered Y; input not from terminal\])$")
-            return b"\n".join([x for x in log_fp.read().splitlines() if flt.match(x) is None]).encode("utf-8")
+            return "\n".join([x for x in log_fp.read().splitlines() if flt.match(x) is None]).encode("utf-8")
     finally:
         if os.path.isfile(cmd_file):
             os.remove(cmd_file)

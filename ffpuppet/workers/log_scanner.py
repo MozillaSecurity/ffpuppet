@@ -55,7 +55,7 @@ def _run(puppet, log_fp):
                 match = token.search(data)
                 if match:
                     puppet._terminate(5)
-                    log_fp.write(b"TOKEN_LOCATED: %s\n" % match.group().encode("utf-8"))
+                    log_fp.write(("TOKEN_LOCATED: %s\n" % match.group()).encode("utf-8"))
                     return
 
             try:

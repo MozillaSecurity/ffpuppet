@@ -77,11 +77,11 @@ def _run(process_id, limit, log_fp):
                         mem_hog = (pid, proc_usage)
                 log_fp.write(puppet_worker.gdb_log_dumpper(mem_hog[0]))
                 log_fp.write(b"\n")
-            log_fp.write(b"MEMORY_LIMIT_EXCEEDED: %d\n" % total_usage)
-            log_fp.write(b"Current Limit: %d (%dMB)\n" % (limit, limit/1048576))
-            log_fp.write(b"Parent PID: %d\n" % process_id)
+            log_fp.write(("MEMORY_LIMIT_EXCEEDED: %d\n" % total_usage).encode("utf-8"))
+            log_fp.write(("Current Limit: %d (%dMB)\n" % (limit, limit/1048576)).encode("utf-8"))
+            log_fp.write(("Parent PID: %d\n" % process_id).encode("utf-8"))
             for pid, proc_usage in proc_info:
-                log_fp.write(b"-> PID %6d: %10d\n" % (pid, proc_usage))
+                log_fp.write(("-> PID %6d: %10d\n" % (pid, proc_usage)).encode("utf-8"))
             break
 
         time.sleep(0.1) # check 10x a second

@@ -295,8 +295,8 @@ class PuppetTests(TestCase): # pylint: disable=too-many-public-methods
         self.assertIsNotNone(ffp.wait(10))
         ffp.close()
         ffp.save_logs(self.logs)
-        with open(os.path.join(self.logs, "log_stderr.txt"), "rb") as log_fp:
-            self.assertRegex(log_fp.read(), b"TOKEN_LOCATED")
+        with open(os.path.join(self.logs, "log_stderr.txt"), "r") as log_fp:
+            self.assertIn("TOKEN_LOCATED", log_fp.read())
 
     def test_12(self):
         "test using an existing profile directory"
@@ -584,8 +584,8 @@ class PuppetTests(TestCase): # pylint: disable=too-many-public-methods
             self.assertIn(fname, ["log_stderr.txt", "log_stdout.txt"])
             total_size += os.stat(os.path.join(self.logs, fname)).st_size
         self.assertLess(limit, total_size)
-        with open(os.path.join(self.logs, "log_stderr.txt"), "rb") as log_fp:
-            self.assertRegex(log_fp.read(), b"LOG_SIZE_LIMIT_EXCEEDED")
+        with open(os.path.join(self.logs, "log_stderr.txt"), "r") as log_fp:
+            self.assertIn("LOG_SIZE_LIMIT_EXCEEDED", log_fp.read())
 
     def test_29(self):
         "test collecting and cleaning up ASan logs"
