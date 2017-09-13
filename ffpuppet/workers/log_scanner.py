@@ -37,16 +37,14 @@ def _run(puppet, log_fp):
 
     while puppet.is_running():
         for log in logs:
+            # check if file has new data
+            if os.stat(log["fname"]).st_size <= log["offset"]:
+                continue
+            # collect new data
             with open(log["fname"], "r") as scan_fp:
-                scan_fp.seek(0, os.SEEK_END)
-                # check if file has new data
-                if scan_fp.tell() > log["offset"]:
-                    scan_fp.seek(log["offset"], os.SEEK_SET)
-                    data = scan_fp.read(0x10000) # 64KB
-                    log["offset"] = scan_fp.tell()
-                else:
-                    continue
-
+                scan_fp.seek(log["offset"], os.SEEK_SET)
+                data = scan_fp.read(0x20000) # 128KB
+                log["offset"] = scan_fp.tell()
             # prepend chunk of previously read line to data
             if log["lbuf"]:
                 data = "".join([log["lbuf"], data])
