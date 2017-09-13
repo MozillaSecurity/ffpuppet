@@ -47,15 +47,15 @@ class PuppetLoggerTests(TestCase):
         plog.add_log("test_new")
         fname = plog.get_fp("test_new").name
         self.assertTrue(os.path.isfile(fname))
-        self.assertEqual(len(plog._logs), 1) # pylint: disable=protected-access
+        self.assertEqual(len(plog.available_logs()), 1)
         plog.close()
-        self.assertEqual(len(plog._logs), 1) # pylint: disable=protected-access
+        self.assertEqual(len(plog.available_logs()), 1)
         self.assertTrue(plog.closed)
         plog.clean_up()
-        self.assertEqual(len(plog._logs), 0) # pylint: disable=protected-access
+        self.assertEqual(len(plog.available_logs()), 0)
         self.assertFalse(os.path.isfile(fname))
         plog.reset()
-        self.assertEqual(len(plog._logs), 0) # pylint: disable=protected-access
+        self.assertEqual(len(plog.available_logs()), 0)
         self.assertFalse(plog.closed)
 
     def test_02(self):
@@ -63,8 +63,9 @@ class PuppetLoggerTests(TestCase):
         plog = PuppetLogger()
         self.addCleanup(plog.clean_up)
         self.assertEqual(len(plog._logs), 0) # pylint: disable=protected-access
+        self.assertEqual(len(plog.available_logs()), 0)
         plog.add_log("test_new") # non-existing log
-        self.assertIn("test_new", plog._logs) # pylint: disable=protected-access
+        self.assertIn("test_new", plog.available_logs())
         fname_new = plog.get_fp("test_new").name
         self.assertTrue(os.path.isfile(fname_new))
         existing_fp = open(os.path.join(self.tmpdir, "test_existing.txt"), "w+b")
@@ -74,7 +75,7 @@ class PuppetLoggerTests(TestCase):
         finally:
             existing_fp.close()
         self.assertEqual(len(plog._logs), 2) # pylint: disable=protected-access
-        self.assertIn("test_existing", plog._logs) # pylint: disable=protected-access
+        self.assertEqual(len(plog.available_logs()), 2)
         fname_exist = plog.get_fp("test_existing").name
         self.assertTrue(os.path.isfile(fname_exist))
         self.assertEqual(plog.log_length("test_new"), 0)
@@ -161,7 +162,7 @@ class PuppetLoggerTests(TestCase):
             plog.get_fp("test_3").write(data)
         plog.get_fp("test_3").flush()
         plog.save_logs(self.tmpdir)
-        self.assertEqual(len(plog._logs), 4) # pylint: disable=protected-access
+        self.assertEqual(len(plog.available_logs()), 4)
         dir_list = os.listdir(self.tmpdir)
         self.assertEqual(len(dir_list), 4)
 

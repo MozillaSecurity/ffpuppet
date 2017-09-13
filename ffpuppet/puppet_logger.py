@@ -31,6 +31,16 @@ class PuppetLogger(object):
         self._logs[log_id] = logfp
 
 
+    def available_logs(self):
+        """
+        List of IDs for the currently available logs.
+
+        @rtype: list
+        @return: A list containing 'log_id's
+        """
+        return self._logs.keys()
+
+
     def clean_up(self):
         """
         Remove log files from disk.

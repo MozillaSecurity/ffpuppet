@@ -158,6 +158,10 @@ class PuppetTests(TestCase): # pylint: disable=too-many-public-methods
         ffp.wait(0.25) # wait for log prints
         ffp.close()
         self.assertTrue(ffp._logs.closed) # pylint: disable=protected-access
+        log_ids = ffp.available_logs()
+        self.assertEqual(len(log_ids), 2)
+        self.assertIn("stderr", log_ids)
+        self.assertIn("stdout", log_ids)
         log_dir = os.path.join(self.logs, "some_dir") # nonexistent directory
         ffp.save_logs(log_dir)
         self.assertTrue(os.path.isdir(log_dir))

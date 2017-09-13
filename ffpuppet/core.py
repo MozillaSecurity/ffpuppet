@@ -187,6 +187,16 @@ class FFPuppet(object):
         self._abort_tokens.add(token)
 
 
+    def available_logs(self):
+        """
+        List of IDs for the currently available logs.
+
+        @rtype: list
+        @return: A list containing 'log_id's
+        """
+        return self._logs.available_logs()
+
+
     def clone_log(self, log_id, offset=None, target_file=None):
         """
         Create a copy of the current browser log.
@@ -203,7 +213,6 @@ class FFPuppet(object):
         @rtype: String or None
         @return: Name of the file containing the cloned log or None on failure
         """
-
         return self._logs.clone_log(log_id, offset=offset, target_file=target_file)
 
 
@@ -952,7 +961,7 @@ def main(argv=None): # pylint: disable=missing-docstring
             log_dir = tempfile.mkdtemp(prefix="ffp_log_")
             try:
                 ffp.save_logs(log_dir)
-                log.info("Dumping browser log...\n%s" % _dump_to_console(log_dir))
+                log.info("Dumping browser log...\n%s", _dump_to_console(log_dir))
             finally:
                 if os.path.isdir(log_dir):
                     shutil.rmtree(log_dir)
