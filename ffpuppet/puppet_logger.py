@@ -127,10 +127,7 @@ class PuppetLogger(object):
         cur_log = self.get_fp(log_id)
         if cur_log is None:
             return None
-
-        with open(cur_log.name, "rb") as logfp:
-            logfp.seek(0, os.SEEK_END)
-            return logfp.tell()
+        return os.stat(cur_log.name).st_size
 
 
     @staticmethod
