@@ -26,6 +26,7 @@ class PuppetLogger(object):
 
     def add_log(self, log_id, logfp=None):
         assert log_id not in self._logs
+        assert not self.closed
         if logfp is None:
             logfp = PuppetLogger.open_unique()
         self._logs[log_id] = logfp

@@ -40,6 +40,8 @@ class PuppetLoggerTests(TestCase):
         self.assertFalse(plog.closed)
         plog.close()
         self.assertTrue(plog.closed)
+        with self.assertRaises(AssertionError):
+            plog.add_log("test")
         plog.clean_up()
         self.assertTrue(plog.closed)
         plog.reset()
