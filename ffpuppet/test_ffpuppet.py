@@ -152,6 +152,8 @@ class PuppetTests(TestCase): # pylint: disable=too-many-public-methods
         "test logging"
         ffp = FFPuppet()
         self.addCleanup(ffp.clean_up)
+        ffp.close()
+        ffp.save_logs(os.path.join(self.logs, "no_logs"))
         tsrv = HTTPTestServer()
         self.addCleanup(tsrv.shutdown)
         ffp.launch(TESTFF_BIN, location=tsrv.get_addr())
@@ -179,8 +181,6 @@ class PuppetTests(TestCase): # pylint: disable=too-many-public-methods
                 self.assertEqual(log_data, ["hello world"])
             else:
                 raise RuntimeError("Unknown log file %r" % fname)
-        #ffp.clean_up()
-        #TODO: check if temp working files are removed (like should be done by PuppetLogger Tests)
 
     def test_05(self):
         "test get_pid()"

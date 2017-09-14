@@ -343,6 +343,7 @@ class FFPuppet(object):
 
         log.debug("close() called")
         if self.closed:
+            self._logs.close() # make sure browser logs are also closed
             return
 
         # terminate the browser process
