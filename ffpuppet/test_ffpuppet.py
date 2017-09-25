@@ -80,7 +80,7 @@ class PuppetTests(TestCase): # pylint: disable=too-many-public-methods
 
     @classmethod
     def setUpClass(cls):
-        if sys.platform.startswith('win') and not os.path.isfile(os.path.join("testff", "testff.exe")):
+        if sys.platform.startswith('win') and not os.path.isfile(TESTFF_BIN):
             raise EnvironmentError("testff.exe is missing see testff.py for build instructions") # pragma: no cover
 
     def setUp(self):
@@ -368,7 +368,8 @@ class PuppetTests(TestCase): # pylint: disable=too-many-public-methods
         with tempfile.NamedTemporaryFile() as test_fp:
             test_fp.write(b"test")
             test_fp.seek(0)
-            fname = os.path.normcase(test_fp.name)
+            # needs normpath() for OSX & normcase() for Windows
+            fname = os.path.normpath(os.path.normcase(test_fp.name))
             ffp.launch(TESTFF_BIN, location=fname)
             ffp.wait(0.25) # wait for log prints
             ffp.close()
@@ -646,7 +647,7 @@ class PuppetTests(TestCase): # pylint: disable=too-many-public-methods
 class ScriptTests(TestCase):
     @classmethod
     def setUpClass(cls):
-        if sys.platform.startswith('win') and not os.path.isfile(os.path.join("testff", "testff.exe")):
+        if sys.platform.startswith('win') and not os.path.isfile(TESTFF_BIN):
             raise EnvironmentError("testff.exe is missing see testff.py for build instructions") # pragma: no cover
 
     def setUp(self):
