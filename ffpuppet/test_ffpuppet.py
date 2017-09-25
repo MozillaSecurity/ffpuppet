@@ -368,8 +368,8 @@ class PuppetTests(TestCase): # pylint: disable=too-many-public-methods
         with tempfile.NamedTemporaryFile() as test_fp:
             test_fp.write(b"test")
             test_fp.seek(0)
-            # needs normpath() for OSX & normcase() for Windows
-            fname = os.path.normpath(os.path.normcase(test_fp.name))
+            # needs realpath() for OSX & normcase() for Windows
+            fname = os.path.realpath(os.path.normcase(test_fp.name))
             ffp.launch(TESTFF_BIN, location=fname)
             ffp.wait(0.25) # wait for log prints
             ffp.close()
