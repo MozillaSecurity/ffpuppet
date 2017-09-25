@@ -643,9 +643,10 @@ class FFPuppet(object):
         log.debug("requested location: %r", location)
         if location is not None:
             if os.path.isfile(location):
-                location = "file:///%s" % pathname2url(os.path.abspath(location).lstrip('/'))
+                location = "///".join(
+                    ["file:", pathname2url(os.path.realpath(location)).lstrip("/")])
             elif re.match(r"http(s)?://", location, re.IGNORECASE) is None:
-                raise IOError("Cannot find %s" % os.path.abspath(location))
+                raise IOError("Cannot find %r" % location)
 
         log_limit = max(log_limit, 0)
         memory_limit = max(memory_limit, 0)

@@ -71,9 +71,13 @@ def main():
         with open(os.path.join(profile, 'Invalidprefs.js'), "w") as prefs_js:
             prefs_js.write("bad!")
 
+    target_url = None # should be set to the value passed to launch()'s 'location' arg
     while url is not None:
         if url.startswith("about"):
             break
+        elif url.startswith("file://"):
+            break
+
         conn = urlopen(url)
         try:
             data = conn.read().decode('utf-8')
@@ -81,6 +85,8 @@ def main():
             redirect = re.search(r"content=\"0;\surl=([^\"]+)\"", data)
             if redirect is not None:
                 url = redirect.group(1)
+                if url is not None:
+                    target_url = url
                 continue
             sys.stdout.write(data)
             sys.stdout.write('\n')
@@ -89,6 +95,8 @@ def main():
             conn.close()
         break
 
+    sys.stdout.write('url: %s\n' % target_url)
+    sys.stdout.flush()
 
     if cmd == 'memory':
         sys.stdout.write('simulating high memory usage\n')

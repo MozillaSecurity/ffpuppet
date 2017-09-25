@@ -23,7 +23,7 @@ logging.basicConfig(level=logging.DEBUG if bool(os.getenv("DEBUG")) else logging
 log = logging.getLogger("ffp_test")
 
 CWD = os.path.realpath(os.path.dirname(__file__))
-TESTFF_BIN = os.path.join(CWD, os.pardir, "testff", "testff.exe") if sys.platform.startswith('win') else os.path.join(CWD, "testff.py")
+TESTFF_BIN = os.path.join(CWD, "testff", "testff.exe") if sys.platform.startswith('win') else os.path.join(CWD, "testff.py")
 
 FFPuppet.LOG_POLL_RATE = 0.01 # reduce this for testing
 
@@ -178,7 +178,7 @@ class PuppetTests(TestCase): # pylint: disable=too-many-public-methods
                 self.assertTrue(log_data[0].startswith('[ffpuppet] Launch command:'))
                 self.assertTrue(log_data[-1].startswith('[ffpuppet] Exit code:')) # exit code differs between platforms
             elif fname.startswith("log_stdout"):
-                self.assertEqual(log_data, ["hello world"])
+                self.assertEqual(log_data[0], "hello world")
             else:
                 raise RuntimeError("Unknown log file %r" % fname)
 
@@ -368,7 +368,17 @@ class PuppetTests(TestCase): # pylint: disable=too-many-public-methods
         with tempfile.NamedTemporaryFile() as test_fp:
             test_fp.write(b"test")
             test_fp.seek(0)
-            ffp.launch(TESTFF_BIN, location=test_fp.name)
+            fname = os.path.normcase(test_fp.name)
+            ffp.launch(TESTFF_BIN, location=fname)
+            ffp.wait(0.25) # wait for log prints
+            ffp.close()
+            ffp.save_logs(self.logs)
+        with open(os.path.join(self.logs, "log_stdout.txt"), "r") as log_fp:
+            location = log_fp.read().strip()
+        self.assertIn("url: file:///", location)
+        location = os.path.normcase(location.split("file:///")[-1])
+        self.assertFalse(location.startswith("/"))
+        self.assertEqual(os.path.normpath(os.path.join("/", location)), fname)
 
     def test_18(self):
         "test passing nonexistent file to launch() via prefs_js"
