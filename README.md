@@ -16,10 +16,6 @@ At this time no modules are required to run FFPuppet however some features may n
 
     pip install --user -e <ffpuppet_repo>
 
-Once installed ffpuppet can be run using the following command:
-
-    python -m ffpuppet
-
 ##### Installing python modules
   
     pip install -r requirements.txt
@@ -44,7 +40,13 @@ on Windows).
 
 Usage
 -----
+
+Once installed FFPuppet can be run using the following command:
+
+    python -m ffpuppet
+
 ```
+$ python -m ffpuppet -h
 usage: __main__.py [-h] [-a ABORT_TOKEN] [-d] [-e EXTENSION] [-g] [-l LOG]
                    [--log-limit LOG_LIMIT] [-m MEMORY] [-p PREFS] [-P PROFILE]
                    [--safe-mode] [-t TIMEOUT] [-u URL] [--valgrind] [-v]
@@ -88,3 +90,9 @@ optional arguments:
   -v, --verbose         Output includes debug prints
   --xvfb                Use Xvfb (Linux only)
 ```
+
+##### Replaying a test case
+
+    python -m ffpuppet <firefox-bin> -p <prefs.js> -d -u <test_case>
+
+This will open the provided test case file in Firefox using the provided prefs.js file and any log data (stderr, stdout, ASan logs... etc) will be dumped to the console when the browser process terminates.
