@@ -847,7 +847,7 @@ def _parse_args(argv=None):
         help="Use GDB (Linux only)")
     parser.add_argument(
         "-l", "--log",
-        help="log file name")
+        help="Location to save log files")
     parser.add_argument(
         "--log-limit", type=int,
         help="Log file size limit in MBs (default: 'no limit')")

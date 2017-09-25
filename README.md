@@ -12,11 +12,19 @@ Installation
 
 At this time no modules are required to run FFPuppet however some features may not be available.
 
+##### To install after cloning the repository
+
+    pip install --user -e <ffpuppet_repo>
+
+Once installed ffpuppet can be run using the following command:
+
+    python -m ffpuppet
+
 ##### Installing python modules
   
     pip install -r requirements.txt
 
-Linux requires xvfb in order to run headless.
+In order to enable memory limiting `psutil` is required on all supported operating systems. Linux requires `xvfb` in order to run headless (this is not the same as Firefox's `-headless` mode).
 
 ##### Ubuntu
 
@@ -37,9 +45,10 @@ on Windows).
 Usage
 -----
 ```
-usage: ffpuppet.py [-h] [-a ABORT_TOKEN] [-d] [-e EXTENSION] [-g] [-l LOG]
-                   [-m MEMORY] [-p PREFS] [-P PROFILE] [--safe-mode]
-                   [-t TIMEOUT] [-u URL] [--valgrind] [-v] [--xvfb]
+usage: __main__.py [-h] [-a ABORT_TOKEN] [-d] [-e EXTENSION] [-g] [-l LOG]
+                   [--log-limit LOG_LIMIT] [-m MEMORY] [-p PREFS] [-P PROFILE]
+                   [--safe-mode] [-t TIMEOUT] [-u URL] [--valgrind] [-v]
+                   [--xvfb]
                    binary
 
 Firefox launcher/wrapper
@@ -57,8 +66,10 @@ optional arguments:
   -e EXTENSION, --extension EXTENSION
                         Install the fuzzPriv extension (specify path to
                         funfuzz/dom/extension)
-  -g, --gdb             Use GDB
-  -l LOG, --log LOG     log file name
+  -g, --gdb             Use GDB (Linux only)
+  -l LOG, --log LOG     Location to save log files
+  --log-limit LOG_LIMIT
+                        Log file size limit in MBs (default: 'no limit')
   -m MEMORY, --memory MEMORY
                         Process memory limit in MBs (Requires psutil)
   -p PREFS, --prefs PREFS
@@ -73,7 +84,7 @@ optional arguments:
                         Number of seconds to wait for the browser to become
                         responsive after launching. (default: 300)
   -u URL, --url URL     Server URL or local file to load.
-  --valgrind            Use valgrind
+  --valgrind            Use Valgrind (Linux only)
   -v, --verbose         Output includes debug prints
-  --xvfb                Use xvfb (Linux only)
+  --xvfb                Use Xvfb (Linux only)
 ```
