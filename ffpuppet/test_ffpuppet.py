@@ -665,7 +665,7 @@ class PuppetTests(TestCase): # pylint: disable=too-many-public-methods
         old_level = logger.level
         profile_dir = [None]
         class _ProfileDirHandler(logging.Handler):
-            def emit(_, record):
+            def emit(self, record):
                 if record.msg == "profile directory: %r":
                     profile_dir[0] = record.args[0]
                     ro_file = os.path.join(profile_dir[0], "read-only-test.txt")
