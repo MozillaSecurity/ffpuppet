@@ -56,7 +56,7 @@ def open_unique(mode="w"):
     return open(log_file, mode)
 
 
-def onerror(func, path, exc_info):
+def onerror(func, path, _exc_info):
     """
     Error handler for `shutil.rmtree`.
 
