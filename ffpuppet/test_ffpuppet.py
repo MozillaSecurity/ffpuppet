@@ -657,52 +657,39 @@ class PuppetTests(TestCase): # pylint: disable=too-many-public-methods
         os.chmod(ro_file, stat.S_IREAD)
         ffp.close()
         self.assertFalse(os.path.isfile(ro_file))
+        ffp.clean_up()
 
-        # The remaining 3 calls to rmtree are within create_profile, and probably can't be hit in real usage.
-        # To create the readonly file between directory creation and removal, create a log handler to detect when the
-        # profile is created and create the file.
-        logger = logging.getLogger("ffpuppet")
-        old_level = logger.level
-        profile_dir = [None]
-        class _ProfileDirHandler(logging.Handler):
-            def emit(self, record):
-                if record.msg == "profile directory: %r":
-                    profile_dir[0] = record.args[0]
-                    ro_file = os.path.join(profile_dir[0], "read-only-test.txt")
-                    with open(ro_file, "w"):
-                        pass
-                    os.chmod(ro_file, stat.S_IREAD)
-                return True
-        hnd = _ProfileDirHandler()
-        logger.addHandler(hnd)
-        self.addCleanup(logger.removeHandler, hnd)
-        logger.setLevel(logging.DEBUG)
-        self.addCleanup(logger.setLevel, old_level)
+        # use template profile that contains a readonly file
+        prf_dir = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, prf_dir)
+        ro_file = os.path.join(prf_dir, "read-only.txt")
+        with open(ro_file, "w"):
+            pass
+        os.chmod(ro_file, stat.S_IREAD)
+        ffp = FFPuppet(use_profile=prf_dir)
+        self.addCleanup(ffp.clean_up)
+        ffp.launch(TESTFF_BIN)
+        working_prf = ffp.profile
+        self.assertTrue(os.path.isdir(working_prf))
+        ffp.close()
+        self.assertFalse(os.path.isdir(working_prf))
 
-        # template profile creation w/ readonly file
-        tmpd = tempfile.mkdtemp()
-        self.addCleanup(os.rmdir, tmpd)
-        shutil.rmtree(FFPuppet.create_profile(template=tmpd))
-        # add a verbose message if this fails so we know to update the log message above.
-        # only do it once since the remaining cases shouldn't be hit unless there's a different problem.
-        self.assertIsNotNone(profile_dir[0],
-                             "Profile creation hook failed. Check if profile location log message changed in "
-                             "create_profile().")
-
-        # profile creation with missing prefs_js w/ readonly file
-        profile_dir = [None]
-        with self.assertRaisesRegex(IOError, "prefs.js file does not exist"):
-            FFPuppet.create_profile(prefs_js="test-does-not-exist.xyz")
-        self.assertIsNotNone(profile_dir[0])
-        self.assertFalse(os.path.isdir(profile_dir[0]))
-
-        # profile creation with unknown extension w/ readonly file
-        profile_dir = [None]
-        with self.assertRaisesRegex(RuntimeError, "Unknown extension"):
-            FFPuppet.create_profile(extension="test-does-not-exist.xyz")
-        self.assertIsNotNone(profile_dir[0])
-        self.assertFalse(os.path.isdir(profile_dir[0]))
-
+    def test_31(self):
+        "test using a readonly prefs.js and extension"
+        prefs = os.path.join(self.logs, "prefs.js")
+        with open(prefs, "w"):
+            pass
+        os.chmod(prefs, stat.S_IREAD)
+        ext = os.path.join(self.logs, "ext.xpi")
+        with open(ext, "w"):
+            pass
+        os.chmod(ext, stat.S_IREAD)
+        ffp = FFPuppet()
+        self.addCleanup(ffp.clean_up)
+        ffp.launch(TESTFF_BIN, extension=ext, prefs_js=prefs)
+        working_prf = ffp.profile
+        ffp.close()
+        self.assertFalse(os.path.isdir(working_prf))
 
 class ScriptTests(TestCase):
     @classmethod
