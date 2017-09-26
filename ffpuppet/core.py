@@ -36,26 +36,6 @@ __author__ = "Tyson Smith"
 __all__ = ("FFPuppet", "LaunchError")
 
 
-def open_unique(mode="w"):
-    """
-    Create and open a unique file.
-
-    @type mode: String
-    @param mode: File mode. See documentation for open().
-
-    @rtype: file object
-    @return: An open file object.
-    """
-
-    tmp_fd, log_file = tempfile.mkstemp(
-        suffix="_log.txt",
-        prefix=time.strftime("ffp_%Y-%m-%d_%H-%M-%S_"))
-    os.close(tmp_fd)
-
-    # open with 'open' so the file object 'name' attribute is correct
-    return open(log_file, mode)
-
-
 def onerror(func, path, _exc_info):
     """
     Error handler for `shutil.rmtree`.
