@@ -25,19 +25,22 @@ class LogSizeLimiterWorker(puppet_worker.BaseWorker):
 
 def _run(puppet, max_size, log_fp):
     """
-    _run(puppet, max_size) -> None
+    _run(puppet, max_size, log_fp) -> None
 
     returns None
     """
 
+    stderr_log = puppet._logs.get_fp("stderr").name
+    stdout_log = puppet._logs.get_fp("stdout").name
     while puppet.is_running():
-        if not os.path.isfile(puppet._log.name):
-            break
-
-        current_size = os.stat(puppet._log.name).st_size
+        err_size = os.stat(stderr_log).st_size
+        out_size = os.stat(stdout_log).st_size
+        current_size = err_size + out_size
         if current_size > max_size:
             puppet._terminate(5)
-            log_fp.write("LOG_SIZE_LIMIT_EXCEEDED: %d\n" % current_size)
-            log_fp.write("Current Limit: %d (%dMB)\n" % (max_size, max_size/1048576))
+            log_fp.write(("LOG_SIZE_LIMIT_EXCEEDED: %d\n" % current_size).encode("utf-8"))
+            log_fp.write(("Current Limit: %d (%dMB)\n" % (max_size, max_size/1048576)).encode("utf-8"))
+            log_fp.write(("stderr log: %d (%dMB)\n" % (err_size, err_size/1048576)).encode("utf-8"))
+            log_fp.write(("stdout log: %d (%dMB)\n" % (out_size, out_size/1048576)).encode("utf-8"))
             break
         time.sleep(0.1) # don't be a CPU hog

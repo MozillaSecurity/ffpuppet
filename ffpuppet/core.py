@@ -27,10 +27,10 @@ try:
 except ImportError:
     pass
 
+from .puppet_logger import PuppetLogger
 from .workers import log_scanner, log_size_limiter, memory_limiter
 
 log = logging.getLogger("ffpuppet") # pylint: disable=invalid-name
-
 
 __author__ = "Tyson Smith"
 __all__ = ("FFPuppet", "LaunchError")
@@ -86,16 +86,17 @@ class LaunchError(Exception):
 
 class FFPuppet(object):
     LAUNCH_TIMEOUT_MIN = 10 # minimum amount of time to wait for the browser to launch
+    LOG_ASAN_PATH = tempfile.gettempdir() # where ASan logs will be temporarily stored
     LOG_BUF_SIZE = 0x10000 # buffer size used to copy logs
     LOG_CLOSE_TIMEOUT = 10
     LOG_POLL_RATE = 1
 
     def __init__(self, use_profile=None, use_valgrind=False, use_xvfb=False, use_gdb=False):
         self._abort_tokens = set() # tokens used to notify log scanner to kill the browser process
-        self._asan_log = os.path.join(tempfile.gettempdir(), "ffp_asan_%d.log" % os.getpid())
+        self._asan_prefix = os.path.join(self.LOG_ASAN_PATH, "ffp_asan_%d.log" % os.getpid())
         self._last_bin_path = None
         self._launches = 0 # number of times the browser has successfully been launched
-        self._log = None
+        self._logs = PuppetLogger()
         self._platform = platform.system().lower()
         self._proc = None
         self._profile_template = use_profile # profile that is used as a template
@@ -177,7 +178,7 @@ class FFPuppet(object):
                 #"check_malloc_usable_size=false", # defaults True
                 #"detect_stack_use_after_return=true", # can't launch firefox with this enabled
                 "disable_coredump=true",
-                "log_path=%s" % self._asan_log,
+                "log_path=%s" % self._asan_prefix,
                 "sleep_before_dying=0",
                 "strict_init_order=true",
                 #"strict_memcmp=false", # defaults True
@@ -231,9 +232,22 @@ class FFPuppet(object):
         self._abort_tokens.add(token)
 
 
-    def clone_log(self, target_file=None, offset=None):
+    def available_logs(self):
+        """
+        List of IDs for the currently available logs.
+
+        @rtype: list
+        @return: A list containing 'log_id's
+        """
+        return self._logs.available_logs()
+
+
+    def clone_log(self, log_id, offset=None, target_file=None):
         """
         Create a copy of the current browser log.
+
+        @type log_id: String
+        @param log_id: The id (key) of the log to clone (stderr, stdout... etc).
 
         @type target_file: String
         @param target_file: The log contents will be saved to target_file.
@@ -244,37 +258,11 @@ class FFPuppet(object):
         @rtype: String or None
         @return: Name of the file containing the cloned log or None on failure
         """
-
-        # check if there is a log to clone
-        if self._log is None or not os.path.isfile(self._log.name):
-            return None
-
-        try:
-            self._log.flush()
-        except ValueError: # ignore exception if file is closed
-            pass
-        with open(self._log.name, "rb") as logfp:
-            if offset is not None:
-                logfp.seek(offset)
-            if target_file is None:
-                cpyfp = open_unique("wb")
-                target_file = cpyfp.name
-            else:
-                cpyfp = open(target_file, "wb")
-            try:
-                shutil.copyfileobj(logfp, cpyfp, self.LOG_BUF_SIZE)
-            finally:
-                cpyfp.close()
-
-        return target_file
+        return self._logs.clone_log(log_id, offset=offset, target_file=target_file)
 
 
     def _dump_minidump_stacks(self):
         log.debug("symbolize minidumps")
-
-        if self._log is None or self._log.closed:
-            log.debug("can't symbolize: no log handle")
-            return
 
         if self.profile is None:
             log.debug("can't symbolize: profile is None")
@@ -290,22 +278,25 @@ class FFPuppet(object):
             return
 
         symbols_path = os.path.join(self._last_bin_path, "symbols")
-
         if not os.path.isdir(symbols_path):
             log.debug("can't symbolize: no symbols at: %s", symbols_path)
             return
 
         found = 0
-        for dumpfile in os.listdir(minidumps_path):
-            if not dumpfile.endswith(".dmp"):
+        for fname in os.listdir(minidumps_path):
+            if not fname.endswith(".dmp"):
                 continue
             found += 1
             if self._have_mdsw:
-                dump_path = os.path.join(minidumps_path, dumpfile)
+                md_log = "minidump"
+                if found > 1:
+                    "_".join([md_log, fname])
+                self._logs.add_log(md_log)
+                dump_path = os.path.join(minidumps_path, fname)
                 log.debug("calling minidump_stackwalk on %s", dump_path)
                 with open(os.devnull, "w") as null_fp:
                     subprocess.check_call(["minidump_stackwalk", "-m", dump_path, symbols_path],
-                                          stdout=self._log, stderr=null_fp)
+                                          stdout=self._logs.get_fp(md_log), stderr=null_fp)
             else:
                 log.warning("Found a minidump, but can't process it without minidump_stackwalk."
                             " See README.md for how to obtain it.")
@@ -313,49 +304,36 @@ class FFPuppet(object):
             log.warning("Found %d minidumps! Expecting 0 or 1", found)
 
 
-    def log_length(self):
+    def log_length(self, log_id):
         """
         Get the length of the current browser log.
+
+        @type log_id: String
+        @param log_id: The id (key) of the log to clone (stderr, stdout... etc).
 
         @rtype: int
         @return: length of the current browser log in bytes.
         """
-        if self._log is None or not os.path.isfile(self._log.name):
-            return 0
-
-        try:
-            self._log.flush()
-        except ValueError: # ignore exception if file is closed
-            pass
-        with open(self._log.name, "rb") as logfp:
-            logfp.seek(0, os.SEEK_END)
-            return logfp.tell()
+        return self._logs.log_length(log_id)
 
 
-    def save_log(self, log_file):
+    def save_logs(self, log_path):
         """
-        The browser log will be saved to log_file.
+        The browser logs will be saved to log_path.
         This should only be called after close().
 
-        @type log_file: String
-        @param log_file: File to create to contain log data. Existing files will be overwritten.
+        @type log_path: String
+        @param log_path: File to create to contain log data. Existing files will be overwritten.
 
         @rtype: None
         @return: None
         """
 
-        if not self.closed:
-            raise RuntimeError("Log is still in use. Call close() first!")
+        log.debug("save_logs() called, log_path is %r", log_path)
+        if not self._logs.closed:
+            raise RuntimeError("Logs are still in use. Call close() first!")
 
-        # copy log to location specified by log_file
-        if self._log is not None and os.path.isfile(self._log.name):
-            dst_path = os.path.dirname(log_file)
-            if not dst_path:
-                dst_path = os.getcwd()
-            if not os.path.isdir(dst_path):
-                os.makedirs(dst_path)
-            log_file = os.path.join(os.path.abspath(dst_path), log_file)
-            shutil.copy(self._log.name, log_file)
+        self._logs.save_logs(log_path)
 
 
     def clean_up(self):
@@ -371,11 +349,8 @@ class FFPuppet(object):
 
         log.debug("clean_up() called")
 
-        self.close(ignore_logs=True)
-
-        if self._log is not None and os.path.isfile(self._log.name):
-            os.remove(self._log.name)
-        self._log = None
+        self.close()
+        self._logs.clean_up()
 
         # close Xvfb
         if self._xvfb is not None:
@@ -384,65 +359,10 @@ class FFPuppet(object):
 
         # at this point everything should be cleaned up
         assert self.closed, "self.closed is not True"
+        assert self._logs.closed, "self._logs.closed is not True"
         assert self._proc is None, "self._proc is not None"
         assert self.profile is None, "self.profile is not None"
         assert not self._workers, "self._workers is not empty"
-
-
-    def _merge_logs(self, close_needed=False):
-        log.debug("merge logs")
-
-        # collect browser log data
-        if self._proc is not None:
-            log.debug("wait for browser log dump to complete")
-            time_limit = time.time() + self.LOG_CLOSE_TIMEOUT
-            # this helps collect complete logs from multiprocess targets
-            while True:
-                log_pos = self._log.tell()
-                time.sleep(self.LOG_POLL_RATE)
-                self._log.flush()
-                if log_pos == self._log.tell(): # this isn't bullet proof but it works
-                    break
-                if time_limit < time.time():
-                    log.warning("Log may be incomplete!")
-                    self._log.write("[ffpuppet] WARNING! Log may be incomplete!\n")
-                    break
-            if close_needed:
-                self._log.write("[ffpuppet] Process was closed by ffpuppet\n")
-            log.debug("exit code: %r", self._proc.returncode)
-
-        log.debug("copying ASan logs")
-        # this is a HACK to try to order ASan logs
-        # It attempts to locate the null deref in the child process (MOZ_CRASH)
-        # triggered by closing the parent process (when e10s is enabled) and place it
-        # at the bottom of the merged log.
-        # This is done to allow FuzzManager to bucket the results properly
-        asan_logs = list()
-        re_asan_null = re.compile(r"==\d+==ERROR:.+?SEGV\son\sunknown\saddress\s0x[0]+\s\(.+?T2\)")
-        for tmp_file in os.listdir(tempfile.gettempdir()):
-            tmp_file = os.path.join(tempfile.gettempdir(), tmp_file)
-            if not tmp_file.startswith(self._asan_log):
-                continue
-            with open(tmp_file, "r") as log_fp:
-                lines = log_fp.readlines(4096)[:7] # don't bother reading more than 4KB
-                if len(lines) < 6 or re.match(re_asan_null, lines[1]):
-                    asan_logs.append(tmp_file)
-                else:
-                    asan_logs.insert(0, tmp_file)
-        for asan_log in asan_logs:
-            self._log.write("\n")
-            self._log.write("[ffpuppet] Read from %s:\n" % asan_log)
-            with open(asan_log, "r") as log_fp:
-                shutil.copyfileobj(log_fp, self._log, self.LOG_BUF_SIZE)
-            self._log.write("\n")
-
-        log.debug("copying worker logs to main log")
-        for worker in self._workers:
-            if worker.log_available():
-                self._log.write("\n")
-                self._log.write("[ffpuppet worker]: %s\n" % worker.name)
-                worker.collect_log(dst_fp=self._log)
-                self._log.write("\n")
 
 
     def _terminate(self, kill_delay=30):
@@ -458,7 +378,7 @@ class FFPuppet(object):
             pass # in case self._proc is None
 
 
-    def close(self, ignore_logs=False):
+    def close(self):
         """
         Terminate the browser process and clean up all processes.
 
@@ -467,12 +387,14 @@ class FFPuppet(object):
         """
 
         log.debug("close() called")
+        if self.closed:
+            self._logs.close() # make sure browser logs are also closed
+            return
 
         # terminate the browser process
-        still_running = self._proc is not None and self._proc.poll() is None
         if self._proc is not None:
             log.debug("firefox pid: %r", self._proc.pid)
-            if still_running:
+            if self._proc.poll() is None:
                 log.debug("process needs to be closed")
                 self._terminate()
             self._proc.wait()
@@ -482,30 +404,35 @@ class FFPuppet(object):
         for worker in self._workers:
             worker.join()
 
-        if not ignore_logs and self._log is not None and not self._log.closed:
-            self._merge_logs(close_needed=still_running)
-
-        if self._proc is not None:
-            self._log.write("[ffpuppet] Exit code: %r\n" % self._proc.returncode)
-            self._proc = None
-
         log.debug("cleaning up workers...")
+        log.debug("copying worker logs to stderr")
+        stderr_log_fp = self._logs.get_fp("stderr")
         for worker in self._workers:
+            if worker.log_available():
+                stderr_log_fp.write(b"\n")
+                stderr_log_fp.write(("[ffpuppet worker]: %s\n" % worker.name).encode("utf-8"))
+                worker.collect_log(dst_fp=stderr_log_fp)
+                stderr_log_fp.write(b"\n")
             worker.clean_up()
         self._workers = list()
+
+        # TODO: wait for ASan logs to dump
+        # scan for ASan logs
+        for fname in os.listdir(os.path.dirname(self._asan_prefix)):
+            tmp_file = os.path.join(tempfile.gettempdir(), fname)
+            if tmp_file.startswith(self._asan_prefix):
+                self._logs.add_log(fname, open(tmp_file, "rb"))
 
         # check for minidumps in the profile and dump them if possible
         self._dump_minidump_stacks()
 
-        # close browser log
-        if self._log is not None and not self._log.closed:
-            self._log.close()
+        if self._proc is not None:
+            self._logs.get_fp("stderr").write(
+                ("[ffpuppet] Exit code: %r\n" % self._proc.returncode).encode("utf-8"))
+            self._proc = None
 
-        # remove ASan logs
-        for tmp_file in os.listdir(tempfile.gettempdir()):
-            tmp_file = os.path.join(tempfile.gettempdir(), tmp_file)
-            if tmp_file.startswith(self._asan_log):
-                os.remove(tmp_file)
+        # close browser logger
+        self._logs.close()
 
         # remove temporary profile directory if necessary
         if self.profile is not None and os.path.isdir(self.profile):
@@ -761,9 +688,10 @@ class FFPuppet(object):
         log.debug("requested location: %r", location)
         if location is not None:
             if os.path.isfile(location):
-                location = "file:///%s" % pathname2url(os.path.abspath(location).lstrip('/'))
+                location = "///".join(
+                    ["file:", pathname2url(os.path.realpath(location)).lstrip("/")])
             elif re.match(r"http(s)?://", location, re.IGNORECASE) is None:
-                raise IOError("Cannot find %s" % os.path.abspath(location))
+                raise IOError("Cannot find %r" % location)
 
         log_limit = max(log_limit, 0)
         memory_limit = max(memory_limit, 0)
@@ -793,14 +721,15 @@ class FFPuppet(object):
             bin_path,
             additional_args=launch_args)
 
-        # clean up existing log file before creating a new one
-        if self._log is not None and os.path.isfile(self._log.name):
-            os.remove(self._log.name)
-
-        # open log
-        self._log = open_unique()
-        self._log.write("[ffpuppet] Launch command: %s\n\n" % " ".join(cmd))
-        self._log.flush()
+        # open logs
+        self._logs.reset() # clean up existing log files
+        self._logs.add_log("stderr")
+        self._logs.add_log("stdout")
+        stderr = self._logs.get_fp("stderr")
+        stderr.write(b"[ffpuppet] Launch command: ")
+        stderr.write(" ".join(cmd).encode("utf-8"))
+        stderr.write(b"\n\n")
+        stderr.flush()
 
         # launch the browser
         log.debug("launch command: %r", " ".join(cmd))
@@ -809,8 +738,8 @@ class FFPuppet(object):
             creationflags=subprocess.CREATE_NEW_PROCESS_GROUP if self._platform == "windows" else 0,
             env=self.get_environ(bin_path),
             shell=False,
-            stderr=self._log,
-            stdout=self._log)
+            stderr=stderr,
+            stdout=self._logs.get_fp("stdout"))
         log.debug("launched firefox with pid: %d", self._proc.pid)
 
         self._bootstrap_finish(init_soc, timeout=launch_timeout, url=location)
@@ -901,7 +830,7 @@ class FFPuppet(object):
                        "Content-Length: %d\r\n" \
                        "Content-Type: text/html\r\n" \
                        "Connection: close\r\n\r\n%s" % (len(response), response)
-            conn.sendall(response.encode("UTF-8"))
+            conn.sendall(response.encode("utf-8"))
 
         except socket.error as soc_e:
             raise LaunchError("Failed to launch browser: %s" % soc_e)
@@ -964,7 +893,7 @@ def _parse_args(argv=None):
         help="Use GDB (Linux only)")
     parser.add_argument(
         "-l", "--log",
-        help="log file name")
+        help="Location to save log files")
     parser.add_argument(
         "--log-limit", type=int,
         help="Log file size limit in MBs (default: 'no limit')")
@@ -998,6 +927,39 @@ def _parse_args(argv=None):
         "--xvfb", action="store_true",
         help="Use Xvfb (Linux only)")
     return parser.parse_args(argv)
+
+
+def _dump_to_console(log_dir, dump_limit=0x20000):
+    # order logs, make sure log_stderr is on the end
+    log_list = os.listdir(log_dir)
+    log_list.sort() # sort alphabetically
+    order = ("log_stdout", "log_stderr")
+    for l_order in order:
+        found = None
+        for fname in log_list:
+            if fname.startswith(l_order):
+                found = fname
+                break
+        # move to the end of the print list
+        if found and log_list[-1] != found:
+            log_list.remove(found)
+            log_list.append(found)
+
+    with tempfile.SpooledTemporaryFile(max_size=0x40000, mode="w+") as out_fp:
+        for fname in log_list:
+            full_path = os.path.join(log_dir, fname)
+            fsize = os.stat(full_path).st_size / 1024.0
+            out_fp.write("\n[Dumping log %r (%0.2fKB)]\n" % (fname, fsize))
+            with open(full_path, "rb") as log_fp:
+                out_fp.write(log_fp.read(dump_limit).decode("utf-8", errors="ignore"))
+            if out_fp.tell() > dump_limit:
+                out_fp.write("\nOutput exceeds %dKB! Log tailed. " % (dump_limit / 1024))
+                out_fp.write("Use '--log' to capture full log.")
+                break
+        # python 3.2 and up only supports seeking from the start unless in binary mode
+        dump_pos = max((out_fp.tell() - dump_limit), 0)
+        out_fp.seek(dump_pos)
+        return out_fp.read()
 
 
 def main(argv=None): # pylint: disable=missing-docstring
@@ -1040,23 +1002,14 @@ def main(argv=None): # pylint: disable=missing-docstring
         log.info("Shutting down...")
         ffp.close()
         log.info("Firefox process closed")
-        output_log = open_unique()
-        output_log.close()
-        ffp.save_log(output_log.name)
-        if args.dump:
-            dump_limit = 131072 # limit max console dump size to 128KB
-            with open(output_log.name, "rb") as log_fp:
-                log_fp.seek(0, os.SEEK_END)
-                if log_fp.tell() > dump_limit:
-                    log_fp.seek(dump_limit * -1, 2)
-                else:
-                    log_fp.seek(0)
-                log.info("Dumping browser log...\n%s\n",
-                    log_fp.read().decode("utf-8", errors="ignore"))
-                if log_fp.tell() > dump_limit:
-                    log.warning("Output exceeds 128KB! Use '--log' to capture full log.")
         if args.log is not None:
-            shutil.move(output_log.name, args.log)
-        else:
-            os.remove(output_log.name)
+            ffp.save_logs(args.log)
+        if args.dump:
+            log_dir = tempfile.mkdtemp(prefix="ffp_log_")
+            try:
+                ffp.save_logs(log_dir)
+                log.info("Dumping browser log...\n%s", _dump_to_console(log_dir))
+            finally:
+                if os.path.isdir(log_dir):
+                    shutil.rmtree(log_dir)
         ffp.clean_up()

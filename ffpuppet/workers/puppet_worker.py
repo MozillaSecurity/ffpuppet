@@ -25,7 +25,7 @@ class BaseWorker(object):
     name = "BaseWorker" # override in subclass
 
     def __init__(self):
-        self.log_fp = tempfile.SpooledTemporaryFile(max_size=self.SPOOL_LIMIT, mode="w+")
+        self.log_fp = tempfile.SpooledTemporaryFile(max_size=self.SPOOL_LIMIT, mode="w+b")
         self._worker = None
 
 
@@ -54,7 +54,7 @@ def gdb_log_dumpper(pid):
     try:
         gdb_bin = subprocess.check_output(["which", "gdb"]).decode("utf-8").strip()
     except subprocess.CalledProcessError:
-        return "Could not dump process info, gdb is not installed"
+        return b"Could not dump process info, gdb is not installed"
 
     tmp_fd, cmd_file = tempfile.mkstemp(
         suffix="_gdb.cmd",
@@ -82,14 +82,14 @@ def gdb_log_dumpper(pid):
                 subprocess.check_call(gdb_cmd, shell=False, stderr=log_fp, stdout=log_fp)
             except subprocess.CalledProcessError:
                 log_fp.seek(0)
-                return "Error executing: %s\n%s" % (" ".join(gdb_cmd), log_fp.read())
+                return ("Error executing: %s\n%s" % (" ".join(gdb_cmd), log_fp.read())).encode("utf-8")
             log_fp.seek(0)
 
             flt = re.compile(
                 r"(\[New LWP \d+\]|" \
                 r"No locals\.|" \
                 r"Quit anyway\? \(y or n\) \[answered Y; input not from terminal\])$")
-            return "\n".join([x for x in log_fp.read().splitlines() if flt.match(x) is None])
+            return "\n".join([x for x in log_fp.read().splitlines() if flt.match(x) is None]).encode("utf-8")
     finally:
         if os.path.isfile(cmd_file):
             os.remove(cmd_file)

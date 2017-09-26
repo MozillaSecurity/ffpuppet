@@ -30,41 +30,35 @@ def _run(puppet, log_fp):
     returns None
     """
 
-    line_buffer = ""
-    offset = 0
+    # logs to scan
+    logs = (
+        {"fname": puppet._logs.get_fp("stderr").name, "lbuf": "", "offset": 0},
+        {"fname": puppet._logs.get_fp("stdout").name, "lbuf": "", "offset": 0})
+
     while puppet.is_running():
-        if not os.path.isfile(puppet._log.name):
-            return
-
-        with open(puppet._log.name, "r") as scan_fp:
-            scan_fp.seek(0, os.SEEK_END)
+        for log in logs:
             # check if file has new data
-            if scan_fp.tell() > offset:
-                scan_fp.seek(offset, os.SEEK_SET)
-                data = scan_fp.read(0x10000) # 64KB
-                offset = scan_fp.tell()
-            else:
-                data = None
+            if os.stat(log["fname"]).st_size <= log["offset"]:
+                continue
+            # collect new data
+            with open(log["fname"], "r") as scan_fp:
+                scan_fp.seek(log["offset"], os.SEEK_SET)
+                data = scan_fp.read(0x20000) # 128KB
+                log["offset"] = scan_fp.tell()
+            # prepend chunk of previously read line to data
+            if log["lbuf"]:
+                data = "".join([log["lbuf"], data])
 
-        # don't be a CPU hog if there is no new data
-        if data is None:
-            time.sleep(0.1)
-            continue
+            for token in puppet._abort_tokens:
+                match = token.search(data)
+                if match:
+                    puppet._terminate(5)
+                    log_fp.write(("TOKEN_LOCATED: %s\n" % match.group()).encode("utf-8"))
+                    return
 
-        # prepend chunk of previously read line to data
-        if line_buffer:
-            data = "".join([line_buffer, data])
-
-        for token in puppet._abort_tokens:
-            match = token.search(data)
-            if match:
-                puppet._terminate(5)
-                log_fp.write("TOKEN_LOCATED: %s\n" % match.group())
-                return
-
-        try:
-            line_buffer = data.rsplit("\n", 1)[1]
-        except IndexError:
-            line_buffer = data
+            try:
+                log["lbuf"] = data.rsplit("\n", 1)[1]
+            except IndexError:
+                log["lbuf"] = data
 
         time.sleep(0.05) # don't be a CPU hog
