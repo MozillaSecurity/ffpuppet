@@ -613,7 +613,7 @@ class FFPuppet(object):
         if prefs_js is not None:
             log.debug("using prefs.js: %r", prefs_js)
             if not os.path.isfile(prefs_js):
-                shutil.rmtree(profile, True, onerror=onerror)  # clean up on failure
+                shutil.rmtree(profile, onerror=onerror)  # clean up on failure
                 raise IOError("prefs.js file does not exist: %r" % prefs_js)
             shutil.copyfile(prefs_js, os.path.join(profile, "prefs.js"))
 
@@ -636,7 +636,7 @@ class FFPuppet(object):
                     os.path.abspath(extension),
                     os.path.join(profile, "extensions", "domfuzz@squarefree.com"))
             else:
-                shutil.rmtree(profile, True, onerror=onerror)  # clean up on failure
+                shutil.rmtree(profile, onerror=onerror)  # clean up on failure
                 raise RuntimeError("Unknown extension: %r" % extension)
 
         return profile
