@@ -304,7 +304,7 @@ class FFPuppet(object):
 
         log.debug("clean_up() called")
 
-        self.close()
+        self.close(force_close=True)
         self._logs.clean_up()
 
         # close Xvfb
@@ -333,9 +333,12 @@ class FFPuppet(object):
             pass # in case self._proc is None
 
 
-    def close(self):
+    def close(self, force_close=False):
         """
         Terminate the browser process and clean up all processes.
+
+        @type force_close: bool
+        @param force_close: Do not collect logs... etc, just make sure everything is closed
 
         @rtype: None
         @return: None
@@ -363,7 +366,7 @@ class FFPuppet(object):
         log.debug("copying worker logs to stderr")
         stderr_log_fp = self._logs.get_fp("stderr")
         for worker in self._workers:
-            if worker.log_available():
+            if not force_close and worker.log_available():
                 stderr_log_fp.write(b"\n")
                 stderr_log_fp.write(("[ffpuppet worker]: %s\n" % worker.name).encode("utf-8"))
                 worker.collect_log(dst_fp=stderr_log_fp)
@@ -371,15 +374,16 @@ class FFPuppet(object):
             worker.clean_up()
         self._workers = list()
 
-        # TODO: wait for ASan logs to dump
-        # scan for ASan logs
-        for fname in os.listdir(os.path.dirname(self._asan_prefix)):
-            tmp_file = os.path.join(tempfile.gettempdir(), fname)
-            if tmp_file.startswith(self._asan_prefix):
-                self._logs.add_log(fname, open(tmp_file, "rb"))
+        if not force_close:
+            # TODO: wait for ASan logs to dump
+            # scan for ASan logs
+            for fname in os.listdir(os.path.dirname(self._asan_prefix)):
+                tmp_file = os.path.join(tempfile.gettempdir(), fname)
+                if tmp_file.startswith(self._asan_prefix):
+                    self._logs.add_log(fname, open(tmp_file, "rb"))
 
-        # check for minidumps in the profile and dump them if possible
-        self._dump_minidump_stacks()
+            # check for minidumps in the profile and dump them if possible
+            self._dump_minidump_stacks()
 
         if self._proc is not None:
             self._logs.get_fp("stderr").write(
