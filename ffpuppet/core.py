@@ -216,7 +216,7 @@ class FFPuppet(object):
         return self._logs.clone_log(log_id, offset=offset, target_file=target_file)
 
 
-    def _dump_minidump_stacks(self):
+    def _dump_minidump_stacks(self, frame_count=100):
         log.debug("symbolize minidumps")
 
         if self.profile is None:
@@ -244,14 +244,21 @@ class FFPuppet(object):
             found += 1
             if self._have_mdsw:
                 md_log = "minidump"
-                if found > 1:
-                    "_".join([md_log, fname])
                 self._logs.add_log(md_log)
                 dump_path = os.path.join(minidumps_path, fname)
                 log.debug("calling minidump_stackwalk on %s", dump_path)
                 with open(os.devnull, "w") as null_fp:
-                    subprocess.check_call(["minidump_stackwalk", "-m", dump_path, symbols_path],
-                                          stdout=self._logs.get_fp(md_log), stderr=null_fp)
+                    md = subprocess.check_output(["minidump_stackwalk", "-m", dump_path, symbols_path], stderr=null_fp)
+
+                if md:
+                    minidump = self._logs.get_fp(md_log)
+                    # Match n number of lines or less
+                    frames = re.search(r'(0\|0\|.*)(.*\r?\n){,%d}' % (frame_count + 1), md)
+                    if frames:
+                        minidump.write(frames.group(0))
+                    else:
+                        log.warning("Unable to identify stack in minidump!")
+
             else:
                 log.warning("Found a minidump, but can't process it without minidump_stackwalk."
                             " See README.md for how to obtain it.")
