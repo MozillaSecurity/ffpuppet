@@ -247,17 +247,30 @@ class FFPuppet(object):
                 self._logs.add_log(md_log)
                 dump_path = os.path.join(minidumps_path, fname)
                 log.debug("calling minidump_stackwalk on %s", dump_path)
-                with open(os.devnull, "w") as null_fp:
-                    md = subprocess.check_output(["minidump_stackwalk", "-m", dump_path, symbols_path], stderr=null_fp)
 
-                if md:
-                    minidump = self._logs.get_fp(md_log)
-                    # Match n number of lines or less
-                    frames = re.search(r'(0\|0\|.*)(.*\r?\n){,%d}' % (frame_count + 1), md)
-                    if frames:
-                        minidump.write(frames.group(0))
-                    else:
-                        log.warning("Unable to identify stack in minidump!")
+                with tempfile.TemporaryFile() as tmp_fp:
+                    with open(os.devnull, "w") as null_fp:
+                        subprocess.check_call(["minidump_stackwalk", "-m", dump_path, symbols_path],
+                                              stdout=tmp_fp, stderr=null_fp)
+                    tmp_fp.seek(0)
+                    minidump_data = tmp_fp.readlines(512 * 1024)
+
+                if minidump_data:
+                    minidump_log = self._logs.get_fp(md_log)
+                    crash_thread = None
+                    for line in minidump_data:
+                        if crash_thread is not None:
+                            if line.startswith("%s|" % crash_thread) or line.startswith("0|"):
+                                minidump_log.write(line)
+                        elif line.startswith("OS"):
+                            minidump_log.write(line)
+                        elif line.startswith("CPU"):
+                            minidump_log.write(line)
+                        elif line.startswith("GPU"):
+                            minidump_log.write(line)
+                        elif line.startswith("Crash"):
+                            minidump_log.write(line)
+                            crash_thread = line.split("|")[3]
 
             else:
                 log.warning("Found a minidump, but can't process it without minidump_stackwalk."
