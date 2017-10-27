@@ -45,6 +45,8 @@ class FFPuppet(object):
     LOG_BUF_SIZE = 0x10000 # buffer size used to copy logs
     LOG_CLOSE_TIMEOUT = 10
     LOG_POLL_RATE = 1
+    MDSW_BIN = "minidump_stackwalk"
+    MDSW_MAX_LINES = 150
 
     def __init__(self, use_profile=None, use_valgrind=False, use_xvfb=False, use_gdb=False):
         self._abort_tokens = set() # tokens used to notify log scanner to kill the browser process
@@ -92,7 +94,7 @@ class FFPuppet(object):
         # check for minidump_stackwalk binary
         try:
             with open(os.devnull, "w") as null_fp:
-                subprocess.call(["minidump_stackwalk"], stdout=null_fp, stderr=null_fp)
+                subprocess.call([self.MDSW_BIN], stdout=null_fp, stderr=null_fp)
             self._have_mdsw = True
         except OSError:
             self._have_mdsw = False
@@ -250,26 +252,34 @@ class FFPuppet(object):
 
                 with tempfile.TemporaryFile() as tmp_fp:
                     with open(os.devnull, "w") as null_fp:
-                        subprocess.check_call(["minidump_stackwalk", "-m", dump_path, symbols_path],
+                        subprocess.check_call([self.MDSW_BIN, "-m", dump_path, symbols_path],
                                               stdout=tmp_fp, stderr=null_fp)
                     tmp_fp.seek(0)
 
                     crash_thread = None
+                    line_count = 0 # lines added to the log so far
                     minidump_log = self._logs.get_fp(md_log)
-                    for line in tmp_fp:
-                        if line.startswith('Module'):
+                    for line in tmp_fp: # pylint: disable=not-an-iterable
+                        if line.startswith(b"Module|"):
                             continue
 
-                        # We assume that the first entry in the stack is the crash_thread
-                        # The alternative would be to parse the crash_thread from Crash| line
-                        if not crash_thread and re.match(r"\d+\|", line):
-                            crash_thread = line.split("|")[0]
-
-                        # Exit after parsing the crash_thread stack
-                        if crash_thread and not line.startswith("%s|" % crash_thread):
-                            break
+                        # check if this is a stack entry (starts with '#|')
+                        try:
+                            t_id = int(line.split(b"|")[0])
+                            # assume that the first entry in the stack is the crash_thread
+                            # NOTE: an alternative would be to parse the 'Crash|' line
+                            if crash_thread is None:
+                                crash_thread = t_id
+                            elif t_id != crash_thread:
+                                break
+                        except ValueError:
+                            pass # not a stack entry
 
                         minidump_log.write(line)
+                        line_count += 1
+                        if line_count >= self.MDSW_MAX_LINES:
+                            minidump_log.write(b"Hit max line limit: %d" % line_count)
+                            break
             else:
                 log.warning("Found a minidump, but can't process it without minidump_stackwalk."
                             " See README.md for how to obtain it.")
