@@ -28,6 +28,7 @@ TESTMDSW_BIN = os.path.join(CWD, "testmdsw", "testmdsw.exe") if sys.platform.sta
 
 FFPuppet.LOG_POLL_RATE = 0.01 # reduce this for testing
 FFPuppet.MDSW_BIN = TESTMDSW_BIN
+FFPuppet.MDSW_MAX_LINES = 8
 
 class TestCase(unittest.TestCase):
 
@@ -652,26 +653,35 @@ class PuppetTests(TestCase): # pylint: disable=too-many-public-methods
         tsrv = HTTPTestServer()
         self.addCleanup(tsrv.shutdown)
         ffp.launch(TESTFF_BIN, location=tsrv.get_addr())
+        # create "test.dmp" file
         out_dmp = ["OS|Linux|0.0.0 sys info...", "CPU|amd64|more info|8", "GPU|||", "Crash|SIGSEGV|0x7fff27aaeff8|0",
             "Module|firefox||firefox|a|0x1|0x1|1", "Module|firefox||firefox|a|0x1|0x2|1", "Module|firefox||firefox|a|0x1|0x3|1",
-            "", "0|0|blah|foo|a/bar.c|123|0x0", "0|1|blat|foo|a/bar.c|223|0x0", "0|3|blas|foo|a/bar.c|423|0x0",
-            "1|0|libpthread-2.23.so||||0xd360", "1|1|swrast_dri.so||||0x7237f3", "1|2|libplds4.so|_fini|||0x163",
-            "2|5|swrast_dri.so||||0x723657", "2|6|libpthread-2.23.so||||0x76ba", "2|7|libc-2.23.so||||0x1073dd"]
+            "", "0|0|blah|foo|a/bar.c|123|0x0", "0|1|blat|foo|a/bar.c|223|0x0", "0|2|blas|foo|a/bar.c|423|0x0",
+            "0|3|blas|foo|a/bar.c|423|0x0", "1|0|libpthread-2.23.so||||0xd360", "1|1|swrast_dri.so||||0x7237f3",
+            "1|2|libplds4.so|_fini|||0x163", "2|0|swrast_dri.so||||0x723657", "2|1|libpthread-2.23.so||||0x76ba",
+            "2|3|libc-2.23.so||||0x1073dd"]
         md_dir = os.path.join(ffp.profile, "minidumps")
         if not os.path.isdir(md_dir):
             os.mkdir(md_dir)
         ffp._last_bin_path = ffp.profile # pylint: disable=protected-access
-        sym_dir = os.path.join(ffp.profile, "symbols")
+        sym_dir = os.path.join(ffp.profile, "symbols") # needs to exist to satisfy a check
         if not os.path.isdir(sym_dir):
             os.mkdir(sym_dir)
         with open(os.path.join(md_dir, "test.dmp"), "w") as out_fp:
             out_fp.write("\n".join(out_dmp))
+        # create a dummy file
+        with open(os.path.join(md_dir, "not_a_dmp.txt"), "w") as out_fp:
+            out_fp.write("this file should be ignored")
+        # process .dmp file
         ffp.close()
         ffp.save_logs(self.logs)
         self.assertIn("log_minidump.txt", os.listdir(self.logs))
         with open(os.path.join(self.logs, "log_minidump.txt"), "r") as in_fp:
-            removed = set(out_dmp) - set(in_fp.read().splitlines())
-        self.assertEqual(len(removed), 9)
+            md_lines = in_fp.read().splitlines()
+        self.assertEqual(len(set(out_dmp) - set(md_lines)), 10)
+        self.assertTrue(md_lines[-1].startswith("Hit max line limit:"))
+        md_lines.pop() # remove the limit msg
+        self.assertEqual(len(md_lines), FFPuppet.MDSW_MAX_LINES)
 
 
 class ScriptTests(TestCase):
