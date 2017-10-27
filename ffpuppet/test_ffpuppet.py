@@ -679,7 +679,7 @@ class PuppetTests(TestCase): # pylint: disable=too-many-public-methods
         with open(os.path.join(self.logs, "log_minidump.txt"), "r") as in_fp:
             md_lines = in_fp.read().splitlines()
         self.assertEqual(len(set(out_dmp) - set(md_lines)), 10)
-        self.assertTrue(md_lines[-1].startswith("Hit max line limit:"))
+        self.assertTrue(md_lines[-1].startswith("WARNING: Hit line output limit!"))
         md_lines.pop() # remove the limit msg
         self.assertEqual(len(md_lines), FFPuppet.MDSW_MAX_LINES)
 
