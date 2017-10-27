@@ -254,16 +254,19 @@ class FFPuppet(object):
                                               stdout=tmp_fp, stderr=null_fp)
                     tmp_fp.seek(0)
 
-                    frame_count = 0
+                    crash_thread = None
                     minidump_log = self._logs.get_fp(md_log)
-                    for line in tmp_fp.readlines():
-                        if line.startswith('Module|'):
+                    for line in tmp_fp:
+                        if line.startswith('Module'):
                             continue
 
-                        if re.match(r"\d+\|", line):
-                            frame_count += 1
+                        # We assume that the first entry in the stack is the crash_thread
+                        # The alternative would be to parse the crash_thread from Crash| line
+                        if not crash_thread and re.match(r"\d+\|", line):
+                            crash_thread = line.split("|")[0]
 
-                        if frame_count > 150:
+                        # Exit after parsing the crash_thread stack
+                        if crash_thread and not line.startswith("%s|" % crash_thread):
                             break
 
                         minidump_log.write(line)
