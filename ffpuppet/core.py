@@ -278,7 +278,8 @@ class FFPuppet(object):
                         minidump_log.write(line)
                         line_count += 1
                         if line_count >= self.MDSW_MAX_LINES:
-                            minidump_log.write(b"Hit max line limit: %d" % line_count)
+                            log.warning("MDSW_MAX_LINES (%d) limit reached" % self.MDSW_MAX_LINES)
+                            minidump_log.write(b"WARNING: Hit line output limit!")
                             break
             else:
                 log.warning("Found a minidump, but can't process it without minidump_stackwalk."
