@@ -30,7 +30,7 @@ install:
     - if [[ $TRAVIS_OS_NAME == "linux" ]] && [ $TRAVIS_PYTHON_VERSION == 2.7 -o $TRAVIS_PYTHON_VERSION == 3.5 ]; then pip install pylint pytest-cov python-coveralls; fi
 
 script:
-    - if [[ $TRAVIS_OS_NAME == "linux" ]] && [ $TRAVIS_PYTHON_VERSION == 2.7 -o $TRAVIS_PYTHON_VERSION == 3.5 ]; then pytest -v --cov=. --cov-report term-missing --cov-config .coveragerc && pylint --errors-only --ignore=testff.py,debugger_windbg.py ffpuppet; else pytest -v; fi
+    - if [[ $TRAVIS_OS_NAME == "linux" ]] && [ $TRAVIS_PYTHON_VERSION == 2.7 -o $TRAVIS_PYTHON_VERSION == 3.5 ]; then pytest -v --cov=. --cov-report term-missing --cov-config .coveragerc && pylint --errors-only --ignore=testff.py,testmdsw.py,debugger_windbg.py ffpuppet; else pytest -v; fi
 
 after_success:
     - if [[ $TRAVIS_OS_NAME == "linux" ]] && [ $TRAVIS_PYTHON_VERSION == 2.7 -o $TRAVIS_PYTHON_VERSION == 3.5 ]; then coveralls; fi

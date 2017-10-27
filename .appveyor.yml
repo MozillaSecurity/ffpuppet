@@ -13,6 +13,7 @@ install:
     - "%PYTHON%\\python.exe -m pip install pylint pytest"
     - py -3.4 -m pip install py2exe
     - py -3.4 -m py2exe.build_exe -O -b 0 -d "ffpuppet\\testff" "ffpuppet\\testff.py"
+    - py -3.4 -m py2exe.build_exe -O -b 0 -d "ffpuppet\\testmdsw" "ffpuppet\\testmdsw.py"
 build: off
 test_script:
-    - "%PYTHON%\\python.exe -m pytest -v && %PYTHON%\\python.exe -m pylint --errors-only --ignore=testff.py,debugger_windbg.py ffpuppet"
+    - "%PYTHON%\\python.exe -m pytest -v && %PYTHON%\\python.exe -m pylint --errors-only --ignore=testff.py,testmdsw.py,debugger_windbg.py ffpuppet"
