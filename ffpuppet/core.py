@@ -216,7 +216,7 @@ class FFPuppet(object):
         return self._logs.clone_log(log_id, offset=offset, target_file=target_file)
 
 
-    def _dump_minidump_stacks(self, frame_count=100):
+    def _dump_minidump_stacks(self):
         log.debug("symbolize minidumps")
 
         if self.profile is None:
@@ -253,25 +253,20 @@ class FFPuppet(object):
                         subprocess.check_call(["minidump_stackwalk", "-m", dump_path, symbols_path],
                                               stdout=tmp_fp, stderr=null_fp)
                     tmp_fp.seek(0)
-                    minidump_data = tmp_fp.readlines(512 * 1024)
 
-                if minidump_data:
+                    frame_count = 0
                     minidump_log = self._logs.get_fp(md_log)
-                    crash_thread = None
-                    for line in minidump_data:
-                        if crash_thread is not None:
-                            if line.startswith("%s|" % crash_thread) or line.startswith("0|"):
-                                minidump_log.write(line)
-                        elif line.startswith("OS"):
-                            minidump_log.write(line)
-                        elif line.startswith("CPU"):
-                            minidump_log.write(line)
-                        elif line.startswith("GPU"):
-                            minidump_log.write(line)
-                        elif line.startswith("Crash"):
-                            minidump_log.write(line)
-                            crash_thread = line.split("|")[3]
+                    for line in tmp_fp.readlines():
+                        if line.startswith('Module|'):
+                            continue
 
+                        if re.match(r"\d+\|", line):
+                            frame_count += 1
+
+                        if frame_count > 150:
+                            break
+
+                        minidump_log.write(line)
             else:
                 log.warning("Found a minidump, but can't process it without minidump_stackwalk."
                             " See README.md for how to obtain it.")
