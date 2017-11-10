@@ -290,10 +290,12 @@ class FFPuppet(object):
 
 
     @staticmethod
-    def poll_file(filename, poll_rate=0.1, idle_wait=1.0, timeout=60):
+    def poll_file(filename, poll_rate=0.1, idle_wait=1.5, timeout=60):
         """
         Wait for file modification to complete. This is done by monitoring the
         last modified time of the specified file.
+        NOTE: This depends on file system data being updated and this might not be uniform
+        across platforms, even different file systems on the same platform may act differently.
 
         @type filename: String
         @param filename: Name of the file to poll.
@@ -314,7 +316,7 @@ class FFPuppet(object):
         assert timeout is None or timeout > idle_wait, "timeout must be greater than idle_wait time"
         assert poll_rate <= idle_wait, "poll_rate must be less then or equal to idle_wait"
         if not os.path.isfile(filename):
-            log.debug("Cannot poll %r does not exist", filename)
+            log.debug("Cannot poll %r. File does not exist", filename)
             return None
         start_time = time.time()
         while time.time() - os.stat(filename).st_mtime < idle_wait:
