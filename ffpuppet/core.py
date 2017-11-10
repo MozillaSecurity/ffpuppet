@@ -248,6 +248,7 @@ class FFPuppet(object):
                 md_log = "minidump"
                 self._logs.add_log(md_log)
                 dump_path = os.path.join(minidumps_path, fname)
+                self.poll_file(dump_path)
                 log.debug("calling minidump_stackwalk on %s", dump_path)
 
                 with tempfile.TemporaryFile() as tmp_fp:
@@ -286,6 +287,42 @@ class FFPuppet(object):
                             " See README.md for how to obtain it.")
         if found > 1:
             log.warning("Found %d minidumps! Expecting 0 or 1", found)
+
+
+    @staticmethod
+    def poll_file(filename, poll_rate=0.1, idle_wait=1.0, timeout=60):
+        """
+        Wait for file modification to complete. This is done by monitoring the
+        last modified time of the specified file.
+
+        @type filename: String
+        @param filename: Name of the file to poll.
+
+        @type poll_rate: float
+        @param poll_rate: Frequency to check the file modification time.
+
+        @type idle_wait: float
+        @param idle_wait: Amount of time that must elapse without file modification to exit.
+
+        @type timeout: float
+        @param timeout: Amount of time in seconds to poll, None will poll forever.
+
+        @rtype: int
+        @return: file size in bytes or None on failure/timeout.
+        """
+
+        assert timeout is None or timeout > idle_wait, "timeout must be greater than idle_wait time"
+        assert poll_rate <= idle_wait, "poll_rate must be less then or equal to idle_wait"
+        if not os.path.isfile(filename):
+            log.debug("Cannot poll %r does not exist", filename)
+            return None
+        start_time = time.time()
+        while time.time() - os.stat(filename).st_mtime < idle_wait:
+            if timeout is not None and start_time + timeout < time.time():
+                log.warning("%r was still being modified after %0.2f seconds", filename, timeout)
+                return None
+            time.sleep(poll_rate)
+        return os.stat(filename).st_size
 
 
     def log_length(self, log_id):
@@ -404,11 +441,11 @@ class FFPuppet(object):
         self._workers = list()
 
         if not force_close:
-            # TODO: wait for ASan logs to dump
             # scan for ASan logs
             for fname in os.listdir(os.path.dirname(self._asan_prefix)):
                 tmp_file = os.path.join(tempfile.gettempdir(), fname)
                 if tmp_file.startswith(self._asan_prefix):
+                    self.poll_file(tmp_file)
                     self._logs.add_log(fname, open(tmp_file, "rb"))
 
             # check for minidumps in the profile and dump them if possible

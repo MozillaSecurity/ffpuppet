@@ -683,6 +683,54 @@ class PuppetTests(TestCase): # pylint: disable=too-many-public-methods
         md_lines.pop() # remove the limit msg
         self.assertEqual(len(md_lines), FFPuppet.MDSW_MAX_LINES)
 
+    def test_31(self):
+        "test poll_file()"
+        def populate_file(filename, size, end_token, delay, abort):
+            with open(filename, "wb") as out_fp:
+                while out_fp.tell() < size:
+                    out_fp.write(b"a")
+                    out_fp.flush()
+                    if abort.is_set():
+                        return
+                    time.sleep(delay)
+                out_fp.write(end_token)
+        abort_evt = threading.Event()
+        e_token = b"EOF"
+        # wait for a file to finish being written
+        t_size = 10
+        w_thread = threading.Thread(
+            target=populate_file,
+            args=(self.tmpfn, t_size, e_token, 0.1, abort_evt))
+        w_thread.start()
+        try:
+            FFPuppet.poll_file(self.tmpfn)
+        finally:
+            abort_evt.set()
+            w_thread.join()
+            abort_evt.clear()
+        with open(self.tmpfn, "rb") as in_fp:
+            data = in_fp.read()
+        self.assertEqual(len(data), t_size + len(e_token))
+        self.assertTrue(data.endswith(e_token))
+        open(self.tmpfn, "wb").close() # clear out the file
+        # timeout while waiting for a file to finish being written
+        t_size = 100
+        w_thread = threading.Thread(
+            target=populate_file,
+            args=(self.tmpfn, t_size, e_token, 0.1, abort_evt))
+        w_thread.start()
+        try:
+            result = FFPuppet.poll_file(self.tmpfn, idle_wait=0.9, timeout=1)
+        finally:
+            abort_evt.set()
+            w_thread.join()
+            abort_evt.clear()
+        with open(self.tmpfn, "rb") as in_fp:
+            data = in_fp.read()
+        self.assertIsNone(result)
+        self.assertLess(len(data), t_size + len(e_token))
+        self.assertFalse(data.endswith(e_token))
+
 
 class ScriptTests(TestCase):
     @classmethod
