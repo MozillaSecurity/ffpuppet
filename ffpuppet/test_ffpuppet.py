@@ -686,16 +686,22 @@ class PuppetTests(TestCase): # pylint: disable=too-many-public-methods
     def test_31(self):
         "test poll_file()"
         def populate_file(filename, size, end_token, delay, abort):
-            with open(filename, "wb") as out_fp:
-                while out_fp.tell() < size:
+            open(filename, "wb").close()
+            while True:
+                with open(filename, "ab") as out_fp:
                     out_fp.write(b"a")
                     out_fp.flush()
-                    if abort.is_set():
-                        return
-                    time.sleep(delay)
+                if os.stat(filename).st_size >= size:
+                    break
+                if abort.is_set():
+                    return
+                time.sleep(delay)
+            with open(filename, "ab") as out_fp:
                 out_fp.write(end_token)
         abort_evt = threading.Event()
         e_token = b"EOF"
+        # test with invalid file
+        self.assertIsNone(FFPuppet.poll_file("invalid_file"))
         # wait for a file to finish being written
         t_size = 10
         w_thread = threading.Thread(
@@ -712,15 +718,14 @@ class PuppetTests(TestCase): # pylint: disable=too-many-public-methods
             data = in_fp.read()
         self.assertEqual(len(data), t_size + len(e_token))
         self.assertTrue(data.endswith(e_token))
-        open(self.tmpfn, "wb").close() # clear out the file
         # timeout while waiting for a file to finish being written
         t_size = 100
         w_thread = threading.Thread(
             target=populate_file,
-            args=(self.tmpfn, t_size, e_token, 0.1, abort_evt))
+            args=(self.tmpfn, t_size, e_token, 0.05, abort_evt))
         w_thread.start()
         try:
-            result = FFPuppet.poll_file(self.tmpfn, idle_wait=0.9, timeout=1)
+            result = FFPuppet.poll_file(self.tmpfn, idle_wait=1.99, timeout=2)
         finally:
             abort_evt.set()
             w_thread.join()
