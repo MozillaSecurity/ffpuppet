@@ -6,6 +6,7 @@
 
 import argparse
 import errno
+import json
 import logging
 import os
 import platform
@@ -16,6 +17,7 @@ import socket
 import subprocess
 import tempfile
 import time
+from xml.etree import ElementTree
 try: # py 2-3 compatibility
     from urllib import pathname2url # pylint: disable=no-name-in-module
 except ImportError:
@@ -610,7 +612,7 @@ class FFPuppet(object):
         """
         Create a profile to be used with Firefox
 
-        @type extension: String
+        @type extension: String, or list of Strings
         @param extension: Path to an extension (e.g. DOMFuzz fuzzPriv extension) to be installed.
 
         @type prefs_js: String
@@ -650,22 +652,52 @@ class FFPuppet(object):
                 with open(times_json, "w") as times_fp:
                     times_fp.write('{"created":%d}' % (int(time.time()) * 1000))
 
-        # XXX: fuzzpriv extension support
-        # should be removed when bug 1322400 is resolved if it is no longer used
-        if extension is not None:
-            os.mkdir(os.path.join(profile, "extensions"))
-            if os.path.isfile(extension) and extension.endswith(".xpi"):
-                shutil.copyfile(
-                    extension,
-                    os.path.join(profile, "extensions", os.path.basename(extension)))
-            elif os.path.isdir(extension):
-                shutil.copytree(
-                    os.path.abspath(extension),
-                    os.path.join(profile, "extensions", "domfuzz@squarefree.com"))
+        # extension support
+        try:
+            if extension is None:
+                extensions = []
+            elif isinstance(extension, (list, tuple)):
+                extensions = extension
             else:
-                shutil.rmtree(profile, True) # clean up on failure
-                raise RuntimeError("Unknown extension: %r" % extension)
-
+                extensions = [extension]
+            if extensions:
+                os.mkdir(os.path.join(profile, "extensions"))
+            for ext in extensions:
+                if os.path.isfile(ext) and ext.endswith(".xpi"):
+                    shutil.copyfile(
+                        ext,
+                        os.path.join(profile, "extensions", os.path.basename(ext)))
+                elif os.path.isdir(ext):
+                    # read manifest to see what the folder should be named
+                    ext_name = None
+                    if os.path.isfile(os.path.join(ext, "manifest.json")):
+                        try:
+                            with open(os.path.join(ext, "manifest.json")) as manifest:
+                                manifest = json.load(manifest)
+                            ext_name = manifest["applications"]["gecko"]["id"]
+                        except Exception as exc:
+                            log.debug("Failed to parse manifest.json: %s", exc)
+                    elif os.path.isfile(os.path.join(ext, "install.rdf")):
+                        try:
+                            xmlns = {"x": "http://www.w3.org/1999/02/22-rdf-syntax-ns#",
+                                     "em": "http://www.mozilla.org/2004/em-rdf#"}
+                            tree = ElementTree.parse(os.path.join(ext, "install.rdf"))
+                            assert tree.getroot().tag == "{%s}RDF" % xmlns["x"]
+                            ids = tree.findall("./x:Description/em:id", namespaces=xmlns)
+                            assert len(ids) == 1
+                            ext_name = ids[0].text
+                        except Exception as exc:
+                            log.debug("Failed to parse install.rdf: %s", exc)
+                    if ext_name is None:
+                        raise RuntimeError("Failed to find extension id in manifest: %r" % ext)
+                    shutil.copytree(
+                        os.path.abspath(ext),
+                        os.path.join(profile, "extensions", ext_name))
+                else:
+                    raise RuntimeError("Unknown extension: %r" % ext)
+        except:
+            shutil.rmtree(profile, True) # clean up on failure
+            raise
         return profile
 
 
@@ -698,7 +730,7 @@ class FFPuppet(object):
         @param safe_mode: Launch Firefox in safe mode. WARNING: Launching in safe mode blocks with
                           a dialog that must be dismissed manually.
 
-        @type extension: String
+        @type extension: String, or list of Strings
         @param extension: Path to an extension (e.g. DOMFuzz fuzzPriv extension) to be installed.
 
         @rtype: None
@@ -913,7 +945,7 @@ def _parse_args(argv=None):
         "-d", "--dump", action="store_true",
         help="Display browser log on process exit")
     parser.add_argument(
-        "-e", "--extension",
+        "-e", "--extension", action="append",
         help="Install the fuzzPriv extension (specify path to funfuzz/dom/extension)")
     parser.add_argument(
         "-g", "--gdb", action="store_true",

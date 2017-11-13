@@ -419,10 +419,6 @@ class PuppetTests(TestCase): # pylint: disable=too-many-public-methods
         with self.assertRaisesRegex(IOError, "prefs.js file does not exist: 'fake_prefs'"):
             FFPuppet.create_profile(prefs_js="fake_prefs")
 
-        # only the fuzzPriv ext is supported atm and support will be removed in the future
-        with self.assertRaisesRegex(RuntimeError, "Unknown extension: 'fake_ext'"):
-            FFPuppet.create_profile(extension="fake_ext")
-
         # try creating a profile from scratch, does nothing but create a directory to be populated
         prof = FFPuppet.create_profile()
         self.assertTrue(os.path.isdir(prof))
@@ -735,6 +731,88 @@ class PuppetTests(TestCase): # pylint: disable=too-many-public-methods
         self.assertIsNone(result)
         self.assertLess(len(data), t_size + len(e_token))
         self.assertFalse(data.endswith(e_token))
+
+    def test_31(self):
+        "test create_profile() extension support"
+
+        # create a profile with a non-existent ext
+        with self.assertRaisesRegex(RuntimeError, "Unknown extension: 'fake_ext'"):
+            FFPuppet.create_profile(extension="fake_ext")
+
+        # create a profile with an xpi ext
+        with open("xpi-ext.xpi", "w"):
+            pass
+        self.addCleanup(os.unlink, "xpi-ext.xpi")
+        prof = FFPuppet.create_profile(extension="xpi-ext.xpi")
+        self.addCleanup(shutil.rmtree, prof)
+        self.assertEqual(os.listdir(prof), ["extensions"])
+        self.assertEqual(os.listdir(os.path.join(prof, "extensions")), ["xpi-ext.xpi"])
+
+        # create a profile with an unknown ext
+        os.mkdir("dummy_ext")
+        self.addCleanup(os.rmdir, "dummy_ext")
+        with self.assertRaisesRegex(RuntimeError, "Failed to find extension id in manifest: 'dummy_ext'"):
+            FFPuppet.create_profile(extension="dummy_ext")
+
+        # create a profile with a bad legacy ext
+        os.mkdir("bad_legacy")
+        self.addCleanup(shutil.rmtree, "bad_legacy")
+        with open(os.path.join("bad_legacy", "install.rdf"), "w"):
+            pass
+        with self.assertRaisesRegex(RuntimeError, "Failed to find extension id in manifest: 'bad_legacy'"):
+            FFPuppet.create_profile(extension="bad_legacy")
+
+        # create a profile with a good legacy ext
+        os.mkdir("good_legacy")
+        self.addCleanup(shutil.rmtree, "good_legacy")
+        with open(os.path.join("good_legacy", "install.rdf"), "w") as manifest:
+            manifest.write("""<?xml version="1.0"?>
+                              <RDF xmlns="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+                                   xmlns:em="http://www.mozilla.org/2004/em-rdf#">
+                                <Description about="urn:mozilla:install-manifest">
+                                  <em:id>good-ext-id</em:id>
+                                </Description>
+                              </RDF>""")
+        with open(os.path.join("good_legacy", "example.js"), "w"):
+            pass
+        prof = FFPuppet.create_profile(extension="good_legacy")
+        self.addCleanup(shutil.rmtree, prof)
+        self.assertEqual(os.listdir(prof), ["extensions"])
+        self.assertEqual(os.listdir(os.path.join(prof, "extensions")), ["good-ext-id"])
+        self.assertEqual(set(os.listdir(os.path.join(prof, "extensions", "good-ext-id"))),
+                         {"install.rdf", "example.js"})
+
+        # create a profile with a bad webext
+        os.mkdir("bad_webext")
+        self.addCleanup(shutil.rmtree, "bad_webext")
+        with open(os.path.join("bad_webext", "manifest.json"), "w"):
+            pass
+        with self.assertRaisesRegex(RuntimeError, "Failed to find extension id in manifest: 'bad_webext'"):
+            FFPuppet.create_profile(extension="bad_webext")
+
+        # create a profile with a good webext
+        os.mkdir("good_webext")
+        self.addCleanup(shutil.rmtree, "good_webext")
+        with open(os.path.join("good_webext", "manifest.json"), "w") as manifest:
+            manifest.write("""{"applications": {"gecko": {"id": "good-webext-id"}}}""")
+        with open(os.path.join("good_webext", "example.js"), "w"):
+            pass
+        prof = FFPuppet.create_profile(extension="good_webext")
+        self.addCleanup(shutil.rmtree, prof)
+        self.assertEqual(os.listdir(prof), ["extensions"])
+        self.assertEqual(os.listdir(os.path.join(prof, "extensions")), ["good-webext-id"])
+        self.assertEqual(set(os.listdir(os.path.join(prof, "extensions", "good-webext-id"))),
+                         {"manifest.json", "example.js"})
+
+        # create a profile with multiple extensions
+        prof = FFPuppet.create_profile(extension=["good_webext", "good_legacy"])
+        self.addCleanup(shutil.rmtree, prof)
+        self.assertEqual(os.listdir(prof), ["extensions"])
+        self.assertEqual(set(os.listdir(os.path.join(prof, "extensions"))), {"good-ext-id", "good-webext-id"})
+        self.assertEqual(set(os.listdir(os.path.join(prof, "extensions", "good-webext-id"))),
+                         {"manifest.json", "example.js"})
+        self.assertEqual(set(os.listdir(os.path.join(prof, "extensions", "good-ext-id"))),
+                         {"install.rdf", "example.js"})
 
 
 class ScriptTests(TestCase):
