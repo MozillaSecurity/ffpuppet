@@ -732,7 +732,7 @@ class PuppetTests(TestCase): # pylint: disable=too-many-public-methods
         self.assertLess(len(data), t_size + len(e_token))
         self.assertFalse(data.endswith(e_token))
 
-    def test_31(self):
+    def test_32(self):
         "test create_profile() extension support"
 
         # create a profile with a non-existent ext
