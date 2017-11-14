@@ -660,7 +660,7 @@ class FFPuppet(object):
                 extensions = extension
             else:
                 extensions = [extension]
-            if extensions:
+            if extensions and not os.path.isdir(os.path.join(profile, "extensions")):
                 os.mkdir(os.path.join(profile, "extensions"))
             for ext in extensions:
                 if os.path.isfile(ext) and ext.endswith(".xpi"):
@@ -675,7 +675,7 @@ class FFPuppet(object):
                             with open(os.path.join(ext, "manifest.json")) as manifest:
                                 manifest = json.load(manifest)
                             ext_name = manifest["applications"]["gecko"]["id"]
-                        except Exception as exc:
+                        except (IOError, KeyError, ValueError) as exc:
                             log.debug("Failed to parse manifest.json: %s", exc)
                     elif os.path.isfile(os.path.join(ext, "install.rdf")):
                         try:
@@ -686,7 +686,7 @@ class FFPuppet(object):
                             ids = tree.findall("./x:Description/em:id", namespaces=xmlns)
                             assert len(ids) == 1
                             ext_name = ids[0].text
-                        except Exception as exc:
+                        except (AssertionError, IOError, ElementTree.ParseError) as exc:
                             log.debug("Failed to parse install.rdf: %s", exc)
                     if ext_name is None:
                         raise RuntimeError("Failed to find extension id in manifest: %r" % ext)
