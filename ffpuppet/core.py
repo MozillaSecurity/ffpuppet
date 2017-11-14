@@ -246,47 +246,50 @@ class FFPuppet(object):
             if not fname.endswith(".dmp"):
                 continue
             found += 1
-            if self._have_mdsw:
-                md_log = "minidump"
-                self._logs.add_log(md_log)
-                dump_path = os.path.join(minidumps_path, fname)
-                self.poll_file(dump_path)
-                log.debug("calling minidump_stackwalk on %s", dump_path)
 
-                with tempfile.TemporaryFile() as tmp_fp:
-                    with open(os.devnull, "w") as null_fp:
-                        subprocess.check_call([self.MDSW_BIN, "-m", dump_path, symbols_path],
-                                              stdout=tmp_fp, stderr=null_fp)
-                    tmp_fp.seek(0)
-
-                    crash_thread = None
-                    line_count = 0 # lines added to the log so far
-                    minidump_log = self._logs.get_fp(md_log)
-                    for line in tmp_fp: # pylint: disable=not-an-iterable
-                        if line.startswith(b"Module|"):
-                            continue
-
-                        # check if this is a stack entry (starts with '#|')
-                        try:
-                            t_id = int(line.split(b"|")[0])
-                            # assume that the first entry in the stack is the crash_thread
-                            # NOTE: an alternative would be to parse the 'Crash|' line
-                            if crash_thread is None:
-                                crash_thread = t_id
-                            elif t_id != crash_thread:
-                                break
-                        except ValueError:
-                            pass # not a stack entry
-
-                        minidump_log.write(line)
-                        line_count += 1
-                        if line_count >= self.MDSW_MAX_LINES:
-                            log.warning("MDSW_MAX_LINES (%d) limit reached" % self.MDSW_MAX_LINES)
-                            minidump_log.write(b"WARNING: Hit line output limit!")
-                            break
-            else:
+            if not self._have_mdsw:
                 log.warning("Found a minidump, but can't process it without minidump_stackwalk."
                             " See README.md for how to obtain it.")
+                break
+
+            md_log = "minidump"
+            self._logs.add_log(md_log)
+            dump_path = os.path.join(minidumps_path, fname)
+            self.poll_file(dump_path)
+            log.debug("calling minidump_stackwalk on %s", dump_path)
+
+            with tempfile.TemporaryFile() as out_fp:
+                ret_val = subprocess.call([self.MDSW_BIN, "-m", dump_path, symbols_path],
+                                          stdout=out_fp, stderr=out_fp)
+                if ret_val != 0:
+                    log.warning("minidump_stackwalk returned %r", ret_val)
+
+                out_fp.seek(0)
+                crash_thread = None
+                line_count = 0 # lines added to the log so far
+                minidump_log = self._logs.get_fp(md_log)
+                for line in out_fp: # pylint: disable=not-an-iterable
+                    if line.startswith(b"Module|"):
+                        continue
+
+                    # check if this is a stack entry (starts with '#|')
+                    try:
+                        t_id = int(line.split(b"|")[0])
+                        # assume that the first entry in the stack is the crash_thread
+                        # NOTE: an alternative would be to parse the 'Crash|' line
+                        if crash_thread is None:
+                            crash_thread = t_id
+                        elif t_id != crash_thread:
+                            break
+                    except ValueError:
+                        pass # not a stack entry
+
+                    minidump_log.write(line)
+                    line_count += 1
+                    if line_count >= self.MDSW_MAX_LINES:
+                        log.warning("MDSW_MAX_LINES (%d) limit reached", self.MDSW_MAX_LINES)
+                        minidump_log.write(b"WARNING: Hit line output limit!")
+                        break
         if found > 1:
             log.warning("Found %d minidumps! Expecting 0 or 1", found)
 
