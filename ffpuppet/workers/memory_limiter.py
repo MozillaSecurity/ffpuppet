@@ -3,7 +3,6 @@
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
 import os
-import platform
 import threading
 import time
 
@@ -40,7 +39,6 @@ def _run(process_id, limit, log_fp):
     returns None
     """
 
-    plat = platform.system().lower()
     try:
         process = psutil.Process(process_id)
     except psutil.NoSuchProcess:
@@ -70,13 +68,6 @@ def _run(process_id, limit, log_fp):
             except psutil.NoSuchProcess:
                 pass # process is dead?
 
-            if plat == "linux":
-                mem_hog = (0, 0) # process using the most memory
-                for pid, proc_usage in proc_info:
-                    if mem_hog[1] < proc_usage:
-                        mem_hog = (pid, proc_usage)
-                log_fp.write(puppet_worker.gdb_log_dumpper(mem_hog[0]))
-                log_fp.write(b"\n")
             log_fp.write(("MEMORY_LIMIT_EXCEEDED: %d\n" % total_usage).encode("utf-8"))
             log_fp.write(("Current Limit: %d (%dMB)\n" % (limit, limit/1048576)).encode("utf-8"))
             log_fp.write(("Parent PID: %d\n" % process_id).encode("utf-8"))
@@ -84,4 +75,4 @@ def _run(process_id, limit, log_fp):
                 log_fp.write(("-> PID %6d: %10d\n" % (pid, proc_usage)).encode("utf-8"))
             break
 
-        time.sleep(0.1) # check 10x a second
+        time.sleep(0.25) # check maximum 4x per second
