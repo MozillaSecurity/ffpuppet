@@ -552,35 +552,7 @@ class PuppetTests(TestCase): # pylint: disable=too-many-public-methods
             ffp.close()
             self.assertFalse(ffp.is_running())
 
-    #def test_27(self):
-    #    "test collecting log data that is dumped after parent process is closed"
-    #    FFPuppet.LOG_POLL_RATE = 0.2
-    #    FFPuppet.LOG_CLOSE_TIMEOUT = 1
-    #    try:
-    #        ffp = FFPuppet()
-    #        self.addCleanup(ffp.clean_up)
-    #        ffp.launch(TESTFF_BIN)
-    #        ffp._log.write("blah\n")
-    #        def _spam_thread():
-    #            while not ffp._log.closed:
-    #                ffp._log.write("blah\n")
-    #                time.sleep(0.1)
-    #        spam_thread = threading.Thread(target=_spam_thread)
-    #        try:
-    #            spam_thread.start()
-    #            ffp.close()
-    #        finally:
-    #            spam_thread.join()
-    #        self.assertFalse(ffp.is_running())
-    #        self.assertIsNone(ffp.wait())
-    #        ffp.save_log(self.tmpfn)
-    #        with open(self.tmpfn, "rb") as log_fp:
-    #            self.assertIn(b"[ffpuppet] WARNING! Log may be incomplete!", log_fp.read())
-    #    finally:
-    #        FFPuppet.LOG_POLL_RATE = 0.001
-    #        FFPuppet.LOG_CLOSE_TIMEOUT = 10
-
-    def test_28(self):
+    def test_27(self):
         "test hitting log size limit"
         ffp = FFPuppet()
         self.addCleanup(ffp.clean_up)
@@ -601,7 +573,7 @@ class PuppetTests(TestCase): # pylint: disable=too-many-public-methods
         with open(os.path.join(self.logs, "log_stderr.txt"), "r") as log_fp:
             self.assertIn("LOG_SIZE_LIMIT_EXCEEDED", log_fp.read())
 
-    def test_29(self):
+    def test_28(self):
         "test collecting and cleaning up ASan logs"
         ffp = FFPuppet()
         self.addCleanup(ffp.clean_up)
@@ -642,7 +614,7 @@ class PuppetTests(TestCase): # pylint: disable=too-many-public-methods
         for t_log in test_logs:
             self.assertFalse(os.path.isfile(t_log))
 
-    def test_30(self):
+    def test_29(self):
         "test minidump processing"
         ffp = FFPuppet()
         self.addCleanup(ffp.clean_up)
@@ -680,7 +652,7 @@ class PuppetTests(TestCase): # pylint: disable=too-many-public-methods
         md_lines.pop() # remove the limit msg
         self.assertEqual(len(md_lines), FFPuppet.MDSW_MAX_LINES)
 
-    def test_31(self):
+    def test_30(self):
         "test poll_file()"
         def populate_file(filename, size, end_token, delay, abort):
             open(filename, "wb").close()
@@ -733,7 +705,7 @@ class PuppetTests(TestCase): # pylint: disable=too-many-public-methods
         self.assertLess(len(data), t_size + len(e_token))
         self.assertFalse(data.endswith(e_token))
 
-    def test_32(self):
+    def test_31(self):
         "test create_profile() extension support"
 
         # create a profile with a non-existent ext
@@ -815,7 +787,7 @@ class PuppetTests(TestCase): # pylint: disable=too-many-public-methods
         self.assertEqual(set(os.listdir(os.path.join(prof, "extensions", "good-ext-id"))),
                          {"install.rdf", "example.js"})
 
-    def test_33(self):
+    def test_32(self):
         "test empty minidump log"
         ffp = FFPuppet()
         self.addCleanup(ffp.clean_up)
@@ -841,7 +813,7 @@ class PuppetTests(TestCase): # pylint: disable=too-many-public-methods
         self.assertTrue(md_lines.startswith("WARNING: minidump_stackwalk log was empty"))
         self.assertEqual(len(md_lines.splitlines()), 1)
 
-    def test_34(self):
+    def test_33(self):
         "test multiple minidumps"
         ffp = FFPuppet()
         self.addCleanup(ffp.clean_up)
