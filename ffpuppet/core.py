@@ -258,9 +258,9 @@ class FFPuppet(object):
             self.poll_file(dump_path)
             log.debug("calling minidump_stackwalk on %s", dump_path)
 
-            with tempfile.TemporaryFile() as out_fp:
+            with tempfile.TemporaryFile() as out_fp, open(os.devnull, "w") as null_fp:
                 ret_val = subprocess.call([self.MDSW_BIN, "-m", dump_path, symbols_path],
-                                          stdout=out_fp, stderr=out_fp)
+                                          stdout=out_fp, stderr=null_fp)
                 if ret_val != 0:
                     log.warning("minidump_stackwalk returned %r", ret_val)
 
