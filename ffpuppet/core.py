@@ -269,8 +269,8 @@ class FFPuppet(object):
                 line_count = 0 # lines added to the log so far
                 minidump_log = self._logs.get_fp(md_log)
                 for line in out_fp: # pylint: disable=not-an-iterable
-                    if line.startswith(b"Module|"):
-                        continue
+                    if not line.rstrip() or line.startswith(b"Module|"):
+                        continue # ignore line
 
                     # check if this is a stack entry (starts with '#|')
                     try:
@@ -290,6 +290,11 @@ class FFPuppet(object):
                         log.warning("MDSW_MAX_LINES (%d) limit reached", self.MDSW_MAX_LINES)
                         minidump_log.write(b"WARNING: Hit line output limit!")
                         break
+
+                if line_count < 1:
+                    log.warning("minidump_stackwalk log was empty")
+                    minidump_log.write(b"WARNING: minidump_stackwalk log was empty")
+
         if found > 1:
             log.warning("Found %d minidumps! Expecting 0 or 1", found)
 
