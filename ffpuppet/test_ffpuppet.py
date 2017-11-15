@@ -672,8 +672,8 @@ class PuppetTests(TestCase): # pylint: disable=too-many-public-methods
         # process .dmp file
         ffp.close()
         ffp.save_logs(self.logs)
-        self.assertIn("log_minidump.txt", os.listdir(self.logs))
-        with open(os.path.join(self.logs, "log_minidump.txt"), "r") as in_fp:
+        self.assertIn("log_minidump_01.txt", os.listdir(self.logs))
+        with open(os.path.join(self.logs, "log_minidump_01.txt"), "r") as in_fp:
             md_lines = in_fp.read().splitlines()
         self.assertEqual(len(set(out_dmp) - set(md_lines)), 11)
         self.assertTrue(md_lines[-1].startswith("WARNING: Hit line output limit!"))
@@ -835,11 +835,40 @@ class PuppetTests(TestCase): # pylint: disable=too-many-public-methods
         # process .dmp file
         ffp.close()
         ffp.save_logs(self.logs)
-        self.assertIn("log_minidump.txt", os.listdir(self.logs))
-        with open(os.path.join(self.logs, "log_minidump.txt"), "r") as in_fp:
+        self.assertIn("log_minidump_01.txt", os.listdir(self.logs))
+        with open(os.path.join(self.logs, "log_minidump_01.txt"), "r") as in_fp:
             md_lines = in_fp.read()
         self.assertTrue(md_lines.startswith("WARNING: minidump_stackwalk log was empty"))
         self.assertEqual(len(md_lines.splitlines()), 1)
+
+    def test_34(self):
+        "test multiple minidumps"
+        ffp = FFPuppet()
+        self.addCleanup(ffp.clean_up)
+        tsrv = HTTPTestServer()
+        self.addCleanup(tsrv.shutdown)
+        ffp.launch(TESTFF_BIN, location=tsrv.get_addr())
+        md_dir = os.path.join(ffp.profile, "minidumps")
+        if not os.path.isdir(md_dir):
+            os.mkdir(md_dir)
+        ffp._last_bin_path = ffp.profile # pylint: disable=protected-access
+        sym_dir = os.path.join(ffp.profile, "symbols") # needs to exist to satisfy a check
+        if not os.path.isdir(sym_dir):
+            os.mkdir(sym_dir)
+        # create "test.dmp" files
+        with open(os.path.join(md_dir, "test1.dmp"), "w") as out_fp:
+            out_fp.write("1a\n1b")
+        with open(os.path.join(md_dir, "test2.dmp"), "w") as out_fp:
+            out_fp.write("2a\n2b")
+        with open(os.path.join(md_dir, "test3.dmp"), "w") as out_fp:
+            out_fp.write("3a\n3b")
+        # process .dmp file
+        ffp.close()
+        ffp.save_logs(self.logs)
+        logs = os.listdir(self.logs)
+        self.assertIn("log_minidump_01.txt", logs)
+        self.assertIn("log_minidump_02.txt", logs)
+        self.assertIn("log_minidump_03.txt", logs)
 
 
 class ScriptTests(TestCase):

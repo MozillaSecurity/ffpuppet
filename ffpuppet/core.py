@@ -252,7 +252,7 @@ class FFPuppet(object):
                             " See README.md for how to obtain it.")
                 break
 
-            md_log = "minidump"
+            md_log = "minidump_%02d" % found
             self._logs.add_log(md_log)
             dump_path = os.path.join(minidumps_path, fname)
             self.poll_file(dump_path)
