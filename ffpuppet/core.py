@@ -959,6 +959,9 @@ def _parse_args(argv=None):
         "-g", "--gdb", action="store_true",
         help="Use GDB (Linux only)")
     parser.add_argument(
+        "--ignore-crashes", action="store_true",
+        help="Do not close the browser when a crash is detected (e10s only)")
+    parser.add_argument(
         "-l", "--log",
         help="Location to save log files")
     parser.add_argument(
@@ -1048,6 +1051,9 @@ def main(argv=None): # pylint: disable=missing-docstring
         use_gdb=args.gdb)
     for a_token in args.abort_token:
         ffp.add_abort_token(a_token)
+    if not args.ignore_crashes:
+        ffp.add_abort_token(
+            re.compile(r"###!!!\s*\[Parent\].+?Error:\s*\(.+?name=PBrowser::Msg_Destroy\)"))
 
     try:
         ffp.launch(
