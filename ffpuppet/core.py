@@ -1021,7 +1021,7 @@ def _dump_to_console(log_dir, dump_limit=0x20000):
             fsize = os.stat(full_path).st_size / 1024.0
             out_fp.write("\n[Dumping log %r (%0.2fKB)]\n" % (fname, fsize))
             with open(full_path, "rb") as log_fp:
-                out_fp.write(log_fp.read(dump_limit).decode("utf-8", errors="ignore"))
+                out_fp.write(log_fp.read(dump_limit).decode("ascii", errors="ignore"))
             if out_fp.tell() > dump_limit:
                 out_fp.write("\nOutput exceeds %dKB! Log tailed. " % (dump_limit / 1024))
                 out_fp.write("Use '--log' to capture full log.")
