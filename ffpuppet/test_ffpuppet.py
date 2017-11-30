@@ -28,7 +28,7 @@ TESTMDSW_BIN = os.path.join(CWD, "testmdsw", "testmdsw.exe") if sys.platform.sta
 
 FFPuppet.LOG_POLL_RATE = 0.01 # reduce this for testing
 FFPuppet.MDSW_BIN = TESTMDSW_BIN
-FFPuppet.MDSW_MAX_LINES = 8
+FFPuppet.MDSW_MAX_STACK = 8
 
 class TestCase(unittest.TestCase):
 
@@ -615,7 +615,7 @@ class PuppetTests(TestCase): # pylint: disable=too-many-public-methods
             self.assertFalse(os.path.isfile(t_log))
 
     def test_29(self):
-        "test minidump processing"
+        "test minidump stack processing"
         ffp = FFPuppet()
         self.addCleanup(ffp.clean_up)
         tsrv = HTTPTestServer()
@@ -650,7 +650,7 @@ class PuppetTests(TestCase): # pylint: disable=too-many-public-methods
         self.assertEqual(len(set(out_dmp) - set(md_lines)), 11)
         self.assertTrue(md_lines[-1].startswith("WARNING: Hit line output limit!"))
         md_lines.pop() # remove the limit msg
-        self.assertEqual(len(md_lines), FFPuppet.MDSW_MAX_LINES)
+        self.assertEqual(len(md_lines), FFPuppet.MDSW_MAX_STACK)
 
     def test_30(self):
         "test poll_file()"
@@ -841,6 +841,48 @@ class PuppetTests(TestCase): # pylint: disable=too-many-public-methods
         self.assertIn("log_minidump_01.txt", logs)
         self.assertIn("log_minidump_02.txt", logs)
         self.assertIn("log_minidump_03.txt", logs)
+
+
+    def test_34(self):
+        "test minidump register processing"
+        ffp = FFPuppet()
+        self.addCleanup(ffp.clean_up)
+        tsrv = HTTPTestServer()
+        self.addCleanup(tsrv.shutdown)
+        ffp.launch(TESTFF_BIN, location=tsrv.get_addr())
+        # create "test.dmp" file
+        out_dmp = [
+            "Crash reason:  SIGSEGV", "Crash address: 0x0", "Process uptime: not available", "",
+            "Thread 0 (crashed)", " 0  libxul.so + 0x123456788",
+            "    rax = 0xe5423423423fffe8   rdx = 0x0000000000000000",
+            "    rcx = 0x0000000000000000   rbx = 0xe54234234233e5e5",
+            "    rsi = 0x0000000000000000   rdi = 0x00007fedc31fe308",
+            "    rbp = 0x00007fffca0dab00   rsp = 0x00007fffca0daad0",
+            "     r8 = 0x0000000000000000    r9 = 0x0000000000000008",
+            "    r10 = 0xffff00ffffffffff   r11 = 0xffffff00ffffffff",
+            "    r12 = 0x0000743564566308   r13 = 0x00007fedce9d8000",
+            "    r14 = 0x0000000000000001   r15 = 0x0000000000000000", "    rip = 0x0000745666666ac",
+            "    Found by: given as instruction pointer in context", " 1  libxul.so + 0x1f4361c]", ""]
+        md_dir = os.path.join(ffp.profile, "minidumps")
+        if not os.path.isdir(md_dir):
+            os.mkdir(md_dir)
+        ffp._last_bin_path = ffp.profile # pylint: disable=protected-access
+        sym_dir = os.path.join(ffp.profile, "symbols") # needs to exist to satisfy a check
+        if not os.path.isdir(sym_dir):
+            os.mkdir(sym_dir)
+        with open(os.path.join(md_dir, "test.dmp"), "w") as out_fp:
+            out_fp.write("\n".join(out_dmp))
+        # process .dmp file
+        ffp.close()
+        ffp.save_logs(self.logs)
+        self.assertIn("log_minidump_01.txt", os.listdir(self.logs))
+        with open(os.path.join(self.logs, "log_minidump_01.txt"), "r") as in_fp:
+            md_lines = list()
+            for line in in_fp:
+                if "=" not in line:
+                    break
+                md_lines.append(line)
+        self.assertEqual(len(md_lines), 9) # only register info should be in here
 
 
 class ScriptTests(TestCase):

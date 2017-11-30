@@ -48,7 +48,7 @@ class FFPuppet(object):
     LOG_CLOSE_TIMEOUT = 10
     LOG_POLL_RATE = 1
     MDSW_BIN = "minidump_stackwalk"
-    MDSW_MAX_LINES = 150
+    MDSW_MAX_STACK = 150
 
     def __init__(self, use_profile=None, use_valgrind=False, use_xvfb=False, use_gdb=False):
         self._abort_tokens = set() # tokens used to notify log scanner to kill the browser process
@@ -256,18 +256,44 @@ class FFPuppet(object):
             self._logs.add_log(md_log)
             dump_path = os.path.join(minidumps_path, fname)
             self.poll_file(dump_path)
-            log.debug("calling minidump_stackwalk on %s", dump_path)
+            minidump_log = self._logs.get_fp(md_log)
 
+            # collect register info from minidump
+            log.debug("calling minidump_stackwalk on %s", dump_path)
             with tempfile.TemporaryFile() as out_fp, open(os.devnull, "w") as null_fp:
-                ret_val = subprocess.call([self.MDSW_BIN, "-m", dump_path, symbols_path],
+                # get register info
+                ret_val = subprocess.call([self.MDSW_BIN, dump_path, symbols_path],
                                           stdout=out_fp, stderr=null_fp)
                 if ret_val != 0:
                     log.warning("minidump_stackwalk returned %r", ret_val)
 
                 out_fp.seek(0)
+                found_registers = False
+                for line in out_fp: # pylint: disable=not-an-iterable
+                    if not found_registers:
+                        # look for the beginning of the register dump
+                        if b"(crashed)" in line:
+                            found_registers = True
+                        continue
+                    line = line.lstrip()
+                    if line.startswith(b"0"):
+                        continue # skip first line
+                    if b"=" not in line:
+                        break # we reached the end
+                    minidump_log.write(line)
+                log.debug("collected register info: %r", found_registers)
+
+            # collect stack trace from minidump
+            log.debug("calling minidump_stackwalk -m on %s", dump_path)
+            with tempfile.TemporaryFile() as out_fp, open(os.devnull, "w") as null_fp:
+                ret_val = subprocess.call([self.MDSW_BIN, "-m", dump_path, symbols_path],
+                                          stdout=out_fp, stderr=null_fp)
+                if ret_val != 0:
+                    log.warning("minidump_stackwalk -m returned %r", ret_val)
+
+                out_fp.seek(0)
                 crash_thread = None
                 line_count = 0 # lines added to the log so far
-                minidump_log = self._logs.get_fp(md_log)
                 for line in out_fp: # pylint: disable=not-an-iterable
                     if not line.rstrip() or line.startswith(b"Module|"):
                         continue # ignore line
@@ -286,8 +312,8 @@ class FFPuppet(object):
 
                     minidump_log.write(line)
                     line_count += 1
-                    if line_count >= self.MDSW_MAX_LINES:
-                        log.warning("MDSW_MAX_LINES (%d) limit reached", self.MDSW_MAX_LINES)
+                    if line_count >= self.MDSW_MAX_STACK:
+                        log.warning("MDSW_MAX_STACK (%d) limit reached", self.MDSW_MAX_STACK)
                         minidump_log.write(b"WARNING: Hit line output limit!")
                         break
 
