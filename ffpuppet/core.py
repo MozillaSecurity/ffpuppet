@@ -237,9 +237,6 @@ class FFPuppet(object):
             return
 
         symbols_path = os.path.join(self._last_bin_path, "symbols")
-        if not os.path.isdir(symbols_path):
-            log.debug("can't symbolize: no symbols at: %s", symbols_path)
-            return
 
         found = 0
         for fname in os.listdir(minidumps_path):
@@ -250,6 +247,9 @@ class FFPuppet(object):
             if not self._have_mdsw:
                 log.warning("Found a minidump, but can't process it without minidump_stackwalk."
                             " See README.md for how to obtain it.")
+                break
+            elif not os.path.isdir(symbols_path):
+                log.warning("Can't symbolize, %r does not exist", symbols_path)
                 break
 
             md_log = "minidump_%02d" % found
