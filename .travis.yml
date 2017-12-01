@@ -17,15 +17,12 @@ matrix:
           dist: trusty
           python: 3.6
           sudo: required
-        - os: osx
-          language: generic
 
 install:
     - if [[ $TRAVIS_OS_NAME == "linux" ]]; then sudo apt-get update -qq; fi
     - if [[ $TRAVIS_OS_NAME == "linux" ]]; then sudo apt-get install -y gdb valgrind; fi
     - if [[ $TRAVIS_OS_NAME == "linux" ]]; then gdb --version; fi
     - if [[ $TRAVIS_OS_NAME == "linux" ]]; then valgrind --version; fi
-    - if [[ $TRAVIS_OS_NAME == "osx" ]]; then python -m pip install pytest; fi
     - python -m pip install -r requirements.txt
     - if [[ $TRAVIS_OS_NAME == "linux" ]] && [ $TRAVIS_PYTHON_VERSION == 2.7 -o $TRAVIS_PYTHON_VERSION == 3.5 ]; then pip install pylint pytest-cov python-coveralls; fi
 
