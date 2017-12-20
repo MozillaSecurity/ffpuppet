@@ -120,6 +120,10 @@ class FFPuppet(object):
         env["MOZ_CC_RUN_DURING_SHUTDOWN"] = "1"
         env["MOZ_CRASHREPORTER"] = "1"
         env["MOZ_CRASHREPORTER_NO_REPORT"] = "1"
+        env["MOZ_DISABLE_CONTENT_SANDBOX"] = "1"
+        env["MOZ_DISABLE_GMP_SANDBOX"] = "1"
+        env["MOZ_DISABLE_GPU_SANDBOX"] = "1"
+        env["MOZ_DISABLE_NPAPI_SANDBOX"] = "1"
         env["MOZ_GDB_SLEEP"] = "0"
         env["XRE_NO_WINDOWS_CRASH_DIALOG"] = "1"
         env["XPCOM_DEBUG_BREAK"] = "warn"
@@ -147,14 +151,16 @@ class FFPuppet(object):
             env["MSAN_SYMBOLIZER_PATH"] = os.environ["ASAN_SYMBOLIZER_PATH"]
             if not os.path.isfile(env["ASAN_SYMBOLIZER_PATH"]):
                 log.warning("Invalid ASAN_SYMBOLIZER_PATH (%s)", env["ASAN_SYMBOLIZER_PATH"])
-        else: # look for llvm-symbolizer bundled with firefox build
+        else:
+            # ASAN_SYMBOLIZER_PATH only needs to be set on platforms other than Windows
             if self._platform == "windows":
-                symbolizer_bin = os.path.join(os.path.dirname(target_bin), "llvm-symbolizer.exe")
+                if not os.path.join(os.path.dirname(target_bin), "llvm-symbolizer.exe"):
+                    log.warning("llvm-symbolizer.exe should be next to the target binary")
             else:
                 symbolizer_bin = os.path.join(os.path.dirname(target_bin), "llvm-symbolizer")
-            if os.path.isfile(symbolizer_bin):
-                env["ASAN_SYMBOLIZER_PATH"] = symbolizer_bin
-                env["MSAN_SYMBOLIZER_PATH"] = symbolizer_bin
+                if os.path.isfile(symbolizer_bin):
+                    env["ASAN_SYMBOLIZER_PATH"] = symbolizer_bin
+                    env["MSAN_SYMBOLIZER_PATH"] = symbolizer_bin
 
         # https://bugzilla.mozilla.org/show_bug.cgi?id=1305151
         # skia assertions are easily hit and mostly due to precision, disable them.
