@@ -38,13 +38,18 @@ class PuppetLoggerTests(TestCase):
         plog = PuppetLogger()
         self.addCleanup(plog.clean_up)
         self.assertFalse(plog.closed)
+        self.assertTrue(os.path.isdir(plog.working_path))
+        old_working_path = plog.working_path
         plog.close()
         self.assertTrue(plog.closed)
         with self.assertRaises(AssertionError):
             plog.add_log("test")
         plog.clean_up()
+        self.assertFalse(os.path.isdir(old_working_path))
+        self.assertIsNone(plog.working_path)
         self.assertTrue(plog.closed)
         plog.reset()
+        self.assertTrue(os.path.isdir(plog.working_path))
         self.assertFalse(plog.closed)
         plog.add_log("test_new")
         fname = plog.get_fp("test_new").name

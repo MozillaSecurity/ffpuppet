@@ -579,8 +579,9 @@ class PuppetTests(TestCase): # pylint: disable=too-many-public-methods
         self.addCleanup(ffp.clean_up)
         ffp.launch(TESTFF_BIN)
         test_logs = list()
+        asan_prefix = os.path.join(ffp._logs.working_path, ffp._logs.LOG_ASAN_PREFIX) # pylint: disable=protected-access
         for i in range(3):
-            test_logs.append(".".join([ffp._asan_prefix, str(i)])) # pylint: disable=protected-access
+            test_logs.append(".".join([asan_prefix, str(i)]))
         # small log with nothing interesting
         with open(test_logs[0], "w") as log_fp:
             log_fp.write("SHORT LOG\n")

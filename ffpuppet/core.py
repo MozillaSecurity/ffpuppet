@@ -43,7 +43,6 @@ class LaunchError(Exception):
 
 class FFPuppet(object):
     LAUNCH_TIMEOUT_MIN = 10 # minimum amount of time to wait for the browser to launch
-    LOG_ASAN_PATH = tempfile.gettempdir() # where ASan logs will be temporarily stored
     LOG_BUF_SIZE = 0x10000 # buffer size used to copy logs
     LOG_CLOSE_TIMEOUT = 10
     LOG_POLL_RATE = 1
@@ -52,7 +51,6 @@ class FFPuppet(object):
 
     def __init__(self, use_profile=None, use_valgrind=False, use_xvfb=False, use_gdb=False):
         self._abort_tokens = set() # tokens used to notify log scanner to kill the browser process
-        self._asan_prefix = os.path.join(self.LOG_ASAN_PATH, "ffp_asan_%d.log" % os.getpid())
         self._last_bin_path = None
         self._launches = 0 # number of times the browser has successfully been launched
         self._logs = PuppetLogger()
@@ -137,7 +135,7 @@ class FFPuppet(object):
                 #"check_malloc_usable_size=false", # defaults True
                 #"detect_stack_use_after_return=true", # can't launch firefox with this enabled
                 "disable_coredump=true",
-                "log_path=%s" % self._asan_prefix,
+                "log_path=%r" % os.path.join(self._logs.working_path, self._logs.LOG_ASAN_PREFIX),
                 "sleep_before_dying=0",
                 "strict_init_order=true",
                 #"strict_memcmp=false", # defaults True
@@ -480,9 +478,9 @@ class FFPuppet(object):
 
         if not force_close:
             # scan for ASan logs
-            for fname in os.listdir(os.path.dirname(self._asan_prefix)):
-                tmp_file = os.path.join(tempfile.gettempdir(), fname)
-                if tmp_file.startswith(self._asan_prefix):
+            for fname in os.listdir(self._logs.working_path):
+                if fname.startswith(self._logs.LOG_ASAN_PREFIX):
+                    tmp_file = os.path.join(self._logs.working_path, fname)
                     self.poll_file(tmp_file)
                     self._logs.add_log(fname, open(tmp_file, "rb"))
 
