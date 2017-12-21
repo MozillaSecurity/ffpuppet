@@ -32,6 +32,13 @@ FFPuppet.MDSW_MAX_STACK = 8
 
 class TestCase(unittest.TestCase):
 
+    @classmethod
+    def setUpClass(cls):
+        if sys.platform.startswith('win') and not os.path.isfile(TESTFF_BIN):
+            raise EnvironmentError("testff.exe is missing see testff.py for build instructions") # pragma: no cover
+        if sys.platform.startswith('win') and not os.path.isfile(TESTMDSW_BIN):
+            raise EnvironmentError("testmdsw.exe is missing see testmdsw.py for build instructions") # pragma: no cover
+
     if sys.version_info.major == 2:
 
         def assertRegex(self, *args, **kwds):
@@ -81,11 +88,6 @@ class HTTPTestServer(object):
 
 class PuppetTests(TestCase): # pylint: disable=too-many-public-methods
 
-    @classmethod
-    def setUpClass(cls):
-        if sys.platform.startswith('win') and not os.path.isfile(TESTFF_BIN):
-            raise EnvironmentError("testff.exe is missing see testff.py for build instructions") # pragma: no cover
-
     def setUp(self):
         fd, self.tmpfn = tempfile.mkstemp(prefix="ffp_test_log_")
         os.close(fd)
@@ -97,13 +99,13 @@ class PuppetTests(TestCase): # pylint: disable=too-many-public-methods
         if os.path.isdir(self.logs):
             shutil.rmtree(self.logs)
 
-    if not sys.platform.startswith('win'):
-        def test_00(self):
-            "test that invalid executables raise the right exception"
-            ffp = FFPuppet()
-            self.addCleanup(ffp.clean_up)
-            with self.assertRaisesRegex(IOError, "is not an executable"):
-                ffp.launch(self.tmpfn)
+    @unittest.skipIf(sys.platform.startswith('win'), "Unsupported on Windows")
+    def test_00(self):
+        "test that invalid executables raise the right exception"
+        ffp = FFPuppet()
+        self.addCleanup(ffp.clean_up)
+        with self.assertRaisesRegex(IOError, "is not an executable"):
+            ffp.launch(self.tmpfn)
 
     def test_01(self):
         "test basic launch and close"
@@ -337,9 +339,10 @@ class PuppetTests(TestCase): # pylint: disable=too-many-public-methods
         os.environ.pop("ASAN_SYMBOLIZER_PATH", None)
         self.assertEqual(env["ASAN_SYMBOLIZER_PATH"], "foo/bar")
 
+    @unittest.skipIf(sys.platform.startswith('win'), "ASAN_SYMBOLIZER_PATH not set automatically on Windows")
     def test_15(self):
         "test automatically using bundled llvm-symbolizer"
-        test_bin = "llvm-symbolizer.exe" if sys.platform.startswith('win') else "llvm-symbolizer"
+        test_bin = "llvm-symbolizer"
         test_dir = tempfile.mkdtemp()
         with open(os.path.join(test_dir, test_bin), "w") as log_fp:
             log_fp.write("test")
@@ -887,10 +890,6 @@ class PuppetTests(TestCase): # pylint: disable=too-many-public-methods
 
 
 class ScriptTests(TestCase):
-    @classmethod
-    def setUpClass(cls):
-        if sys.platform.startswith('win') and not os.path.isfile(TESTFF_BIN):
-            raise EnvironmentError("testff.exe is missing see testff.py for build instructions") # pragma: no cover
 
     def setUp(self):
         self.tmpdir = tempfile.mkdtemp(prefix="ffp_test")
