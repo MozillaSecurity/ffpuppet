@@ -139,7 +139,7 @@ class FFPuppet(object):
                 #"check_malloc_usable_size=false", # defaults True
                 #"detect_stack_use_after_return=true", # can't launch firefox with this enabled
                 "disable_coredump=true",
-                "log_path=%r" % os.path.join(self._logs.working_path, self._logs.LOG_ASAN_PREFIX),
+                "log_path='%s'" % os.path.join(self._logs.working_path, self._logs.LOG_ASAN_PREFIX),
                 "sleep_before_dying=0",
                 "strict_init_order=true",
                 #"strict_memcmp=false", # defaults True
