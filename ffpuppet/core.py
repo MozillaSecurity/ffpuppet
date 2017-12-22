@@ -892,7 +892,7 @@ class FFPuppet(object):
                 init_soc.listen(5)
                 break
             except socket.error as soc_e:
-                if soc_e.errno == errno.EADDRINUSE: # Address already in use
+                if soc_e.errno in (errno.EADDRINUSE, 10013):  # Address already in use
                     if remaining <= 1:
                         raise LaunchError("Could not find available port")
                     continue
