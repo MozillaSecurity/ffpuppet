@@ -846,7 +846,6 @@ class PuppetTests(TestCase): # pylint: disable=too-many-public-methods
         self.assertIn("log_minidump_02.txt", logs)
         self.assertIn("log_minidump_03.txt", logs)
 
-
     def test_34(self):
         "test minidump register processing"
         ffp = FFPuppet()
@@ -887,6 +886,25 @@ class PuppetTests(TestCase): # pylint: disable=too-many-public-methods
                     break
                 md_lines.append(line)
         self.assertEqual(len(md_lines), 9) # only register info should be in here
+
+    def test_35(self):
+        "test exhausting bootstrap ports"
+
+        tsrv = HTTPTestServer()
+        self.addCleanup(tsrv.shutdown)
+        ffp = FFPuppet()
+        self.addCleanup(ffp.clean_up)
+        try:
+            ffp.BS_PORT_MAX = random.randint(0x4000, 0xFFFF)
+            ffp.BS_PORT_MIN = ffp.BS_PORT_MAX
+            soc = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            soc.bind(("127.0.0.1", ffp.BS_PORT_MAX))
+            self.addCleanup(soc.close)
+            with self.assertRaisesRegex(LaunchError, "Could not find available port"):
+                ffp.launch(TESTFF_BIN, location=tsrv.get_addr())
+        finally:
+            ffp.BS_PORT_MAX = 0xFFFF
+            ffp.BS_PORT_MIN = 0x4000
 
 
 class ScriptTests(TestCase):
