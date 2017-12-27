@@ -60,9 +60,9 @@ class HTTPTestServer(object):
         self._handler = handler if handler is not None else ReqHandler
         while True:
             try:
-                self._httpd = HTTPServer(('127.0.0.1', random.randint(0x800, 0xFFFF)), self._handler)
+                self._httpd = HTTPServer(('127.0.0.1', random.randint(0x2000, 0xFFFF)), self._handler)
             except socket.error as soc_e: # pragma: no cover
-                if soc_e.errno == errno.EADDRINUSE: # Address already in use
+                if soc_e.errno in (errno.EADDRINUSE, 10013):  # Address already in use
                     continue
                 raise
             break
@@ -895,11 +895,9 @@ class PuppetTests(TestCase): # pylint: disable=too-many-public-methods
         ffp = FFPuppet()
         self.addCleanup(ffp.clean_up)
         try:
-            ffp.BS_PORT_MAX = random.randint(0x4000, 0xFFFF)
+            # use same port as tsrv since we know it will be in use
+            ffp.BS_PORT_MAX = tsrv._httpd.server_address[1]  # pylint: disable=protected-access
             ffp.BS_PORT_MIN = ffp.BS_PORT_MAX
-            soc = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            soc.bind(("127.0.0.1", ffp.BS_PORT_MAX))
-            self.addCleanup(soc.close)
             with self.assertRaisesRegex(LaunchError, "Could not find available port"):
                 ffp.launch(TESTFF_BIN, location=tsrv.get_addr())
         finally:
