@@ -868,13 +868,12 @@ class PuppetTests(TestCase): # pylint: disable=too-many-public-methods
 
     def test_35(self):
         "test exhausting bootstrap ports"
-
         ffp = FFPuppet()
         self.addCleanup(ffp.clean_up)
         init_soc = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.addCleanup(init_soc.close)
         if sys.platform.startswith("win"):
-            init_soc.setsockopt(socket.SOL_SOCKET, socket.SO_EXCLUSIVEADDRUSE, 1)
+            init_soc.setsockopt(socket.SOL_SOCKET, socket.SO_EXCLUSIVEADDRUSE, 1)  # pylint: disable=no-member
         init_soc.bind(("127.0.0.1", 0))  # bind to a random free port
         try:
             ffp.BS_PORT_MAX = init_soc.getsockname()[1]
