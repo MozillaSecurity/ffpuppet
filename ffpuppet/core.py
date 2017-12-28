@@ -18,10 +18,10 @@ import subprocess
 import tempfile
 import time
 from xml.etree import ElementTree
-try: # py 2-3 compatibility
-    from urllib import pathname2url # pylint: disable=no-name-in-module
+try:  # py 2-3 compatibility
+    from urllib import pathname2url  # pylint: disable=no-name-in-module
 except ImportError:
-    from urllib.request import pathname2url # pylint: disable=no-name-in-module
+    from urllib.request import pathname2url  # pylint: disable=no-name-in-module,import-error
 
 try:
     import xvfbwrapper
@@ -31,7 +31,7 @@ except ImportError:
 from .puppet_logger import PuppetLogger
 from .workers import log_scanner, log_size_limiter, memory_limiter
 
-log = logging.getLogger("ffpuppet") # pylint: disable=invalid-name
+log = logging.getLogger("ffpuppet")  # pylint: disable=invalid-name
 
 __author__ = "Tyson Smith"
 __all__ = ("FFPuppet", "LaunchError")
@@ -883,7 +883,10 @@ class FFPuppet(object):
 
         init_soc = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         if self._platform == "windows":
-            init_soc.setsockopt(socket.SOL_SOCKET, socket.SO_EXCLUSIVEADDRUSE, 1)
+            init_soc.setsockopt(
+                socket.SOL_SOCKET,
+                socket.SO_EXCLUSIVEADDRUSE,  # pylint: disable=no-member
+                1)
         init_soc.settimeout(0.25)
         attempts = 100  # number of attempts to find an available port
         while True:
