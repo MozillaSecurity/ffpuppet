@@ -60,7 +60,7 @@ class HTTPTestServer(object):
         self._handler = handler if handler is not None else ReqHandler
         while True:
             try:
-                self._httpd = HTTPServer(('127.0.0.1', random.randint(0x2000, 0xFFFF)), self._handler)
+                self._httpd = HTTPServer(("127.0.0.1", 0), self._handler)
             except socket.error as soc_e: # pragma: no cover
                 if soc_e.errno in (errno.EADDRINUSE, 10013):  # Address already in use
                     continue
@@ -118,6 +118,7 @@ class PuppetTests(TestCase): # pylint: disable=too-many-public-methods
         self.assertEqual(len(ffp._workers), 0) # pylint: disable=protected-access
         self.assertEqual(ffp.get_launch_count(), 1)
         self.assertIsNone(ffp.wait(0))
+        self.assertTrue(ffp.is_running())
         ffp.close()
         self.assertIsNone(ffp._proc) # pylint: disable=protected-access
         self.assertFalse(ffp.is_running())
@@ -142,7 +143,7 @@ class PuppetTests(TestCase): # pylint: disable=too-many-public-methods
             ffp.LAUNCH_TIMEOUT_MIN = 1
             self.addCleanup(ffp.clean_up)
             with open(self.tmpfn, 'w') as prefs:
-                prefs.write('//fftest_hang\n')
+                prefs.write('//fftest_startup_hang\n')
             start = time.time()
             with self.assertRaisesRegex(LaunchError, "Launching browser timed out"):
                 ffp.launch(TESTFF_BIN, prefs_js=self.tmpfn, launch_timeout=1)
@@ -175,6 +176,8 @@ class PuppetTests(TestCase): # pylint: disable=too-many-public-methods
         dir_list = os.listdir(log_dir)
         self.assertIn("log_stderr.txt", dir_list)
         self.assertIn("log_stdout.txt", dir_list)
+        with open(os.path.join(log_dir, "log_stdout.txt"), "r") as log_fp:
+            self.assertIn("url: http://", log_fp.read().strip())
         for fname in os.listdir(log_dir):
             with open(os.path.join(log_dir, fname)) as log_fp:
                 log_data = log_fp.read().splitlines()
@@ -213,9 +216,7 @@ class PuppetTests(TestCase): # pylint: disable=too-many-public-methods
         ffp = FFPuppet()
         self.addCleanup(ffp.clean_up)
         self.assertIsNone(ffp.wait())
-        tsrv = HTTPTestServer()
-        self.addCleanup(tsrv.shutdown)
-        ffp.launch(TESTFF_BIN, location=tsrv.get_addr())
+        ffp.launch(TESTFF_BIN)
         self.assertIsNone(ffp.wait(0))
         ffp._terminate() # pylint: disable=protected-access
         self.assertFalse(ffp.is_running())
@@ -264,9 +265,7 @@ class PuppetTests(TestCase): # pylint: disable=too-many-public-methods
         self.addCleanup(ffp.clean_up)
         with open(self.tmpfn, 'w') as prefs:
             prefs.write('//fftest_memory\n')
-        tsrv = HTTPTestServer()
-        self.addCleanup(tsrv.shutdown)
-        ffp.launch(TESTFF_BIN, location=tsrv.get_addr(), prefs_js=self.tmpfn, memory_limit=0x100000) # 1MB
+        ffp.launch(TESTFF_BIN, prefs_js=self.tmpfn, memory_limit=0x100000) # 1MB
         self.assertIsNotNone(ffp.wait(60))
         ffp.close()
         ffp.save_logs(self.logs)
@@ -277,15 +276,13 @@ class PuppetTests(TestCase): # pylint: disable=too-many-public-methods
         "test calling launch() multiple times"
         ffp = FFPuppet()
         self.addCleanup(ffp.clean_up)
-        tsrv = HTTPTestServer()
-        self.addCleanup(tsrv.shutdown)
         for _ in range(10):
-            ffp.launch(TESTFF_BIN, location=tsrv.get_addr())
+            ffp.launch(TESTFF_BIN, prefs_js=self.tmpfn)
             ffp.close()
-        # call 2x without calling launch
-        ffp.launch(TESTFF_BIN, location=tsrv.get_addr())
+        # call 2x without calling close()
+        ffp.launch(TESTFF_BIN, prefs_js=self.tmpfn)
         with self.assertRaisesRegex(LaunchError, "Process is already running"):
-            ffp.launch(TESTFF_BIN, location=tsrv.get_addr())
+            ffp.launch(TESTFF_BIN, prefs_js=self.tmpfn)
         ffp.close()
 
     def test_11(self):
@@ -298,9 +295,7 @@ class PuppetTests(TestCase): # pylint: disable=too-many-public-methods
         with self.assertRaisesRegex(TypeError, "Expecting 'str' or 're._pattern_type' got: 'NoneType'"):
             ffp.add_abort_token(None)
         ffp.add_abort_token("###!!! ASSERTION:")
-        tsrv = HTTPTestServer()
-        self.addCleanup(tsrv.shutdown)
-        ffp.launch(TESTFF_BIN, location=tsrv.get_addr(), prefs_js=self.tmpfn)
+        ffp.launch(TESTFF_BIN, prefs_js=self.tmpfn)
         self.assertIsNotNone(ffp.wait(10))
         ffp.close()
         ffp.save_logs(self.logs)
@@ -314,7 +309,6 @@ class PuppetTests(TestCase): # pylint: disable=too-many-public-methods
         self.addCleanup(ffp.clean_up)
         try:
             ffp.launch(TESTFF_BIN)
-            ffp.close()
             ffp.clean_up()
             self.assertTrue(os.path.isdir(prf_dir))
         finally:
@@ -534,22 +528,13 @@ class PuppetTests(TestCase): # pylint: disable=too-many-public-methods
 
     def test_26(self):
         "test parallel launches"
-        # use soft_assert test mode because it hangs around for 5s
-        with open(self.tmpfn, 'w') as prefs:
-            prefs.write('//fftest_soft_assert\n')
-        # use a dummy token to make ffp launch worker threads
-        token = re.compile(r"DUMMY\dREGEX\.+")
         ffps = list()
         # use test pool size of 20
         for _ in range(20):
             ffps.append(FFPuppet())
             self.addCleanup(ffps[-1].clean_up)
-            ffps[-1].add_abort_token(token)
-        tsrv = HTTPTestServer()
-        self.addCleanup(tsrv.shutdown)
         for ffp in ffps:
-            ffp.launch(TESTFF_BIN, location=tsrv.get_addr(), prefs_js=self.tmpfn)
-            self.assertTrue(ffp.is_running())
+            ffp.launch(TESTFF_BIN)
         for ffp in ffps:
             self.assertTrue(ffp.is_running())
             ffp.close()
@@ -562,9 +547,7 @@ class PuppetTests(TestCase): # pylint: disable=too-many-public-methods
         with open(self.tmpfn, 'w') as prefs:
             prefs.write('//fftest_big_log\n')
         limit = 0x100000 # 1MB
-        tsrv = HTTPTestServer()
-        self.addCleanup(tsrv.shutdown)
-        ffp.launch(TESTFF_BIN, location=tsrv.get_addr(), prefs_js=self.tmpfn, log_limit=limit)
+        ffp.launch(TESTFF_BIN, prefs_js=self.tmpfn, log_limit=limit)
         self.assertIsNotNone(ffp.wait(60))
         ffp.close()
         ffp.save_logs(self.logs)
@@ -821,9 +804,7 @@ class PuppetTests(TestCase): # pylint: disable=too-many-public-methods
         "test multiple minidumps"
         ffp = FFPuppet()
         self.addCleanup(ffp.clean_up)
-        tsrv = HTTPTestServer()
-        self.addCleanup(tsrv.shutdown)
-        ffp.launch(TESTFF_BIN, location=tsrv.get_addr())
+        ffp.launch(TESTFF_BIN)
         md_dir = os.path.join(ffp.profile, "minidumps")
         if not os.path.isdir(md_dir):
             os.mkdir(md_dir)
@@ -850,9 +831,7 @@ class PuppetTests(TestCase): # pylint: disable=too-many-public-methods
         "test minidump register processing"
         ffp = FFPuppet()
         self.addCleanup(ffp.clean_up)
-        tsrv = HTTPTestServer()
-        self.addCleanup(tsrv.shutdown)
-        ffp.launch(TESTFF_BIN, location=tsrv.get_addr())
+        ffp.launch(TESTFF_BIN)
         # create "test.dmp" file
         out_dmp = [
             "Crash reason:  SIGSEGV", "Crash address: 0x0", "Process uptime: not available", "",
@@ -890,16 +869,18 @@ class PuppetTests(TestCase): # pylint: disable=too-many-public-methods
     def test_35(self):
         "test exhausting bootstrap ports"
 
-        tsrv = HTTPTestServer()
-        self.addCleanup(tsrv.shutdown)
         ffp = FFPuppet()
         self.addCleanup(ffp.clean_up)
+        init_soc = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self.addCleanup(init_soc.close)
+        if sys.platform.startswith("win"):
+            init_soc.setsockopt(socket.SOL_SOCKET, socket.SO_EXCLUSIVEADDRUSE, 1)
+        init_soc.bind(("127.0.0.1", 0))  # bind to a random free port
         try:
-            # use same port as tsrv since we know it will be in use
-            ffp.BS_PORT_MAX = tsrv._httpd.server_address[1]  # pylint: disable=protected-access
+            ffp.BS_PORT_MAX = init_soc.getsockname()[1]
             ffp.BS_PORT_MIN = ffp.BS_PORT_MAX
             with self.assertRaisesRegex(LaunchError, "Could not find available port"):
-                ffp.launch(TESTFF_BIN, location=tsrv.get_addr())
+                ffp.launch(TESTFF_BIN, launch_timeout=5)
         finally:
             ffp.BS_PORT_MAX = 0xFFFF
             ffp.BS_PORT_MIN = 0x4000

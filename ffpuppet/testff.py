@@ -36,7 +36,7 @@ def main():
                     pass
                 elif line.startswith('/'):
                     line = line.lstrip('/').strip()
-                    if line == 'fftest_hang':
+                    if line == 'fftest_startup_hang':
                         cmd = 'hang'
                     elif line == 'fftest_startup_crash':
                         cmd = 'start_crash'
@@ -102,9 +102,8 @@ def main():
         sys.stdout.write('simulating high memory usage\n')
         sys.stdout.flush()
         blob = []
-        with open(os.devnull, "r") as r_fp:
-            for _ in range(200):
-                blob.append(r_fp.read(1024*1024))
+        for _ in range(200):
+            blob.append("A" * 1024 * 1024)
     elif cmd == 'soft_assert':
         sys.stdout.write('simulating soft assertion\n')
         # split '###!!! ASSERTION: tests\n' across multiple reads by the log scanner

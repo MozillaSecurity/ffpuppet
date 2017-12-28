@@ -880,20 +880,21 @@ class FFPuppet(object):
 
     def _bootstrap_start(self):
         assert self.BS_PORT_MAX >= self.BS_PORT_MIN, "Invalid port range"
-        retries = min((self.BS_PORT_MAX - self.BS_PORT_MIN + 1) * 10, 1000)
-        assert retries > 0
 
-        for remaining in range(retries, 0, -1):
+        init_soc = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        if self._platform == "windows":
+            init_soc.setsockopt(socket.SOL_SOCKET, socket.SO_EXCLUSIVEADDRUSE, 1)
+        init_soc.settimeout(0.25)
+        attempts = 100  # number of attempts to find an available port
+        while True:
             try:
-                init_soc = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-                init_soc.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-                init_soc.settimeout(0.25)
                 init_soc.bind(("127.0.0.1", random.randint(self.BS_PORT_MIN, self.BS_PORT_MAX)))
                 init_soc.listen(5)
                 break
             except socket.error as soc_e:
                 if soc_e.errno in (errno.EADDRINUSE, 10013):  # Address already in use
-                    if remaining <= 1:
+                    attempts -= 1
+                    if attempts < 1:
                         raise LaunchError("Could not find available port")
                     continue
                 raise soc_e
