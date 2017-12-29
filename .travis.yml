@@ -3,26 +3,21 @@ language: python
 matrix:
     include:
         - os: linux
-          dist: trusty
           python: 2.7
-          sudo: required
         - os: linux
-          dist: trusty
           python: 3.4
-          sudo: required
         - os: linux
-          dist: trusty
           python: 3.5
         - os: linux
-          dist: trusty
           python: 3.6
-          sudo: required
 
-install:
-    - if [[ $TRAVIS_OS_NAME == "linux" ]]; then sudo apt-get update -qq; fi
-    - if [[ $TRAVIS_OS_NAME == "linux" ]]; then sudo apt-get install -y gdb valgrind; fi
-    - if [[ $TRAVIS_OS_NAME == "linux" ]]; then gdb --version; fi
-    - if [[ $TRAVIS_OS_NAME == "linux" ]]; then valgrind --version; fi
+addons:
+  apt:
+    packages:
+      - gdb
+      - valgrind
+
+before_install:
     - python -m pip install -r requirements.txt
     - if [[ $TRAVIS_OS_NAME == "linux" ]] && [ $TRAVIS_PYTHON_VERSION == 2.7 -o $TRAVIS_PYTHON_VERSION == 3.5 ]; then pip install pylint pytest-cov python-coveralls; fi
 
