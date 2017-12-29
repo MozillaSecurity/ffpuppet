@@ -10,6 +10,13 @@ matrix:
           python: 3.5
         - os: linux
           python: 3.6
+        - os: linux
+          python: 3.7-dev
+        - os: osx
+          language: generic
+    allow_failures:
+        - os: linux
+          python: 3.7-dev
 
 addons:
   apt:
@@ -18,7 +25,8 @@ addons:
       - valgrind
 
 before_install:
-    - python -m pip install -r requirements.txt
+    - if [[ $TRAVIS_OS_NAME == "osx" ]]; then pip2 install pytest; fi
+    - if [[ $TRAVIS_OS_NAME == "osx" ]]; then pip2 install -r requirements.txt; else pip install -r requirements.txt; fi
     - if [[ $TRAVIS_OS_NAME == "linux" ]] && [ $TRAVIS_PYTHON_VERSION == 2.7 -o $TRAVIS_PYTHON_VERSION == 3.5 ]; then pip install pylint pytest-cov python-coveralls; fi
 
 script:
