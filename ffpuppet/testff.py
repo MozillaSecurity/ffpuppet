@@ -104,6 +104,7 @@ def main():
         blob = []
         for _ in range(200):
             blob.append("A" * 1024 * 1024)
+        time.sleep(30)
     elif cmd == 'soft_assert':
         sys.stdout.write('simulating soft assertion\n')
         # split '###!!! ASSERTION: tests\n' across multiple reads by the log scanner

@@ -4,6 +4,7 @@
 
 import shutil
 import tempfile
+import threading
 
 __author__ = "Tyson Smith"
 __credits__ = ["Tyson Smith"]
@@ -21,6 +22,7 @@ class BaseWorker(object):
     name = "BaseWorker" # override in subclass
 
     def __init__(self):
+        self.aborted = threading.Event()
         self.log_fp = tempfile.SpooledTemporaryFile(max_size=self.SPOOL_LIMIT, mode="w+b")
         self._worker = None
 
@@ -32,7 +34,6 @@ class BaseWorker(object):
     def collect_log(self, dst_fp):
         if self._worker is not None and self._worker.is_alive():
             raise RuntimeError("Worker must exit before collecting log")
-
         self.log_fp.seek(0)
         shutil.copyfileobj(self.log_fp, dst_fp, self.READ_BUF)
 

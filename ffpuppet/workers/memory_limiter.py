@@ -25,54 +25,55 @@ class MemoryLimiterWorker(puppet_worker.BaseWorker):
     name = os.path.splitext(os.path.basename(__file__))[0]
 
     def start(self, process_id, memory_limit):
-        self._worker = threading.Thread(target=_run, args=(process_id, memory_limit, self.log_fp))
+        self._worker = threading.Thread(target=self._run, args=(process_id, memory_limit))
         self._worker.start()
 
 
-def _run(process_id, limit, log_fp):
-    """
-    _run(process_id, limit, log_fp) -> None
-    Use psutil to actively monitor the amount of memory in use by the process with the
-    matching process_id. If that amount exceeds limit the process will be terminated.
-    Information is collected and stored to log_fp.
+    def _run(self, process_id, limit):
+        """
+        _run(process_id, limit) -> None
+        Use psutil to actively monitor the amount of memory in use by the process with the
+        matching process_id. If that amount exceeds limit the process will be terminated.
+        Information is collected and stored to log_fp.
 
-    returns None
-    """
+        returns None
+        """
 
-    try:
-        process = psutil.Process(process_id)
-    except psutil.NoSuchProcess:
-        return
-
-    while process.is_running():
-        proc_info = list()
-        total_usage = 0
         try:
-            cur_rss = process.memory_info().rss
-            total_usage += cur_rss
-            proc_info.append((process.pid, cur_rss))
-            for child in process.children(recursive=True):
-                try:
-                    cur_rss = child.memory_info().rss
-                    total_usage += cur_rss
-                    proc_info.append((child.pid, cur_rss))
-                except psutil.NoSuchProcess:
-                    pass
+            process = psutil.Process(process_id)
         except psutil.NoSuchProcess:
-            break # process is dead?
+            return
 
-        if total_usage >= limit:
+        while process.is_running():
+            proc_info = list()
+            total_usage = 0
             try:
-                process.kill()
-                process.wait()
+                cur_rss = process.memory_info().rss
+                total_usage += cur_rss
+                proc_info.append((process.pid, cur_rss))
+                for child in process.children(recursive=True):
+                    try:
+                        cur_rss = child.memory_info().rss
+                        total_usage += cur_rss
+                        proc_info.append((child.pid, cur_rss))
+                    except psutil.NoSuchProcess:
+                        pass
             except psutil.NoSuchProcess:
-                pass # process is dead?
+                break # process is dead?
 
-            log_fp.write(("MEMORY_LIMIT_EXCEEDED: %d\n" % total_usage).encode("utf-8"))
-            log_fp.write(("Current Limit: %d (%dMB)\n" % (limit, limit/1048576)).encode("utf-8"))
-            log_fp.write(("Parent PID: %d\n" % process_id).encode("utf-8"))
-            for pid, proc_usage in proc_info:
-                log_fp.write(("-> PID %6d: %10d\n" % (pid, proc_usage)).encode("utf-8"))
-            break
+            if total_usage >= limit:
+                self.aborted.set()
+                try:
+                    process.kill()
+                    process.wait()
+                except psutil.NoSuchProcess:
+                    pass # process is dead?
 
-        time.sleep(0.25) # check maximum 4x per second
+                self.log_fp.write(("MEMORY_LIMIT_EXCEEDED: %d\n" % total_usage).encode("utf-8"))
+                self.log_fp.write(("Current Limit: %d (%dMB)\n" % (limit, limit/1048576)).encode("utf-8"))
+                self.log_fp.write(("Parent PID: %d\n" % process_id).encode("utf-8"))
+                for pid, proc_usage in proc_info:
+                    self.log_fp.write(("-> PID %6d: %10d\n" % (pid, proc_usage)).encode("utf-8"))
+                break
+
+            time.sleep(0.25) # check maximum 4x per second
