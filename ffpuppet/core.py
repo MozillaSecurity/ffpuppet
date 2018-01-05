@@ -50,14 +50,14 @@ class FFPuppet(object):
     LOG_POLL_RATE = 1
     MDSW_BIN = "minidump_stackwalk"
     MDSW_MAX_STACK = 150
-    PROC_EXIT_REASONS = {  # possible reasons the target process was terminated
-        "ABORTED",  # process crashed/aborted/assertion failure etc...
-        "CLOSED",  # terminated by call to FFPuppet close()
-        "EXITED",  # exited normally with exit code 0
-        "LOG_SIZE",  # exceeded log size limit
-        "MEMORY_LIMIT", # exceeded process memory limit
-        "NOT_RUNNING",  # the process was None when close was called
-        "TOKEN_FOUND"}  # abort token was located in the logs
+    R_CODE = {  # reason codes map to the reason the target process was terminated
+        "ABORTED": 0,  # process crashed/aborted/assertion failure etc...
+        "CLOSED": 1,  # terminated by call to FFPuppet close()
+        "EXITED": 2,  # exited normally with exit code 0
+        "LOG_SIZE": 3,  # exceeded log size limit
+        "MEMORY_LIMIT": 4, # exceeded process memory limit
+        "NOT_RUNNING": 5,  # the process was None when close was called
+        "TOKEN_FOUND": 6}  # abort token was located in the logs
 
     def __init__(self, use_profile=None, use_valgrind=False, use_xvfb=False, use_gdb=False):
         self._abort_tokens = set() # tokens used to notify log scanner to kill the browser process
@@ -72,7 +72,7 @@ class FFPuppet(object):
         self._workers = list() # collection of threads and processes
         self._xvfb = None
         self.profile = None # path to profile
-        self.reason = "CLOSED" # why the target process was terminated
+        self.reason = self.R_CODE["CLOSED"] # why the target process was terminated
 
         if use_valgrind:
             if not self._platform.startswith("linux"):
@@ -429,7 +429,6 @@ class FFPuppet(object):
         """
 
         log.debug("clean_up() called")
-
         self.close(force_close=True)
         self._logs.clean_up()
 
@@ -475,37 +474,36 @@ class FFPuppet(object):
             self._logs.close() # make sure browser logs are also closed
             return
 
-        reason = None  # reason the process was terminated
-        # terminate the browser process
+        r_key = None  # reason the process was terminated
         if self._proc is not None:
             log.debug("firefox pid: %r", self._proc.pid)
+            # terminate the browser process if needed
             if self._proc.poll() is None:
-                reason = "CLOSED"
+                r_key = "CLOSED"
                 log.debug("process needs to be closed")
                 self._terminate()
             self._proc.wait()
-            if reason is None:
-                reason = "EXITED" if self._proc.returncode == 0 else "ABORTED"
+            if r_key is None:
+                r_key = "EXITED" if self._proc.returncode == 0 else "ABORTED"
         else:
-            reason = "NOT_RUNNING"
+            log.debug("firefox process was 'None'")
+            r_key = "NOT_RUNNING"
 
-        # join worker threads and processes
         log.debug("joining %d worker(s)...", len(self._workers))
         for worker in self._workers:
             worker.join()
 
-        log.debug("cleaning up workers...")
-        log.debug("copying worker logs to stderr")
+        log.debug("copying worker logs to stderr and cleaning up")
         stderr_log_fp = self._logs.get_fp("stderr")
 
         for worker in self._workers:
             if worker.aborted.is_set():
                 if worker.name == "log_scanner":
-                    reason = "TOKEN_FOUND"
+                    r_key = "TOKEN_FOUND"
                 elif worker.name == "log_size_limiter":
-                    reason = "LOG_SIZE"
+                    r_key = "LOG_SIZE"
                 elif worker.name == "memory_limiter":
-                    reason = "MEMORY_LIMIT"
+                    r_key = "MEMORY_LIMIT"
                 else:
                     raise AssertionError("reason is not set for %r" % worker.name)
 
@@ -541,9 +539,9 @@ class FFPuppet(object):
             shutil.rmtree(self.profile)
             self.profile = None
 
-        log.debug("process exit reason %r", reason)
-        self.reason = reason  # set before asserting to avoid recursion issues... just in case
-        assert reason in self.PROC_EXIT_REASONS
+        log.debug("process exit reason %r", r_key)
+        self.reason = self.R_CODE.get(r_key, "CLOSED")
+        assert r_key in self.R_CODE
 
 
     def get_launch_count(self):
