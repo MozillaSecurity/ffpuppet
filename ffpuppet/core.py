@@ -50,6 +50,14 @@ class FFPuppet(object):
     LOG_POLL_RATE = 1
     MDSW_BIN = "minidump_stackwalk"
     MDSW_MAX_STACK = 150
+    PROC_EXIT_REASONS = {  # possible reasons the target process was terminated
+        "ABORTED",  # process crashed/aborted/assertion failure etc...
+        "CLOSED",  # terminated by call to FFPuppet close()
+        "EXITED",  # exited normally with exit code 0
+        "LOG_SIZE",  # exceeded log size limit
+        "MEMORY_LIMIT", # exceeded process memory limit
+        "NOT_RUNNING",  # the process was None when close was called
+        "TOKEN_FOUND"}  # abort token was located in the logs
 
     def __init__(self, use_profile=None, use_valgrind=False, use_xvfb=False, use_gdb=False):
         self._abort_tokens = set() # tokens used to notify log scanner to kill the browser process
@@ -63,8 +71,8 @@ class FFPuppet(object):
         self._use_gdb = use_gdb
         self._workers = list() # collection of threads and processes
         self._xvfb = None
-        self.closed = True # False once launch() is called and True once close() is called
         self.profile = None # path to profile
+        self.reason = "CLOSED" # why the target process was terminated
 
         if use_valgrind:
             if not self._platform.startswith("linux"):
@@ -224,6 +232,14 @@ class FFPuppet(object):
         @return: Name of the file containing the cloned log or None on failure
         """
         return self._logs.clone_log(log_id, offset=offset, target_file=target_file)
+
+
+    @property
+    def closed(self):
+        """
+        WARNING: This will likely go away in the near future
+        """
+        return self.reason is not None
 
 
     def _dump_minidump_stacks(self):
@@ -423,7 +439,7 @@ class FFPuppet(object):
             self._xvfb = None
 
         # at this point everything should be cleaned up
-        assert self.closed, "self.closed is not True"
+        assert self.reason is not None, "self.reason is None"
         assert self._logs.closed, "self._logs.closed is not True"
         assert self._proc is None, "self._proc is not None"
         assert self.profile is None, "self.profile is not None"
@@ -455,17 +471,23 @@ class FFPuppet(object):
         """
 
         log.debug("close() called")
-        if self.closed:
+        if self.reason is not None:
             self._logs.close() # make sure browser logs are also closed
             return
 
+        reason = None  # reason the process was terminated
         # terminate the browser process
         if self._proc is not None:
             log.debug("firefox pid: %r", self._proc.pid)
             if self._proc.poll() is None:
+                reason = "CLOSED"
                 log.debug("process needs to be closed")
                 self._terminate()
             self._proc.wait()
+            if reason is None:
+                reason = "EXITED" if self._proc.returncode == 0 else "ABORTED"
+        else:
+            reason = "NOT_RUNNING"
 
         # join worker threads and processes
         log.debug("joining %d worker(s)...", len(self._workers))
@@ -475,7 +497,18 @@ class FFPuppet(object):
         log.debug("cleaning up workers...")
         log.debug("copying worker logs to stderr")
         stderr_log_fp = self._logs.get_fp("stderr")
+
         for worker in self._workers:
+            if worker.aborted.is_set():
+                if worker.name == "log_scanner":
+                    reason = "TOKEN_FOUND"
+                elif worker.name == "log_size_limiter":
+                    reason = "LOG_SIZE"
+                elif worker.name == "memory_limiter":
+                    reason = "MEMORY_LIMIT"
+                else:
+                    raise AssertionError("reason is not set for %r" % worker.name)
+
             if not force_close and worker.log_available():
                 stderr_log_fp.write(b"\n")
                 stderr_log_fp.write(("[ffpuppet worker]: %s\n" % worker.name).encode("utf-8"))
@@ -508,7 +541,9 @@ class FFPuppet(object):
             shutil.rmtree(self.profile)
             self.profile = None
 
-        self.closed = True
+        log.debug("process exit reason %r", reason)
+        self.reason = reason  # set before asserting to avoid recursion issues... just in case
+        assert reason in self.PROC_EXIT_REASONS
 
 
     def get_launch_count(self):
@@ -798,7 +833,7 @@ class FFPuppet(object):
         if memory_limit and not memory_limiter.MemoryLimiterWorker.available:
             raise EnvironmentError("Please install psutil")
 
-        self.closed = False
+        self.reason = None
         launch_timeout = max(launch_timeout, self.LAUNCH_TIMEOUT_MIN) # force minimum launch timeout
         log.debug("launch timeout: %d", launch_timeout)
 
