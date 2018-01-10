@@ -450,19 +450,24 @@ class FFPuppet(object):
         kill_delay = max(kill_delay if not self._use_valgrind else 0.1, 0)
         try:
             log.debug("calling terminate()")
-            proc_children = self._proc.children(recursive=True)
-            for c_proc in proc_children:
-                c_proc.terminate()
-            self._proc.terminate()
+            # iterate over child procs and then target proc
+            procs = self._proc.children(recursive=True) + [self._proc]
+            for proc in procs:
+                try:
+                    proc.terminate()
+                except psutil.NoSuchProcess:
+                    pass
             # call kill() if processes did not terminate after waiting for kill_delay
             # but skip on Windows since terminate() == kill()
             if self._platform != "windows" and self.wait(kill_delay) is None:
                 log.debug("%r (kill_delay) elapsed... calling kill()", kill_delay)
-                for c_proc in proc_children:
-                    if not c_proc.is_running():
-                        continue
-                    c_proc.kill()
-                self._proc.kill()
+                for proc in procs:
+                    try:
+                        if not proc.is_running():
+                            continue
+                        proc.kill()
+                    except psutil.NoSuchProcess:
+                        pass
         except AttributeError:
             pass # in case self._proc is None
 
