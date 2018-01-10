@@ -23,6 +23,7 @@ try:  # py 2-3 compatibility
 except ImportError:
     from urllib.request import pathname2url  # pylint: disable=no-name-in-module,import-error
 
+import psutil
 try:
     import xvfbwrapper
 except ImportError:
@@ -53,11 +54,10 @@ class FFPuppet(object):
     R_CODE = {  # reason codes map to the reason the target process was terminated
         "ABORTED": 0,  # process crashed/aborted/assertion failure etc...
         "CLOSED": 1,  # terminated by call to FFPuppet close()
-        "EXITED": 2,  # exited normally with exit code 0
-        "LOG_SIZE": 3,  # exceeded log size limit
-        "MEMORY_LIMIT": 4, # exceeded process memory limit
-        "NOT_RUNNING": 5,  # the process was None when close was called
-        "TOKEN_FOUND": 6}  # abort token was located in the logs
+        "LOG_SIZE": 2,  # exceeded log size limit
+        "MEMORY_LIMIT": 3, # exceeded process memory limit
+        "NOT_RUNNING": 4,  # the process was None when close was called
+        "TOKEN_FOUND": 5}  # abort token was located in the logs
 
     def __init__(self, use_profile=None, use_valgrind=False, use_xvfb=False, use_gdb=False):
         self._abort_tokens = set() # tokens used to notify log scanner to kill the browser process
@@ -446,13 +446,22 @@ class FFPuppet(object):
 
 
     def _terminate(self, kill_delay=30):
-        kill_delay = max(kill_delay, 0)
+        # call kill() immediately if Valgrind is used otherwise wait for "kill_delay"
+        kill_delay = max(kill_delay if not self._use_valgrind else 0.1, 0)
         try:
             log.debug("calling terminate()")
+            proc_children = self._proc.children(recursive=True)
+            for c_proc in proc_children:
+                c_proc.terminate()
             self._proc.terminate()
-            # call kill() immediately if Valgrind is used otherwise wait for "kill_delay"
-            if self.wait(kill_delay if not self._use_valgrind else 0.1) is None:
-                log.debug("calling kill()")
+            # call kill() if processes did not terminate after waiting for kill_delay
+            # but skip on Windows since terminate() == kill()
+            if self._platform != "windows" and self.wait(kill_delay) is None:
+                log.debug("%r (kill_delay) elapsed... calling kill()", kill_delay)
+                for c_proc in proc_children:
+                    if not c_proc.is_running():
+                        continue
+                    c_proc.kill()
                 self._proc.kill()
         except AttributeError:
             pass # in case self._proc is None
@@ -469,7 +478,7 @@ class FFPuppet(object):
         @return: None
         """
 
-        log.debug("close() called")
+        log.debug("close(force_close=%s) called", "True" if force_close else "False")
         if self.reason is not None:
             self._logs.close() # make sure browser logs are also closed
             return
@@ -478,13 +487,13 @@ class FFPuppet(object):
         if self._proc is not None:
             log.debug("firefox pid: %r", self._proc.pid)
             # terminate the browser process if needed
-            if self._proc.poll() is None:
+            if self._proc.is_running():
                 r_key = "CLOSED"
                 log.debug("process needs to be closed")
                 self._terminate()
+            else:
+                r_key = "ABORTED"
             self._proc.wait()
-            if r_key is None:
-                r_key = "EXITED" if self._proc.returncode == 0 else "ABORTED"
         else:
             log.debug("firefox process was 'None'")
             r_key = "NOT_RUNNING"
@@ -528,7 +537,7 @@ class FFPuppet(object):
 
         if self._proc is not None:
             self._logs.get_fp("stderr").write(
-                ("[ffpuppet] Exit code: %r\n" % self._proc.returncode).encode("utf-8"))
+                ("[ffpuppet] Exit code: %r\n" % self._proc.poll()).encode("utf-8"))
             self._proc = None
 
         # close browser logger
@@ -828,9 +837,6 @@ class FFPuppet(object):
         log_limit = max(log_limit, 0)
         memory_limit = max(memory_limit, 0)
 
-        if memory_limit and not memory_limiter.MemoryLimiterWorker.available:
-            raise EnvironmentError("Please install psutil")
-
         self.reason = None
         launch_timeout = max(launch_timeout, self.LAUNCH_TIMEOUT_MIN) # force minimum launch timeout
         log.debug("launch timeout: %d", launch_timeout)
@@ -865,7 +871,7 @@ class FFPuppet(object):
 
         # launch the browser
         log.debug("launch command: %r", " ".join(cmd))
-        self._proc = subprocess.Popen(
+        self._proc = psutil.Popen(
             cmd,
             creationflags=subprocess.CREATE_NEW_PROCESS_GROUP if self._platform == "windows" else 0,
             env=self.get_environ(bin_path),
@@ -908,7 +914,11 @@ class FFPuppet(object):
         @rtype: bool
         @return: True if the process is running otherwise False
         """
-        return self._proc is not None and self._proc.poll() is None
+        if self._proc is not None and self._proc.is_running():
+            if self._proc.status() != psutil.STATUS_ZOMBIE:
+                return True
+            log.warning("PID %r is a zombie", self._proc.pid)
+        return False
 
 
     def _bootstrap_start(self):
@@ -988,31 +998,30 @@ class FFPuppet(object):
 
     def wait(self, timeout=None):
         """
-        Wait for process to terminate. This call will block until the process exits unless
-        a timeout is specified. If a timeout greater than zero is specified the call will
+        Wait for process and children to terminate. This call will block until the process exits
+        unless a timeout is specified. If a timeout of zero or greater is specified the call will
         only block until the timeout expires.
 
-        @type timeout: float or None
+        @type timeout: float, int or None
         @param timeout: maximum amount of time to wait for process to terminate
                         or None (wait indefinitely)
 
         @rtype: int or None
-        @return: exit code if process exits and None if timeout expired
+        @return: exit code of process if it exits and None if timeout expired or the process does
+                 not exist
         """
-        if timeout is not None:
-            timeout = max(timeout, 0)
-            timer_exp = time.time() + timeout
-        else:
-            timer_exp = 0
-        while self._proc is not None:
-            retval = self._proc.poll()
-            if retval is not None:
-                return retval
-            if timeout is not None and time.time() >= timer_exp:
-                log.debug("wait() timed out (%0.2fs)", timeout)
-                break
-            time.sleep(0.1)
-        return None
+        assert timeout is None or (isinstance(timeout, (float, int)) and timeout >= 0)
+        if self._proc is None:
+            log.debug("calling wait() when self._proc is None")
+            return None
+        try:
+            procs = [self._proc] + self._proc.children()
+            _, alive = psutil.wait_procs(procs, timeout=timeout)
+            if alive:
+                log.debug("wait() %d of %d processes still alive", len(alive), len(procs))
+        except psutil.NoSuchProcess:
+            pass
+        return self._proc.poll()
 
 
 def _parse_args(argv=None):

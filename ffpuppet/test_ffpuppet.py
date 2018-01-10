@@ -218,13 +218,17 @@ class PuppetTests(TestCase): # pylint: disable=too-many-public-methods
         "test wait()"
         ffp = FFPuppet()
         self.addCleanup(ffp.clean_up)
+        # call when ffp._proc is None
         self.assertIsNone(ffp.wait())
         ffp.launch(TESTFF_BIN)
+        # call when ffp._proc is running
+        self.assertTrue(ffp.is_running())
         self.assertIsNone(ffp.wait(0))
         ffp._terminate() # pylint: disable=protected-access
+        # call when ffp._proc is not running
         self.assertFalse(ffp.is_running())
-        self.assertIsNotNone(ffp.wait())
-        self.assertNotEqual(ffp.wait(), 0)
+        self.assertIsNotNone(ffp.wait(0))  # with a timeout of zero
+        self.assertNotEqual(ffp.wait(), 0)  # without a timeout
         ffp.close()
         ffp._terminate() # should not raise # pylint: disable=protected-access
         self.assertIsNone(ffp.wait(None))
@@ -361,8 +365,7 @@ class PuppetTests(TestCase): # pylint: disable=too-many-public-methods
                 ffp = FFPuppet(use_xvfb=True)
         else:
             ffp = FFPuppet(use_xvfb=True)
-        if ffp is not None:
-            ffp.clean_up()
+            self.addCleanup(ffp.clean_up)
 
     def test_17(self):
         "test passing a file and a non existing file to launch() via location"
