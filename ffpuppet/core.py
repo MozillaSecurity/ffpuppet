@@ -51,13 +51,9 @@ class FFPuppet(object):
     LOG_POLL_RATE = 1
     MDSW_BIN = "minidump_stackwalk"
     MDSW_MAX_STACK = 150
-    R_CODE = {  # reason codes map to the reason the target process was terminated
-        "ABORTED": 0,  # process crashed/aborted/assertion failure etc...
-        "CLOSED": 1,  # terminated by call to FFPuppet close()
-        "LOG_SIZE": 2,  # exceeded log size limit
-        "MEMORY_LIMIT": 3, # exceeded process memory limit
-        "NOT_RUNNING": 4,  # the process was None when close was called
-        "TOKEN_FOUND": 5}  # abort token was located in the logs
+    RC_CLOSED = "CLOSED"  # target was closed by call to FFPuppet close()
+    RC_EXITED = "EXITED"  # target exited/crashed/aborted/assertion failure etc...
+    RC_WORKER = "WORKER"  # target was closed by worker thread
 
     def __init__(self, use_profile=None, use_valgrind=False, use_xvfb=False, use_gdb=False):
         self._abort_tokens = set() # tokens used to notify log scanner to kill the browser process
@@ -72,7 +68,7 @@ class FFPuppet(object):
         self._workers = list() # collection of threads and processes
         self._xvfb = None
         self.profile = None # path to profile
-        self.reason = self.R_CODE["CLOSED"] # why the target process was terminated
+        self.reason = self.RC_CLOSED # why the target process was terminated
 
         if use_valgrind:
             if not self._platform.startswith("linux"):
@@ -488,20 +484,19 @@ class FFPuppet(object):
             self._logs.close() # make sure browser logs are also closed
             return
 
-        r_key = None  # reason the process was terminated
+        r_key = self.RC_CLOSED  # reason the process was terminated
         if self._proc is not None:
             log.debug("firefox pid: %r", self._proc.pid)
             # terminate the browser process if needed
             if self._proc.is_running():
-                r_key = "CLOSED"
+                r_key = self.RC_CLOSED
                 log.debug("process needs to be closed")
                 self._terminate()
             else:
-                r_key = "ABORTED"
+                r_key = self.RC_EXITED
             self._proc.wait()
         else:
             log.debug("firefox process was 'None'")
-            r_key = "NOT_RUNNING"
 
         log.debug("joining %d worker(s)...", len(self._workers))
         for worker in self._workers:
@@ -512,14 +507,7 @@ class FFPuppet(object):
 
         for worker in self._workers:
             if worker.aborted.is_set():
-                if worker.name == "log_scanner":
-                    r_key = "TOKEN_FOUND"
-                elif worker.name == "log_size_limiter":
-                    r_key = "LOG_SIZE"
-                elif worker.name == "memory_limiter":
-                    r_key = "MEMORY_LIMIT"
-                else:
-                    raise AssertionError("reason is not set for %r" % worker.name)
+                r_key = self.RC_WORKER
 
             if not force_close and worker.log_available():
                 stderr_log_fp.write(b"\n")
@@ -532,10 +520,11 @@ class FFPuppet(object):
         if not force_close:
             # scan for ASan logs
             for fname in os.listdir(self._logs.working_path):
-                if fname.startswith(self._logs.LOG_ASAN_PREFIX):
-                    tmp_file = os.path.join(self._logs.working_path, fname)
-                    self.poll_file(tmp_file)
-                    self._logs.add_log(fname, open(tmp_file, "rb"))
+                if not fname.startswith(self._logs.LOG_ASAN_PREFIX):
+                    continue
+                tmp_file = os.path.join(self._logs.working_path, fname)
+                self.poll_file(tmp_file)
+                self._logs.add_log(fname, open(tmp_file, "rb"))
 
             # check for minidumps in the profile and dump them if possible
             self._dump_minidump_stacks()
@@ -554,8 +543,7 @@ class FFPuppet(object):
             self.profile = None
 
         log.debug("process exit reason %r", r_key)
-        self.reason = self.R_CODE.get(r_key, "CLOSED")
-        assert r_key in self.R_CODE
+        self.reason = r_key
 
 
     def get_launch_count(self):

@@ -120,7 +120,7 @@ class PuppetTests(TestCase): # pylint: disable=too-many-public-methods
         self.assertTrue(ffp.is_running())
         self.assertIsNone(ffp.reason)
         ffp.close()
-        self.assertEqual(ffp.reason, ffp.R_CODE["CLOSED"])
+        self.assertEqual(ffp.reason, ffp.RC_CLOSED)
         self.assertIsNone(ffp._proc) # pylint: disable=protected-access
         self.assertFalse(ffp.is_running())
         self.assertIsNone(ffp.wait(10))
@@ -135,7 +135,7 @@ class PuppetTests(TestCase): # pylint: disable=too-many-public-methods
             ffp.launch(TESTFF_BIN, prefs_js=self.tmpfn)
         self.assertEqual(ffp.wait(10), 1) # test crash returns 1
         ffp.close()
-        self.assertEqual(ffp.reason, ffp.R_CODE["ABORTED"])
+        self.assertEqual(ffp.reason, ffp.RC_EXITED)
 
     def test_03(self):
         "test hang on start"
@@ -151,7 +151,7 @@ class PuppetTests(TestCase): # pylint: disable=too-many-public-methods
                 ffp.launch(TESTFF_BIN, prefs_js=self.tmpfn, launch_timeout=1)
             duration = time.time() - start
             ffp.close()
-            self.assertEqual(ffp.reason, ffp.R_CODE["CLOSED"])
+            self.assertEqual(ffp.reason, ffp.RC_CLOSED)
             self.assertGreater(duration, ffp.LAUNCH_TIMEOUT_MIN)
             self.assertLess(duration, 30)
         finally:
@@ -275,7 +275,7 @@ class PuppetTests(TestCase): # pylint: disable=too-many-public-methods
         ffp.launch(TESTFF_BIN, prefs_js=self.tmpfn, memory_limit=0x100000) # 1MB
         self.assertIsNotNone(ffp.wait(30))
         ffp.close()
-        self.assertEqual(ffp.reason, ffp.R_CODE["MEMORY_LIMIT"])
+        self.assertEqual(ffp.reason, ffp.RC_WORKER)
         ffp.save_logs(self.logs)
         with open(os.path.join(self.logs, "log_stderr.txt"), "rb") as log_fp:
             self.assertRegex(log_fp.read(), b"MEMORY_LIMIT_EXCEEDED")
@@ -306,7 +306,7 @@ class PuppetTests(TestCase): # pylint: disable=too-many-public-methods
         ffp.launch(TESTFF_BIN, prefs_js=self.tmpfn)
         self.assertIsNotNone(ffp.wait(10))
         ffp.close()
-        self.assertEqual(ffp.reason, ffp.R_CODE["TOKEN_FOUND"])
+        self.assertEqual(ffp.reason, ffp.RC_WORKER)
         ffp.save_logs(self.logs)
         with open(os.path.join(self.logs, "log_stderr.txt"), "r") as log_fp:
             self.assertIn("TOKEN_LOCATED", log_fp.read())
@@ -559,7 +559,7 @@ class PuppetTests(TestCase): # pylint: disable=too-many-public-methods
         ffp.launch(TESTFF_BIN, prefs_js=self.tmpfn, log_limit=limit)
         self.assertIsNotNone(ffp.wait(10))
         ffp.close()
-        self.assertEqual(ffp.reason, ffp.R_CODE["LOG_SIZE"])
+        self.assertEqual(ffp.reason, ffp.RC_WORKER)
         ffp.save_logs(self.logs)
         total_size = 0
         for fname in os.listdir(self.logs):
