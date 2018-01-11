@@ -442,30 +442,26 @@ class FFPuppet(object):
 
 
     def _terminate(self, kill_delay=30):
+        assert self._proc is not None
         # call kill() immediately if Valgrind is used otherwise wait for "kill_delay"
         kill_delay = max(kill_delay if not self._use_valgrind else 0.1, 0)
-        try:
-            log.debug("calling terminate()")
-            # iterate over child procs and then target proc
-            procs = self._proc.children(recursive=True) + [self._proc]
-            for proc in procs:
+        target = psutil.Process(self._proc.pid)
+        log.debug("calling _terminate()")
+        # iterate over child procs and then target proc
+        for proc in target.children() + [target]:
+            try:
+                proc.terminate()
+            except psutil.NoSuchProcess:
+                pass
+        # call kill() if processes did not terminate after waiting for kill_delay
+        # always wait but skip kill() pass on Windows since terminate() == kill()
+        if self.wait(kill_delay) is None and self._platform != "windows":
+            log.debug("kill_delay %d elapsed... calling kill()", kill_delay)
+            for proc in target.children(recursive=True) + [target]:
                 try:
-                    proc.terminate()
+                    proc.kill()
                 except psutil.NoSuchProcess:
                     pass
-            # call kill() if processes did not terminate after waiting for kill_delay
-            # but skip on Windows since terminate() == kill()
-            if self._platform != "windows" and self.wait(kill_delay) is None:
-                log.debug("%r (kill_delay) elapsed... calling kill()", kill_delay)
-                for proc in procs:
-                    try:
-                        if not proc.is_running():
-                            continue
-                        proc.kill()
-                    except psutil.NoSuchProcess:
-                        pass
-        except AttributeError:
-            pass # in case self._proc is None
 
 
     def close(self, force_close=False):
@@ -490,7 +486,7 @@ class FFPuppet(object):
             # terminate the browser process if needed
             if self.is_running():
                 r_key = self.RC_CLOSED
-                log.debug("process needs to be closed")
+                log.debug("process needs to be terminated")
                 self._terminate()
             else:
                 r_key = self.RC_EXITED
@@ -864,7 +860,7 @@ class FFPuppet(object):
 
         # launch the browser
         log.debug("launch command: %r", " ".join(cmd))
-        self._proc = psutil.Popen(
+        self._proc = subprocess.Popen(
             cmd,
             creationflags=subprocess.CREATE_NEW_PROCESS_GROUP if self._platform == "windows" else 0,
             env=self.get_environ(bin_path),
@@ -874,7 +870,7 @@ class FFPuppet(object):
         log.debug("launched firefox with pid: %d", self._proc.pid)
 
         self._bootstrap_finish(init_soc, timeout=launch_timeout, url=location)
-        log.debug("bootstrap complete, %d process(es) running", 1 + len(self._proc.children()))
+        log.debug("bootstrap complete")
 
         if prefs_js is not None and os.path.isfile(os.path.join(self.profile, "Invalidprefs.js")):
             raise LaunchError("%r is invalid" % prefs_js)
@@ -907,11 +903,7 @@ class FFPuppet(object):
         @rtype: bool
         @return: True if the process is running otherwise False
         """
-        if self._proc is not None and self._proc.is_running():
-            if self._proc.status() != psutil.STATUS_ZOMBIE:
-                return True
-            log.warning("PID %r is a zombie", self._proc.pid)
-        return False
+        return self._proc is not None and self._proc.poll() is None
 
 
     def _bootstrap_start(self):
@@ -1004,16 +996,16 @@ class FFPuppet(object):
                  not exist
         """
         assert timeout is None or (isinstance(timeout, (float, int)) and timeout >= 0)
-        if self._proc is None:
-            log.debug("calling wait() when self._proc is None")
-            return None
-        try:
-            dead, alive = psutil.wait_procs(self._proc.children() + [self._proc], timeout=timeout)
-            if alive:
-                log.debug("wait() %d alive, %d dead processes", len(alive), len(dead))
-        except psutil.NoSuchProcess:
-            pass
-        return self._proc.poll()
+        start_time = time.time()
+        while self._proc is not None:
+            retval = self._proc.poll()
+            if retval is not None:
+                return retval
+            if timeout is not None and (time.time() - start_time >= timeout):
+                log.debug("wait() timed out (%0.2fs)", timeout)
+                break
+            time.sleep(0.1)
+        return None
 
 
 def _parse_args(argv=None):

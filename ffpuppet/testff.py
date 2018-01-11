@@ -27,6 +27,9 @@ def main():
             url = arg
         elif arg == '-profile':
             profile = sys.argv.pop(1)
+        elif arg == '--multiprocessing-fork':  # for multiproc testing on windows
+            time.sleep(EXIT_DELAY)
+            sys.exit(0)
         else:
             raise RuntimeError('unknown argument: %s' % arg)
     assert url is not None
@@ -83,7 +86,6 @@ def main():
         for _ in range(POOL_SIZE):
             proc_pool.apply_async(time.sleep, (EXIT_DELAY,))
         time.sleep(.25) # wait for procs to launch
-
 
     target_url = None # should be set to the value passed to launch()'s 'location' arg
     while url is not None:

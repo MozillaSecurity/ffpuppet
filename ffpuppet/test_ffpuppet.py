@@ -15,6 +15,8 @@ try: # py 2-3 compatibility
 except ImportError:
     from http.server import HTTPServer, BaseHTTPRequestHandler # pylint: disable=import-error
 
+from psutil import Process
+
 from ffpuppet import FFPuppet, LaunchError, main
 
 
@@ -224,13 +226,14 @@ class PuppetTests(TestCase): # pylint: disable=too-many-public-methods
         # call when ffp._proc is running
         self.assertTrue(ffp.is_running())
         self.assertIsNone(ffp.wait(0))
-        ffp._terminate() # pylint: disable=protected-access
+        ffp._terminate()  # pylint: disable=protected-access
         # call when ffp._proc is not running
         self.assertFalse(ffp.is_running())
         self.assertIsNotNone(ffp.wait(0))  # with a timeout of zero
-        self.assertNotEqual(ffp.wait(), 0)  # without a timeout
+        self.assertIsNotNone(ffp.wait())  # without a timeout
         ffp.close()
-        ffp._terminate() # should not raise # pylint: disable=protected-access
+        with self.assertRaisesRegex(AssertionError, ""):
+            ffp._terminate()  # pylint: disable=protected-access
         self.assertIsNone(ffp.wait(None))
 
     def test_08(self):
@@ -905,7 +908,7 @@ class PuppetTests(TestCase): # pylint: disable=too-many-public-methods
         ffp.launch(TESTFF_BIN, prefs_js=self.tmpfn, location=tsrv.get_addr())
         self.assertTrue(ffp.is_running())
         self.assertIsNone(ffp.wait(0))
-        c_procs = ffp._proc.children()  # pylint: disable=protected-access
+        c_procs = Process(ffp.get_pid()).children()
         self.assertGreater(len(c_procs), 0)
         # terminate one of the processes
         c_procs[-1].terminate()
