@@ -7,11 +7,15 @@ import os.path
 import re
 import sys
 import time
+
+from multiprocessing import Pool
 try:
     from urllib.request import urlopen
 except ImportError:
     from urllib2 import urlopen
 
+EXIT_DELAY = 45
+POOL_SIZE = 4 # number of child procs to create
 
 def main():
     profile = url = None
@@ -42,6 +46,8 @@ def main():
                         cmd = 'start_crash'
                     elif line == 'fftest_memory':
                         cmd = 'memory'
+                    elif line == 'fftest_multi_proc':
+                        cmd = 'multi_proc'
                     elif line == 'fftest_soft_assert':
                         cmd = 'soft_assert'
                     elif line == 'fftest_invalid_js':
@@ -58,6 +64,8 @@ def main():
                     raise RuntimeError('unknown value in prefs.js: %s' % line)
     #sys.stdout.write('cmd: %s\n' % cmd)
     #sys.stdout.flush()
+
+    proc_pool = None
     if cmd == 'hang':
         sys.stdout.write('hanging\n')
         sys.stdout.flush()
@@ -70,6 +78,12 @@ def main():
     elif cmd == 'invalid_js':
         with open(os.path.join(profile, 'Invalidprefs.js'), "w") as prefs_js:
             prefs_js.write("bad!")
+    elif cmd == 'multi_proc':
+        proc_pool = Pool(processes=POOL_SIZE)
+        for _ in range(POOL_SIZE):
+            proc_pool.apply_async(time.sleep, (EXIT_DELAY,))
+        time.sleep(.25) # wait for procs to launch
+
 
     target_url = None # should be set to the value passed to launch()'s 'location' arg
     while url is not None:
@@ -104,7 +118,6 @@ def main():
         blob = []
         for _ in range(200):
             blob.append("A" * 1024 * 1024)
-        time.sleep(30)
     elif cmd == 'soft_assert':
         sys.stdout.write('simulating soft assertion\n')
         # split '###!!! ASSERTION: tests\n' across multiple reads by the log scanner
@@ -126,7 +139,13 @@ def main():
         sys.stdout.write('exit code test\n')
         sys.exit(exit_code)
 
-    time.sleep(45) # wait before closing (should be terminated before elapse)
+    try:
+        time.sleep(EXIT_DELAY) # wait before closing (should be terminated before elapse)
+    finally:
+        # cleanup for multiprocess
+        if proc_pool is not None:
+            proc_pool.terminate()
+            proc_pool.join()
     sys.exit(0)
 
 if __name__ == '__main__':

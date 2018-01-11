@@ -488,13 +488,13 @@ class FFPuppet(object):
         if self._proc is not None:
             log.debug("firefox pid: %r", self._proc.pid)
             # terminate the browser process if needed
-            if self._proc.is_running():
+            if self.is_running():
                 r_key = self.RC_CLOSED
                 log.debug("process needs to be closed")
                 self._terminate()
             else:
                 r_key = self.RC_EXITED
-            self._proc.wait()
+            self.wait()
         else:
             log.debug("firefox process was 'None'")
 
@@ -874,7 +874,7 @@ class FFPuppet(object):
         log.debug("launched firefox with pid: %d", self._proc.pid)
 
         self._bootstrap_finish(init_soc, timeout=launch_timeout, url=location)
-        log.debug("bootstrap complete")
+        log.debug("bootstrap complete, %d process(es) running", 1 + len(self._proc.children()))
 
         if prefs_js is not None and os.path.isfile(os.path.join(self.profile, "Invalidprefs.js")):
             raise LaunchError("%r is invalid" % prefs_js)
@@ -1008,10 +1008,9 @@ class FFPuppet(object):
             log.debug("calling wait() when self._proc is None")
             return None
         try:
-            procs = [self._proc] + self._proc.children()
-            _, alive = psutil.wait_procs(procs, timeout=timeout)
+            dead, alive = psutil.wait_procs(self._proc.children() + [self._proc], timeout=timeout)
             if alive:
-                log.debug("wait() %d of %d processes still alive", len(alive), len(procs))
+                log.debug("wait() %d alive, %d dead processes", len(alive), len(dead))
         except psutil.NoSuchProcess:
             pass
         return self._proc.poll()

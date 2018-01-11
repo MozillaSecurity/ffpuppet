@@ -894,6 +894,24 @@ class PuppetTests(TestCase): # pylint: disable=too-many-public-methods
             ffp.BS_PORT_MAX = 0xFFFF
             ffp.BS_PORT_MIN = 0x4000
 
+    def test_36(self):
+        "test multiprocess target"
+        with open(self.tmpfn, "w") as prefs_fp:
+            prefs_fp.write("//fftest_multi_proc\n")
+        tsrv = HTTPTestServer()
+        self.addCleanup(tsrv.shutdown)
+        ffp = FFPuppet()
+        self.addCleanup(ffp.clean_up)
+        ffp.launch(TESTFF_BIN, prefs_js=self.tmpfn, location=tsrv.get_addr())
+        self.assertTrue(ffp.is_running())
+        self.assertIsNone(ffp.wait(0))
+        c_procs = ffp._proc.children()  # pylint: disable=protected-access
+        self.assertGreater(len(c_procs), 0)
+        # terminate one of the processes
+        c_procs[-1].terminate()
+        ffp.close()
+        self.assertFalse(ffp.is_running())
+        self.assertIsNone(ffp.wait(0))
 
 class ScriptTests(TestCase):
 
