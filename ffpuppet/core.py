@@ -443,12 +443,18 @@ class FFPuppet(object):
 
     def _terminate(self, kill_delay=30):
         assert self._proc is not None
-        # call kill() immediately if Valgrind is used otherwise wait for "kill_delay"
-        kill_delay = max(kill_delay if not self._use_valgrind else 0.1, 0)
-        target = psutil.Process(self._proc.pid)
-        log.debug("calling _terminate()")
+        assert isinstance(kill_delay, (float, int)) and kill_delay >= 0
+        log.debug("_terminate(kill_delay=%0.2f) called", kill_delay)
+        try:
+            target = psutil.Process(self._proc.pid)
+        except psutil.NoSuchProcess:
+            return None  # there is nothing we can do here
+        try:
+            procs = target.children()
+        except psutil.NoSuchProcess:
+            procs = list()
         # iterate over child procs and then target proc
-        for proc in target.children() + [target]:
+        for proc in procs + [target]:
             try:
                 proc.terminate()
             except psutil.NoSuchProcess:
@@ -457,7 +463,11 @@ class FFPuppet(object):
         # always wait but skip kill() pass on Windows since terminate() == kill()
         if self.wait(kill_delay) is None and self._platform != "windows":
             log.debug("kill_delay %d elapsed... calling kill()", kill_delay)
-            for proc in target.children(recursive=True) + [target]:
+            try:
+                procs = target.children(recursive=True)
+            except psutil.NoSuchProcess:
+                procs = list()
+            for proc in procs + [target]:
                 try:
                     proc.kill()
                 except psutil.NoSuchProcess:
@@ -487,7 +497,10 @@ class FFPuppet(object):
             if self.is_running():
                 r_key = self.RC_CLOSED
                 log.debug("process needs to be terminated")
-                self._terminate()
+                if self._use_valgrind:
+                    self._terminate(0.1)
+                else:
+                    self._terminate()
             else:
                 r_key = self.RC_EXITED
             self.wait()
@@ -1037,7 +1050,7 @@ def _parse_args(argv=None):
         help="Log file size limit in MBs (default: 'no limit')")
     parser.add_argument(
         "-m", "--memory", type=int,
-        help="Process memory limit in MBs (Requires psutil)")
+        help="Process memory limit in MBs")
     parser.add_argument(
         "-p", "--prefs",
         help="prefs.js file to use")

@@ -20,7 +20,7 @@ At this time no modules are required to run FFPuppet however some features may n
   
     pip install -r requirements.txt
 
-In order to enable memory limiting `psutil` is required on all supported operating systems. Linux requires `xvfb` in order to run headless (this is not the same as Firefox's `-headless` mode).
+Linux requires `xvfb` in order to run headless (this is not the same as Firefox's `-headless` mode).
 
 ##### Ubuntu
 
@@ -47,10 +47,10 @@ Once installed FFPuppet can be run using the following command:
 
 ```
 $ python -m ffpuppet -h
-usage: __main__.py [-h] [-a ABORT_TOKEN] [-d] [-e EXTENSION] [-g] [-l LOG]
-                   [--log-limit LOG_LIMIT] [-m MEMORY] [-p PREFS] [-P PROFILE]
-                   [--safe-mode] [-t TIMEOUT] [-u URL] [--valgrind] [-v]
-                   [--xvfb]
+usage: __main__.py [-h] [-a ABORT_TOKEN] [-d] [-e EXTENSION] [-g]
+                   [--ignore-crashes] [-l LOG] [--log-limit LOG_LIMIT]
+                   [-m MEMORY] [-p PREFS] [-P PROFILE] [--safe-mode]
+                   [-t TIMEOUT] [-u URL] [--valgrind] [-v] [--xvfb]
                    binary
 
 Firefox launcher/wrapper
@@ -69,11 +69,13 @@ optional arguments:
                         Install the fuzzPriv extension (specify path to
                         funfuzz/dom/extension)
   -g, --gdb             Use GDB (Linux only)
+  --ignore-crashes      Do not close the browser when a crash is detected
+                        (e10s only)
   -l LOG, --log LOG     Location to save log files
   --log-limit LOG_LIMIT
                         Log file size limit in MBs (default: 'no limit')
   -m MEMORY, --memory MEMORY
-                        Process memory limit in MBs (Requires psutil)
+                        Process memory limit in MBs
   -p PREFS, --prefs PREFS
                         prefs.js file to use
   -P PROFILE, --profile PROFILE
