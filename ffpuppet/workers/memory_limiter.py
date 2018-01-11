@@ -6,10 +6,7 @@ import os
 import threading
 import time
 
-try:
-    import psutil
-except ImportError:
-    psutil = None
+import psutil
 
 from . import puppet_worker
 
@@ -21,7 +18,6 @@ class MemoryLimiterWorker(puppet_worker.BaseWorker):
     MemoryLimiterWorker intended to be used with ffpuppet to limit the about of memory
     used by the browser process.
     """
-    available = psutil is not None
     name = os.path.splitext(os.path.basename(__file__))[0]
 
     def start(self, process_id, memory_limit):
