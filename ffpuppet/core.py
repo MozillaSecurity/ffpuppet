@@ -941,19 +941,17 @@ class FFPuppet(object):
                 socket.SO_EXCLUSIVEADDRUSE,  # pylint: disable=no-member
                 1)
         init_soc.settimeout(0.25)
-        attempts = 100  # number of attempts to find an available port
-        while True:
+        for _ in range(100):  # number of attempts to find an available port
             try:
                 init_soc.bind(("127.0.0.1", random.randint(self.BS_PORT_MIN, self.BS_PORT_MAX)))
                 init_soc.listen(5)
                 break
             except socket.error as soc_e:
                 if soc_e.errno in (errno.EADDRINUSE, 10013):  # Address already in use
-                    attempts -= 1
-                    if attempts < 1:
-                        raise LaunchError("Could not find available port")
                     continue
                 raise soc_e
+        else:
+            raise LaunchError("Could not find available port")
         with open(os.path.join(self.profile, "prefs.js"), "a") as prefs_fp:
             prefs_fp.write("\n") # make sure there is a newline before appending to prefs.js
             prefs_fp.write("user_pref('capability.policy.policynames', 'localfilelinks');\n")
