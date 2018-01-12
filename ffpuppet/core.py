@@ -394,6 +394,18 @@ class FFPuppet(object):
         return self._logs.log_length(log_id)
 
 
+    @property
+    def returncode(self):
+        """
+        Process exit status of the target process. Can be used with 'reason' to help gain insight
+        into process termination and better understand results.
+
+        @rtype: int or None
+        @return: process returncode if the process has run and exited otherwise None
+        """
+        return None if self._proc is None else self._proc.poll()
+
+
     def save_logs(self, log_path):
         """
         The browser logs will be saved to log_path.
