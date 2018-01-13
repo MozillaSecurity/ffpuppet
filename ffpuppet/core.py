@@ -908,7 +908,7 @@ class FFPuppet(object):
         if memory_limit:
             # launch memory monitor thread
             self._workers.append(memory_limiter.MemoryLimiterWorker())
-            self._workers[-1].start(self._proc.pid, memory_limit)
+            self._workers[-1].start(self, memory_limit)
 
         if self._use_valgrind:
             self.add_abort_token(re.compile(r"==\d+==\s"))
