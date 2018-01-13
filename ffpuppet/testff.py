@@ -81,7 +81,7 @@ def main():
     elif cmd == 'invalid_js':
         with open(os.path.join(profile, 'Invalidprefs.js'), "w") as prefs_js:
             prefs_js.write("bad!")
-    elif cmd == 'multi_proc':
+    elif cmd in ('memory', 'multi_proc'):
         proc_pool = Pool(processes=POOL_SIZE)
         for _ in range(POOL_SIZE):
             proc_pool.apply_async(time.sleep, (EXIT_DELAY,))

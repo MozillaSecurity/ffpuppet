@@ -43,17 +43,17 @@ class LogScannerWorker(puppet_worker.BaseWorker):
                 # collect new data
                 with open(log["fname"], "r") as scan_fp:
                     scan_fp.seek(log["offset"], os.SEEK_SET)
-                    data = scan_fp.read(0x20000) # 128KB
+                    data = scan_fp.read(0x20000)  # 128KB
                     log["offset"] = scan_fp.tell()
                 # prepend chunk of previously read line to data
                 if log["lbuf"]:
                     data = "".join([log["lbuf"], data])
 
-                for token in puppet._abort_tokens:
+                for token in puppet._abort_tokens:  # pylint: disable=protected-access
                     match = token.search(data)
                     if match:
                         self.aborted.set()
-                        puppet._terminate(5)  # TODO: this could fail, use psutil.
+                        puppet._terminate(5)  # pylint: disable=protected-access
                         self.log_fp.write(("TOKEN_LOCATED: %s\n" % match.group()).encode("utf-8"))
                         return
 
@@ -62,4 +62,4 @@ class LogScannerWorker(puppet_worker.BaseWorker):
                 except IndexError:
                     log["lbuf"] = data
 
-            time.sleep(0.05) # don't be a CPU hog
+            time.sleep(0.05)  # don't be a CPU hog

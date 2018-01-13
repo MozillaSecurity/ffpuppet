@@ -121,8 +121,10 @@ class PuppetTests(TestCase): # pylint: disable=too-many-public-methods
         self.assertIsNone(ffp.wait(0))
         self.assertTrue(ffp.is_running())
         self.assertIsNone(ffp.reason)
+        self.assertIsNone(ffp.returncode)
         ffp.close()
         self.assertEqual(ffp.reason, ffp.RC_CLOSED)
+        self.assertIsNone(ffp.returncode)
         self.assertIsNone(ffp._proc) # pylint: disable=protected-access
         self.assertFalse(ffp.is_running())
         self.assertIsNone(ffp.wait(10))
@@ -136,6 +138,7 @@ class PuppetTests(TestCase): # pylint: disable=too-many-public-methods
         with self.assertRaisesRegex(LaunchError, "Failure during browser startup"):
             ffp.launch(TESTFF_BIN, prefs_js=self.tmpfn)
         self.assertEqual(ffp.wait(10), 1) # test crash returns 1
+        self.assertEqual(ffp.returncode, 1)
         ffp.close()
         self.assertEqual(ffp.reason, ffp.RC_EXITED)
 
@@ -231,6 +234,7 @@ class PuppetTests(TestCase): # pylint: disable=too-many-public-methods
         self.assertFalse(ffp.is_running())
         self.assertIsNotNone(ffp.wait(0))  # with a timeout of zero
         self.assertIsNotNone(ffp.wait())  # without a timeout
+        self.assertIsNotNone(ffp.returncode)
         ffp.close()
         with self.assertRaisesRegex(AssertionError, ""):
             ffp._terminate()  # pylint: disable=protected-access
@@ -277,6 +281,7 @@ class PuppetTests(TestCase): # pylint: disable=too-many-public-methods
             prefs.write('//fftest_memory\n')
         ffp.launch(TESTFF_BIN, prefs_js=self.tmpfn, memory_limit=0x100000) # 1MB
         self.assertIsNotNone(ffp.wait(30))
+        self.assertIsNotNone(ffp.returncode)
         ffp.close()
         self.assertEqual(ffp.reason, ffp.RC_WORKER)
         ffp.save_logs(self.logs)
@@ -308,6 +313,7 @@ class PuppetTests(TestCase): # pylint: disable=too-many-public-methods
         ffp.add_abort_token("###!!! ASSERTION:")
         ffp.launch(TESTFF_BIN, prefs_js=self.tmpfn)
         self.assertIsNotNone(ffp.wait(10))
+        self.assertIsNotNone(ffp.returncode)
         ffp.close()
         self.assertEqual(ffp.reason, ffp.RC_WORKER)
         ffp.save_logs(self.logs)
@@ -561,8 +567,10 @@ class PuppetTests(TestCase): # pylint: disable=too-many-public-methods
         limit = 0x100000 # 1MB
         ffp.launch(TESTFF_BIN, prefs_js=self.tmpfn, log_limit=limit)
         self.assertIsNotNone(ffp.wait(10))
+        self.assertIsNotNone(ffp.returncode)
         ffp.close()
         self.assertEqual(ffp.reason, ffp.RC_WORKER)
+        self.assertIsNone(ffp.returncode)
         ffp.save_logs(self.logs)
         total_size = 0
         for fname in os.listdir(self.logs):
@@ -915,6 +923,21 @@ class PuppetTests(TestCase): # pylint: disable=too-many-public-methods
         ffp.close()
         self.assertFalse(ffp.is_running())
         self.assertIsNone(ffp.wait(0))
+
+    def test_37(self):
+        "test returncode"
+        with open(self.tmpfn, "w") as prefs_fp:
+            prefs_fp.write("//fftest_exit_code_3\n")
+        tsrv = HTTPTestServer()
+        self.addCleanup(tsrv.shutdown)
+        ffp = FFPuppet()
+        self.addCleanup(ffp.clean_up)
+        ffp.launch(TESTFF_BIN, prefs_js=self.tmpfn, location=tsrv.get_addr())
+        ffp.wait(10)
+        self.assertEqual(ffp.returncode, 3)
+        ffp.close()
+        self.assertEqual(ffp.reason, ffp.RC_EXITED)
+        self.assertIsNone(ffp.returncode)
 
 class ScriptTests(TestCase):
 

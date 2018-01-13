@@ -394,6 +394,18 @@ class FFPuppet(object):
         return self._logs.log_length(log_id)
 
 
+    @property
+    def returncode(self):
+        """
+        Process exit status of the target process. Can be used with 'reason' to help gain insight
+        into process termination and better understand results.
+
+        @rtype: int or None
+        @return: process returncode if the process has run and exited otherwise None
+        """
+        return None if self._proc is None else self._proc.poll()
+
+
     def save_logs(self, log_path):
         """
         The browser logs will be saved to log_path.
@@ -896,7 +908,7 @@ class FFPuppet(object):
         if memory_limit:
             # launch memory monitor thread
             self._workers.append(memory_limiter.MemoryLimiterWorker())
-            self._workers[-1].start(self._proc.pid, memory_limit)
+            self._workers[-1].start(self, memory_limit)
 
         if self._use_valgrind:
             self.add_abort_token(re.compile(r"==\d+==\s"))
@@ -929,19 +941,17 @@ class FFPuppet(object):
                 socket.SO_EXCLUSIVEADDRUSE,  # pylint: disable=no-member
                 1)
         init_soc.settimeout(0.25)
-        attempts = 100  # number of attempts to find an available port
-        while True:
+        for _ in range(100):  # number of attempts to find an available port
             try:
                 init_soc.bind(("127.0.0.1", random.randint(self.BS_PORT_MIN, self.BS_PORT_MAX)))
                 init_soc.listen(5)
                 break
             except socket.error as soc_e:
                 if soc_e.errno in (errno.EADDRINUSE, 10013):  # Address already in use
-                    attempts -= 1
-                    if attempts < 1:
-                        raise LaunchError("Could not find available port")
                     continue
                 raise soc_e
+        else:
+            raise LaunchError("Could not find available port")
         with open(os.path.join(self.profile, "prefs.js"), "a") as prefs_fp:
             prefs_fp.write("\n") # make sure there is a newline before appending to prefs.js
             prefs_fp.write("user_pref('capability.policy.policynames', 'localfilelinks');\n")
