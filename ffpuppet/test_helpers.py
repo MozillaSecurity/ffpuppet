@@ -32,13 +32,13 @@ class HelperTests(TestCase): # pylint: disable=too-many-public-methods
     def setUp(self):
         fd, self.tmpfn = tempfile.mkstemp(prefix="helper_test_")
         os.close(fd)
-        self.tmp_path = tempfile.mkdtemp(prefix="helper_test_")
+        self.tmpdir = tempfile.mkdtemp(prefix="helper_test_")
 
     def tearDown(self):
         if os.path.isfile(self.tmpfn):
             os.unlink(self.tmpfn)
-        if os.path.isdir(self.tmp_path):
-            shutil.rmtree(self.tmp_path)
+        if os.path.isdir(self.tmpdir):
+            shutil.rmtree(self.tmpdir)
 
     def test_01(self):
         "test create_profile()"
@@ -56,11 +56,11 @@ class HelperTests(TestCase): # pylint: disable=too-many-public-methods
         self.assertEqual(len(contents), 0)
 
         # create dummy profile
-        invalid_js = os.path.join(self.tmp_path, "Invalidprefs.js")
+        invalid_js = os.path.join(self.tmpdir, "Invalidprefs.js")
         with open(invalid_js, "w") as log_fp:
             log_fp.write("blah!")
         # try creating a profile from a template
-        prof = create_profile(prefs_js=self.tmpfn, template=self.tmp_path)
+        prof = create_profile(prefs_js=self.tmpfn, template=self.tmpdir)
         self.assertTrue(os.path.isdir(prof))
         contents = os.listdir(prof)
         shutil.rmtree(prof)
@@ -77,7 +77,9 @@ class HelperTests(TestCase): # pylint: disable=too-many-public-methods
             prefs_fp.write('user_pref("a.a", 0);\n')
             prefs_fp.write('user_pref("a.b", "test");\n')
             prefs_fp.write('user_pref("a.c", true);\n')
-        with tempfile.NamedTemporaryFile(mode="w") as prefs_fp:  # custom prefs.js
+        tmpfd, custom_prefs = tempfile.mkstemp(dir=self.tmpdir)
+        os.close(tmpfd)
+        with open(custom_prefs, "w") as prefs_fp:
             prefs_fp.write('// comment line\n')
             prefs_fp.write('# comment line\n')
             prefs_fp.write('/* comment block.\n')
@@ -85,14 +87,12 @@ class HelperTests(TestCase): # pylint: disable=too-many-public-methods
             prefs_fp.write(' \n\n')
             prefs_fp.write('user_pref("a.a", 0); // test comment\n')
             prefs_fp.write('user_pref("a.c", true);\n')
-            prefs_fp.flush()
-            self.assertTrue(check_prefs(self.tmpfn, prefs_fp.name))
-        with tempfile.NamedTemporaryFile(mode="w") as prefs_fp:  # custom prefs.js
+        self.assertTrue(check_prefs(self.tmpfn, prefs_fp.name))
+        with open(custom_prefs, "w") as prefs_fp:
             prefs_fp.write('user_pref("a.a", 0);\n')
             prefs_fp.write('user_pref("b.a", false);\n')
-            prefs_fp.flush()
-            # test detecting missing prefs
-            self.assertFalse(check_prefs(self.tmpfn, prefs_fp.name))
+        # test detecting missing prefs
+        self.assertFalse(check_prefs(self.tmpfn, prefs_fp.name))
 
     def test_03(self):
         "test poll_file()"
