@@ -488,7 +488,7 @@ class PuppetTests(TestCase): # pylint: disable=too-many-public-methods
 
     def test_23(self):
         "test check_prefs()"
-        with open(self.tmpfn, 'w') as prefs_fp: # browser prefs.js dummy
+        with open(self.tmpfn, 'w') as prefs_fp:  # browser prefs.js dummy
             prefs_fp.write('// comment line\n')
             prefs_fp.write('# comment line\n')
             prefs_fp.write(' \n\n')
@@ -497,27 +497,24 @@ class PuppetTests(TestCase): # pylint: disable=too-many-public-methods
             prefs_fp.write('user_pref("a.c", true);\n')
         ffp = FFPuppet()
         self.addCleanup(ffp.clean_up)
-        self.assertFalse(ffp.check_prefs(self.tmpfn)) # test with profile == None
-        try:
-            fd, custom_prefs = tempfile.mkstemp(prefix="ffp_test_log_")
-            os.close(fd)
-            with open(custom_prefs, 'w') as prefs_fp: # custom prefs.js
-                prefs_fp.write('// comment line\n')
-                prefs_fp.write('# comment line\n')
-                prefs_fp.write('/* comment block.\n')
-                prefs_fp.write('*\n')
-                prefs_fp.write(' \n\n')
-                prefs_fp.write('user_pref("a.a", 0); // test comment\n')
-                prefs_fp.write('user_pref("a.c", true);\n')
+        with tempfile.NamedTemporaryFile(mode="w") as prefs_fp:  # custom prefs.js
+            prefs_fp.write('// comment line\n')
+            prefs_fp.write('# comment line\n')
+            prefs_fp.write('/* comment block.\n')
+            prefs_fp.write('*\n')
+            prefs_fp.write(' \n\n')
+            prefs_fp.write('user_pref("a.a", 0); // test comment\n')
+            prefs_fp.write('user_pref("a.c", true);\n')
+            prefs_fp.flush()
             ffp.launch(TESTFF_BIN, prefs_js=self.tmpfn)
-            self.assertTrue(ffp.check_prefs(custom_prefs))
-            # test detects missing prefs
-            with open(custom_prefs, 'w') as prefs_fp: # custom prefs.js
-                prefs_fp.write('user_pref("a.a", 0);\n')
-                prefs_fp.write('user_pref("b.a", false);\n')
-            self.assertFalse(ffp.check_prefs(custom_prefs))
-        finally:
-            os.remove(custom_prefs)
+            profile_prefs = os.path.join(ffp.profile, "prefs.js")
+            self.assertTrue(ffp.check_prefs(profile_prefs, prefs_fp.name))
+        with tempfile.NamedTemporaryFile(mode="w") as prefs_fp:  # custom prefs.js
+            prefs_fp.write('user_pref("a.a", 0);\n')
+            prefs_fp.write('user_pref("b.a", false);\n')
+            prefs_fp.flush()
+            # test detecting missing prefs
+            self.assertFalse(ffp.check_prefs(profile_prefs, prefs_fp.name))
 
     def test_24(self):
         "test detecting invalid prefs file"
