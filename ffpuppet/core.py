@@ -60,6 +60,7 @@ class FFPuppet(object):
         self._platform = platform.system().lower()
         self._proc = None
         self._profile_template = use_profile # profile that is used as a template
+        self._returncode = 0 # return code of target process
         self._use_valgrind = use_valgrind
         self._use_gdb = use_gdb
         self._workers = list() # collection of threads and processes
@@ -365,7 +366,12 @@ class FFPuppet(object):
         @rtype: int or None
         @return: process returncode if the process has run and exited otherwise None
         """
-        return None if self._proc is None else self._proc.poll()
+
+        if self._returncode is None:
+            assert self._proc is not None, "_proc and _returncode are both None"
+            # cache returncode value if available
+            self._returncode = self._proc.poll()
+        return self._returncode
 
 
     def save_logs(self, log_path):
@@ -477,7 +483,7 @@ class FFPuppet(object):
                     self._terminate()
             else:
                 r_key = self.RC_EXITED
-            self.wait()
+            self._returncode = self.wait()
         else:
             log.debug("firefox process was 'None'")
 
@@ -487,7 +493,6 @@ class FFPuppet(object):
 
         log.debug("copying worker logs to stderr and cleaning up")
         stderr_log_fp = self._logs.get_fp("stderr")
-
         for worker in self._workers:
             if worker.aborted.is_set():
                 r_key = self.RC_WORKER
@@ -513,8 +518,7 @@ class FFPuppet(object):
             self._dump_minidump_stacks()
 
         if self._proc is not None:
-            self._logs.get_fp("stderr").write(
-                ("[ffpuppet] Exit code: %r\n" % self._proc.poll()).encode("utf-8"))
+            stderr_log_fp.write(("[ffpuppet] Exit code: %r\n" % self._returncode).encode("utf-8"))
             self._proc = None
 
         # close browser logger
@@ -674,6 +678,7 @@ class FFPuppet(object):
         memory_limit = max(memory_limit, 0)
 
         self.reason = None
+        self._returncode = None
         launch_timeout = max(launch_timeout, self.LAUNCH_TIMEOUT_MIN) # force minimum launch timeout
         log.debug("launch timeout: %d", launch_timeout)
 

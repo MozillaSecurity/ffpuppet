@@ -112,6 +112,7 @@ class PuppetTests(TestCase): # pylint: disable=too-many-public-methods
         ffp = FFPuppet()
         self.addCleanup(ffp.clean_up)
         self.assertEqual(ffp.get_launch_count(), 0)
+        self.assertEqual(ffp.returncode, 0)
         tsrv = HTTPTestServer()
         self.addCleanup(tsrv.shutdown)
         ffp.launch(TESTFF_BIN, location=tsrv.get_addr())
@@ -123,7 +124,7 @@ class PuppetTests(TestCase): # pylint: disable=too-many-public-methods
         self.assertIsNone(ffp.returncode)
         ffp.close()
         self.assertEqual(ffp.reason, ffp.RC_CLOSED)
-        self.assertIsNone(ffp.returncode)
+        self.assertIsNotNone(ffp.returncode)
         self.assertIsNone(ffp._proc) # pylint: disable=protected-access
         self.assertFalse(ffp.is_running())
         self.assertIsNone(ffp.wait(10))
@@ -137,9 +138,9 @@ class PuppetTests(TestCase): # pylint: disable=too-many-public-methods
         with self.assertRaisesRegex(LaunchError, "Failure during browser startup"):
             ffp.launch(TESTFF_BIN, prefs_js=self.tmpfn)
         self.assertEqual(ffp.wait(10), 1) # test crash returns 1
-        self.assertEqual(ffp.returncode, 1)
         ffp.close()
         self.assertEqual(ffp.reason, ffp.RC_EXITED)
+        self.assertEqual(ffp.returncode, 1)
 
     def test_03(self):
         "test hang on start"
@@ -233,8 +234,8 @@ class PuppetTests(TestCase): # pylint: disable=too-many-public-methods
         self.assertFalse(ffp.is_running())
         self.assertIsNotNone(ffp.wait(0))  # with a timeout of zero
         self.assertIsNotNone(ffp.wait())  # without a timeout
-        self.assertIsNotNone(ffp.returncode)
         ffp.close()
+        self.assertIsNotNone(ffp.returncode)
         with self.assertRaisesRegex(AssertionError, ""):
             ffp._terminate()  # pylint: disable=protected-access
         self.assertIsNone(ffp.wait(None))
@@ -280,8 +281,8 @@ class PuppetTests(TestCase): # pylint: disable=too-many-public-methods
             prefs.write('//fftest_memory\n')
         ffp.launch(TESTFF_BIN, prefs_js=self.tmpfn, memory_limit=0x100000) # 1MB
         self.assertIsNotNone(ffp.wait(30))
-        self.assertIsNotNone(ffp.returncode)
         ffp.close()
+        self.assertIsNotNone(ffp.returncode)
         self.assertEqual(ffp.reason, ffp.RC_WORKER)
         ffp.save_logs(self.logs)
         with open(os.path.join(self.logs, "log_stderr.txt"), "rb") as log_fp:
@@ -312,9 +313,9 @@ class PuppetTests(TestCase): # pylint: disable=too-many-public-methods
         ffp.add_abort_token("###!!! ASSERTION:")
         ffp.launch(TESTFF_BIN, prefs_js=self.tmpfn)
         self.assertIsNotNone(ffp.wait(10))
-        self.assertIsNotNone(ffp.returncode)
         ffp.close()
         self.assertEqual(ffp.reason, ffp.RC_WORKER)
+        self.assertIsNotNone(ffp.returncode)
         ffp.save_logs(self.logs)
         with open(os.path.join(self.logs, "log_stderr.txt"), "r") as log_fp:
             self.assertIn("TOKEN_LOCATED", log_fp.read())
@@ -506,7 +507,7 @@ class PuppetTests(TestCase): # pylint: disable=too-many-public-methods
         self.assertIsNotNone(ffp.returncode)
         ffp.close()
         self.assertEqual(ffp.reason, ffp.RC_WORKER)
-        self.assertIsNone(ffp.returncode)
+        self.assertIsNotNone(ffp.returncode)
         ffp.save_logs(self.logs)
         total_size = 0
         for fname in os.listdir(self.logs):
@@ -732,10 +733,17 @@ class PuppetTests(TestCase): # pylint: disable=too-many-public-methods
         tsrv = HTTPTestServer()
         self.addCleanup(tsrv.shutdown)
         ffp = FFPuppet()
+        self.assertEqual(ffp.returncode, 0)
         self.addCleanup(ffp.clean_up)
         ffp.launch(TESTFF_BIN, prefs_js=self.tmpfn, location=tsrv.get_addr())
         ffp.wait(10)
+        self.assertFalse(ffp.is_running())
+        # verify private member is set when using returncode property
+        self.assertIsNone(ffp._returncode)
         self.assertEqual(ffp.returncode, 3)
+        self.assertEqual(ffp._returncode, 3)  # pylint: disable=protected-access
+        # verify private member is set when calling close()
+        ffp._returncode = None  # pylint: disable=protected-access
         ffp.close()
         self.assertEqual(ffp.reason, ffp.RC_EXITED)
-        self.assertIsNone(ffp.returncode)
+        self.assertEqual(ffp.returncode, 3)
