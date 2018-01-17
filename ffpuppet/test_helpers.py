@@ -4,6 +4,7 @@
 
 import logging
 import os
+import platform
 import shutil
 import sys
 import tempfile
@@ -11,7 +12,7 @@ import threading
 import time
 import unittest
 
-from .helpers import create_profile, check_prefs, poll_file
+from .helpers import create_profile, check_prefs, poll_file, configure_sanitizers, prepare_environment
 
 logging.basicConfig(level=logging.DEBUG if bool(os.getenv("DEBUG")) else logging.INFO)
 log = logging.getLogger("helpers_test")
@@ -228,3 +229,63 @@ class HelperTests(TestCase): # pylint: disable=too-many-public-methods
                          {"manifest.json", "example.js"})
         self.assertEqual(set(os.listdir(os.path.join(prof, "extensions", "good-ext-id"))),
                          {"install.rdf", "example.js"})
+
+    def test_05(self):
+        "test configure_sanitizers()"
+        is_windows = platform.system().lower().startswith("windows")
+        def parse(opt_str):
+            opts = dict()
+            for entry in opt_str.split(":"):
+                k, v = entry.split("=")
+                opts[k] = v
+            return opts
+
+        # create dummy llvm-symbolizer
+        dummy_symb = os.path.join(self.tmpdir, "llvm-symbolizer%s" % (".exe" if is_windows else ""))
+        with open(dummy_symb, "w") as out_fp:
+            out_fp.write("blah")
+
+        # test with empty environment
+        env = {}
+        configure_sanitizers(env, self.tmpdir, "blah")
+        self.assertIn("ASAN_OPTIONS", env)
+        asan_opts = parse(env["ASAN_OPTIONS"])
+        self.assertIn("detect_leaks", asan_opts)
+        self.assertEqual(asan_opts["detect_leaks"], "false")
+        self.assertEqual(asan_opts["log_path"], "'blah'")
+        self.assertIn("LSAN_OPTIONS", env)
+        self.assertIn("UBSAN_OPTIONS", env)
+        if not is_windows:
+            self.assertIn("llvm-symbolizer", env["ASAN_SYMBOLIZER_PATH"])
+        else:
+            self.assertNotIn("ASAN_SYMBOLIZER_PATH", env)
+
+        # test with presets environment
+        env = {"ASAN_OPTIONS":"detect_leaks=true", "LSAN_OPTIONS":"a=1=2", "UBSAN_OPTIONS":""}
+        configure_sanitizers(env, self.tmpdir, "blah")
+        self.assertIn("ASAN_OPTIONS", env)
+        asan_opts = parse(env["ASAN_OPTIONS"])
+        self.assertIn("detect_leaks", asan_opts)
+        self.assertEqual(asan_opts["detect_leaks"], "true")
+        self.assertIn("LSAN_OPTIONS", env)
+        self.assertIn("UBSAN_OPTIONS", env)
+        ubsan_opts = parse(env["UBSAN_OPTIONS"])
+        self.assertIn("print_stacktrace", ubsan_opts)
+
+        # test bad env
+        with self.assertRaisesRegex(AssertionError, ""):
+            configure_sanitizers({"ASAN_OPTIONS":1}, self.tmpdir, "blah")
+
+        # test previously set ASAN_SYMBOLIZER_PATH
+        env = {"ASAN_SYMBOLIZER_PATH":"blah"}
+        configure_sanitizers(env, "target_dir", "blah")
+        self.assertIn("ASAN_SYMBOLIZER_PATH", env)
+        self.assertEqual(env["ASAN_SYMBOLIZER_PATH"], "blah")
+
+    def test_06(self):
+        "test prepare_environment()"
+        env = prepare_environment("", "blah", True)
+        self.assertIn("ASAN_OPTIONS", env)
+        self.assertIn("LSAN_OPTIONS", env)
+        self.assertIn("UBSAN_OPTIONS", env)
+        self.assertIn("RUST_BACKTRACE", env)

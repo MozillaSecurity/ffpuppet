@@ -346,29 +346,6 @@ class PuppetTests(TestCase): # pylint: disable=too-many-public-methods
         ffp.close()
 
     def test_14(self):
-        "test manually setting ASAN_SYMBOLIZER_PATH"
-        os.environ["ASAN_SYMBOLIZER_PATH"] = "foo/bar"
-        ffp = FFPuppet()
-        env = ffp.get_environ("fake/bin/path")
-        ffp.clean_up()
-        os.environ.pop("ASAN_SYMBOLIZER_PATH", None)
-        self.assertEqual(env["ASAN_SYMBOLIZER_PATH"], "foo/bar")
-
-    @unittest.skipIf(sys.platform.startswith('win'), "ASAN_SYMBOLIZER_PATH not set automatically on Windows")
-    def test_15(self):
-        "test automatically using bundled llvm-symbolizer"
-        test_bin = "llvm-symbolizer"
-        test_dir = tempfile.mkdtemp()
-        with open(os.path.join(test_dir, test_bin), "w") as log_fp:
-            log_fp.write("test")
-        ffp = FFPuppet()
-        env = ffp.get_environ(os.path.join(test_dir, "fake_bin"))
-        ffp.clean_up()
-        shutil.rmtree(test_dir)
-        self.assertIn("ASAN_SYMBOLIZER_PATH", env)
-        self.assertEqual(env["ASAN_SYMBOLIZER_PATH"], os.path.join(test_dir, test_bin))
-
-    def test_16(self):
         "test launching under Xvfb"
         ffp = None
         if not sys.platform.startswith("linux"):
@@ -378,7 +355,7 @@ class PuppetTests(TestCase): # pylint: disable=too-many-public-methods
             ffp = FFPuppet(use_xvfb=True)
             self.addCleanup(ffp.clean_up)
 
-    def test_17(self):
+    def test_15(self):
         "test passing a file and a non existing file to launch() via location"
         ffp = FFPuppet()
         self.addCleanup(ffp.clean_up)
@@ -401,14 +378,14 @@ class PuppetTests(TestCase): # pylint: disable=too-many-public-methods
         self.assertFalse(location.startswith("/"))
         self.assertEqual(os.path.normpath(os.path.join("/", location)), fname)
 
-    def test_18(self):
+    def test_16(self):
         "test passing nonexistent file to launch() via prefs_js"
         ffp = FFPuppet()
         self.addCleanup(ffp.clean_up)
         with self.assertRaisesRegex(IOError, "prefs.js file does not exist"):
             ffp.launch(TESTFF_BIN, prefs_js="fake_file.js")
 
-    def test_19(self):
+    def test_17(self):
         "test launching with gdb"
         if not sys.platform.startswith("linux"):
             with self.assertRaisesRegex(EnvironmentError, "GDB is only supported on Linux"):
@@ -428,7 +405,7 @@ class PuppetTests(TestCase): # pylint: disable=too-many-public-methods
             self.assertRegex(log_data, br"[Inferior \d+ (process \d+) exited with code \d+]")
             self.assertRegex(log_data, br"\+quit_with_code")
 
-    def test_20(self):
+    def test_18(self):
         "test calling save_logs() before close()"
         ffp = FFPuppet()
         self.addCleanup(ffp.clean_up)
@@ -436,7 +413,7 @@ class PuppetTests(TestCase): # pylint: disable=too-many-public-methods
         with self.assertRaisesRegex(RuntimeError, "Logs are still in use.+"):
             ffp.save_logs(self.logs)
 
-    def test_21(self):
+    def test_19(self):
         "test launching with Valgrind"
         if not sys.platform.startswith("linux"):
             with self.assertRaisesRegex(EnvironmentError, "Valgrind is only supported on Linux"):
@@ -456,7 +433,7 @@ class PuppetTests(TestCase): # pylint: disable=too-many-public-methods
             self.assertRegex(log_data, br"valgrind -q")
             self.assertRegex(log_data, br"\[ffpuppet\] Exit code: 0")
 
-    def test_22(self):
+    def test_20(self):
         "test detecting invalid prefs file"
         with open(self.tmpfn, 'w') as prefs_fp:
             prefs_fp.write('//fftest_invalid_js\n')
@@ -465,7 +442,7 @@ class PuppetTests(TestCase): # pylint: disable=too-many-public-methods
         with self.assertRaisesRegex(LaunchError, "'.+?' is invalid"):
             ffp.launch(TESTFF_BIN, location=self.tsrv.get_addr(), prefs_js=self.tmpfn)
 
-    def test_23(self):
+    def test_21(self):
         "test log_length()"
         ffp = FFPuppet()
         self.addCleanup(ffp.clean_up)
@@ -479,7 +456,7 @@ class PuppetTests(TestCase): # pylint: disable=too-many-public-methods
         # verify clean_up() removed the logs
         self.assertIsNone(ffp.log_length("stderr"))
 
-    def test_24(self):
+    def test_22(self):
         "test parallel launches"
         ffps = list()
         # use test pool size of 20
@@ -493,7 +470,7 @@ class PuppetTests(TestCase): # pylint: disable=too-many-public-methods
             ffp.close()
             self.assertFalse(ffp.is_running())
 
-    def test_25(self):
+    def test_23(self):
         "test hitting log size limit"
         ffp = FFPuppet()
         self.addCleanup(ffp.clean_up)
@@ -515,7 +492,7 @@ class PuppetTests(TestCase): # pylint: disable=too-many-public-methods
         with open(os.path.join(self.logs, "log_stderr.txt"), "r") as log_fp:
             self.assertIn("LOG_SIZE_LIMIT_EXCEEDED", log_fp.read())
 
-    def test_26(self):
+    def test_24(self):
         "test collecting and cleaning up ASan logs"
         ffp = FFPuppet()
         self.addCleanup(ffp.clean_up)
@@ -557,7 +534,7 @@ class PuppetTests(TestCase): # pylint: disable=too-many-public-methods
         for t_log in test_logs:
             self.assertFalse(os.path.isfile(t_log))
 
-    def test_27(self):
+    def test_25(self):
         "test minidump stack processing"
         ffp = FFPuppet()
         self.addCleanup(ffp.clean_up)
@@ -593,7 +570,7 @@ class PuppetTests(TestCase): # pylint: disable=too-many-public-methods
         md_lines.pop() # remove the limit msg
         self.assertEqual(len(md_lines), FFPuppet.MDSW_MAX_STACK)
 
-    def test_28(self):
+    def test_26(self):
         "test empty minidump log"
         ffp = FFPuppet()
         self.addCleanup(ffp.clean_up)
@@ -617,7 +594,7 @@ class PuppetTests(TestCase): # pylint: disable=too-many-public-methods
         self.assertTrue(md_lines.startswith("WARNING: minidump_stackwalk log was empty"))
         self.assertEqual(len(md_lines.splitlines()), 1)
 
-    def test_29(self):
+    def test_27(self):
         "test multiple minidumps"
         ffp = FFPuppet()
         self.addCleanup(ffp.clean_up)
@@ -644,7 +621,7 @@ class PuppetTests(TestCase): # pylint: disable=too-many-public-methods
         self.assertIn("log_minidump_02.txt", logs)
         self.assertIn("log_minidump_03.txt", logs)
 
-    def test_30(self):
+    def test_28(self):
         "test minidump register processing"
         ffp = FFPuppet()
         self.addCleanup(ffp.clean_up)
@@ -683,7 +660,7 @@ class PuppetTests(TestCase): # pylint: disable=too-many-public-methods
                 md_lines.append(line)
         self.assertEqual(len(md_lines), 9) # only register info should be in here
 
-    def test_31(self):
+    def test_29(self):
         "test exhausting bootstrap ports"
         ffp = FFPuppet()
         self.addCleanup(ffp.clean_up)
@@ -701,7 +678,7 @@ class PuppetTests(TestCase): # pylint: disable=too-many-public-methods
             ffp.BS_PORT_MAX = 0xFFFF
             ffp.BS_PORT_MIN = 0x4000
 
-    def test_32(self):
+    def test_30(self):
         "test multiprocess target"
         with open(self.tmpfn, "w") as prefs_fp:
             prefs_fp.write("//fftest_multi_proc\n")
@@ -718,7 +695,7 @@ class PuppetTests(TestCase): # pylint: disable=too-many-public-methods
         self.assertFalse(ffp.is_running())
         self.assertIsNone(ffp.wait(0))
 
-    def test_33(self):
+    def test_31(self):
         "test returncode"
         with open(self.tmpfn, "w") as prefs_fp:
             prefs_fp.write("//fftest_exit_code_3\n")
@@ -731,7 +708,7 @@ class PuppetTests(TestCase): # pylint: disable=too-many-public-methods
         ffp.wait(10)
         self.assertFalse(ffp.is_running())
         # verify private member is set when using returncode property
-        self.assertIsNone(ffp._returncode)
+        self.assertIsNone(ffp._returncode)  # pylint: disable=protected-access
         self.assertEqual(ffp.returncode, 3)
         self.assertEqual(ffp._returncode, 3)  # pylint: disable=protected-access
         # verify private member is set when calling close()

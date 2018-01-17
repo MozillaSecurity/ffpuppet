@@ -5,6 +5,7 @@
 import json
 import logging
 import os
+import platform
 import shutil
 import tempfile
 import time
@@ -15,6 +16,31 @@ log = logging.getLogger("ffpuppet")  # pylint: disable=invalid-name
 
 __author__ = "Tyson Smith"
 __all__ = ("check_prefs", "create_profile", "poll_file")
+
+
+class SanitizerConfig(object):
+    def __init__(self):
+        self._options = dict()
+
+    def add(self, key, value, overwrite=False):
+        if key not in self._options or overwrite:
+            self._options[key] = value
+
+    def load_options(self, env, key):
+        assert isinstance(env, dict)
+        if key not in env:
+            return None
+        assert isinstance(env[key], str)
+        for option in env[key].split(" :"):
+            try:
+                opt_name, opt_value = option.split("=")
+                self._options[opt_name] = opt_value
+            except ValueError:
+                log.warning("Malformed option in %r", key)
+
+    @property
+    def options(self):
+        return ":".join(["=".join([k, v]) for k, v in self._options.items()])
 
 
 def check_prefs(prof_prefs, input_prefs):
@@ -50,6 +76,51 @@ def check_prefs(prof_prefs, input_prefs):
         ", ".join([m_pref.lstrip("user_pref(") for m_pref in missing_prefs]))
 
     return not bool(missing_prefs)
+
+
+def configure_sanitizers(env, target_dir, log_path):
+    # setup Address Sanitizer options if not set manually
+    # https://github.com/google/sanitizers/wiki/AddressSanitizerFlags
+    # https://github.com/google/sanitizers/wiki/SanitizerCommonFlags
+    asan_config = SanitizerConfig()
+    asan_config.load_options(env, "ASAN_OPTIONS")
+    asan_config.add("abort_on_error", "true")
+    #asan_config.add("alloc_dealloc_mismatch", "false")  # different defaults per OS
+    asan_config.add("allocator_may_return_null", "true")
+    asan_config.add("check_initialization_order", "true")
+    #asan_config.add("detect_stack_use_after_return", "true")  # https://bugzil.la/1057551
+    #asan_config.add("detect_stack_use_after_scope", "true")
+    asan_config.add("detect_leaks", "false")
+    asan_config.add("disable_coredump", "true")
+    asan_config.add("log_path", "'%s'" % log_path)
+    asan_config.add("sleep_before_dying", "0")
+    asan_config.add("strict_init_order", "true")
+    asan_config.add("symbolize", "true")
+    env["ASAN_OPTIONS"] = asan_config.options
+
+    # setup Leak Sanitizer options if not set manually
+    # https://github.com/google/sanitizers/wiki/AddressSanitizerLeakSanitizer
+    lsan_config = SanitizerConfig()
+    lsan_config.load_options(env, "LSAN_OPTIONS")
+    lsan_config.add("max_leaks", "1")
+    env["LSAN_OPTIONS"] = lsan_config.options
+
+    # setup Undefined Behavior Sanitizer options if not set manually
+    ubsan_config = SanitizerConfig()
+    ubsan_config.load_options(env, "UBSAN_OPTIONS")
+    ubsan_config.add("print_stacktrace", "1")
+    env["UBSAN_OPTIONS"] = ubsan_config.options
+
+    if "ASAN_SYMBOLIZER_PATH" not in env:
+        # ASAN_SYMBOLIZER_PATH only needs to be set on platforms other than Windows
+        if not platform.system().lower().startswith("windows"):
+            symbolizer_bin = os.path.join(target_dir, "llvm-symbolizer")
+            if os.path.isfile(symbolizer_bin):
+                env["ASAN_SYMBOLIZER_PATH"] = symbolizer_bin
+        elif not os.path.join(target_dir, "llvm-symbolizer.exe"):
+            log.warning("llvm-symbolizer.exe should be next to the target binary")
+    elif "ASAN_SYMBOLIZER_PATH" in env and not os.path.isfile(env["ASAN_SYMBOLIZER_PATH"]):
+        log.warning("Invalid ASAN_SYMBOLIZER_PATH (%s)", env["ASAN_SYMBOLIZER_PATH"])
 
 
 def create_profile(extension=None, prefs_js=None, template=None):
@@ -143,6 +214,52 @@ def create_profile(extension=None, prefs_js=None, template=None):
         shutil.rmtree(profile, True) # cleanup on failure
         raise
     return profile
+
+
+def prepare_environment(target_dir, sanitizer_log, valgrind_enabled):
+    """
+    Get the string environment that is used when launching the browser.
+
+    @type target_dir: String
+    @param target_dir: Path to the directory containing the Firefox binary
+
+    @type sanitizer_log: String
+    @param sanitizer_log: Log prefix set with ASAN_OPTIONS=log_path=<sanitizer_log>
+
+    @type valgrind_enabled: bool
+    @param valgrind_enabled: Valgrind will be used during the run
+
+    @rtype: dict
+    @return: A dict representing the string environment
+    """
+    env = dict(os.environ)
+    if valgrind_enabled:
+        # https://developer.gimp.org/api/2.0/glib/glib-running.html#G_DEBUG
+        env["G_DEBUG"] = "gc-friendly"
+
+    # https://developer.gimp.org/api/2.0/glib/glib-running.html#G_SLICE
+    env["G_SLICE"] = "always-malloc"
+    env["MOZ_CC_RUN_DURING_SHUTDOWN"] = "1"
+    env["MOZ_CRASHREPORTER"] = "1"
+    env["MOZ_CRASHREPORTER_NO_REPORT"] = "1"
+    env["MOZ_DISABLE_CONTENT_SANDBOX"] = "1"
+    env["MOZ_DISABLE_GMP_SANDBOX"] = "1"
+    env["MOZ_DISABLE_GPU_SANDBOX"] = "1"
+    env["MOZ_DISABLE_NPAPI_SANDBOX"] = "1"
+    env["MOZ_GDB_SLEEP"] = "0"
+    env["XRE_NO_WINDOWS_CRASH_DIALOG"] = "1"
+    env["XPCOM_DEBUG_BREAK"] = "warn"
+    # https://bugzilla.mozilla.org/show_bug.cgi?id=1305151
+    # skia assertions are easily hit and mostly due to precision, disable them.
+    if "MOZ_SKIA_DISABLE_ASSERTS" not in env:
+        env["MOZ_SKIA_DISABLE_ASSERTS"] = "1"
+
+    if "RUST_BACKTRACE" not in env:
+        env["RUST_BACKTRACE"] = "full"
+
+    configure_sanitizers(env, target_dir, sanitizer_log)
+
+    return env
 
 
 def poll_file(filename, poll_rate=0.1, idle_wait=1.5, timeout=60):

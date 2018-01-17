@@ -25,7 +25,7 @@ try:
 except ImportError:
     pass
 
-from .helpers import create_profile, poll_file
+from .helpers import create_profile, prepare_environment, poll_file
 from .puppet_logger import PuppetLogger
 from .workers import log_scanner, log_size_limiter, memory_limiter
 
@@ -102,83 +102,6 @@ class FFPuppet(object):
             self._have_mdsw = True
         except OSError:
             self._have_mdsw = False
-
-
-    def get_environ(self, target_bin):
-        """
-        Get the string environment that is used when launching the browser.
-
-        @type bin_path: String
-        @param bin_path: Path to the Firefox binary
-
-        @rtype: dict
-        @return: A dict representing the string environment
-        """
-        env = dict(os.environ)
-        if self._use_valgrind:
-            # https://developer.gimp.org/api/2.0/glib/glib-running.html#G_DEBUG
-            env["G_DEBUG"] = "gc-friendly"
-
-        # https://developer.gimp.org/api/2.0/glib/glib-running.html#G_SLICE
-        env["G_SLICE"] = "always-malloc"
-        env["MOZ_CC_RUN_DURING_SHUTDOWN"] = "1"
-        env["MOZ_CRASHREPORTER"] = "1"
-        env["MOZ_CRASHREPORTER_NO_REPORT"] = "1"
-        env["MOZ_DISABLE_CONTENT_SANDBOX"] = "1"
-        env["MOZ_DISABLE_GMP_SANDBOX"] = "1"
-        env["MOZ_DISABLE_GPU_SANDBOX"] = "1"
-        env["MOZ_DISABLE_NPAPI_SANDBOX"] = "1"
-        env["MOZ_GDB_SLEEP"] = "0"
-        env["XRE_NO_WINDOWS_CRASH_DIALOG"] = "1"
-        env["XPCOM_DEBUG_BREAK"] = "warn"
-
-        # setup Address Sanitizer options if not set manually
-        # https://github.com/google/sanitizers/wiki/AddressSanitizerFlags
-        if "ASAN_OPTIONS" not in env:
-            env["ASAN_OPTIONS"] = ":".join((
-                "abort_on_error=true",
-                #"alloc_dealloc_mismatch=false", # different defaults per OS
-                "allocator_may_return_null=true",
-                "check_initialization_order=true",
-                #"check_malloc_usable_size=false", # defaults True
-                #"detect_stack_use_after_return=true", # can't launch firefox with this enabled
-                "disable_coredump=true",
-                "log_path='%s'" % os.path.join(self._logs.working_path, self._logs.LOG_ASAN_PREFIX),
-                "sleep_before_dying=0",
-                "strict_init_order=true",
-                #"strict_memcmp=false", # defaults True
-                "symbolize=true"))
-
-        # default to environment definition
-        if "ASAN_SYMBOLIZER_PATH" in env:
-            env["ASAN_SYMBOLIZER_PATH"] = os.environ["ASAN_SYMBOLIZER_PATH"]
-            env["MSAN_SYMBOLIZER_PATH"] = os.environ["ASAN_SYMBOLIZER_PATH"]
-            if not os.path.isfile(env["ASAN_SYMBOLIZER_PATH"]):
-                log.warning("Invalid ASAN_SYMBOLIZER_PATH (%s)", env["ASAN_SYMBOLIZER_PATH"])
-        else:
-            # ASAN_SYMBOLIZER_PATH only needs to be set on platforms other than Windows
-            if self._platform == "windows":
-                if not os.path.join(os.path.dirname(target_bin), "llvm-symbolizer.exe"):
-                    log.warning("llvm-symbolizer.exe should be next to the target binary")
-            else:
-                symbolizer_bin = os.path.join(os.path.dirname(target_bin), "llvm-symbolizer")
-                if os.path.isfile(symbolizer_bin):
-                    env["ASAN_SYMBOLIZER_PATH"] = symbolizer_bin
-                    env["MSAN_SYMBOLIZER_PATH"] = symbolizer_bin
-
-        # https://bugzilla.mozilla.org/show_bug.cgi?id=1305151
-        # skia assertions are easily hit and mostly due to precision, disable them.
-        if "MOZ_SKIA_DISABLE_ASSERTS" not in env:
-            env["MOZ_SKIA_DISABLE_ASSERTS"] = "1"
-
-        if "RUST_BACKTRACE" not in env:
-            env["RUST_BACKTRACE"] = "full"
-
-        # setup Undefined Behavior Sanitizer options if not set manually
-        if "UBSAN_OPTIONS" not in env:
-            env["UBSAN_OPTIONS"] = "print_stacktrace=1"
-
-        return env
 
 
     def add_abort_token(self, token):
@@ -339,9 +262,6 @@ class FFPuppet(object):
 
         if found > 1:
             log.warning("Found %d minidumps! Expecting 0 or 1", found)
-
-
-
 
 
     def log_length(self, log_id):
@@ -710,13 +630,13 @@ class FFPuppet(object):
         stderr.write(" ".join(cmd).encode("utf-8"))
         stderr.write(b"\n\n")
         stderr.flush()
-
+        sanitizer_logs = os.path.join(self._logs.working_path, self._logs.LOG_ASAN_PREFIX)
         # launch the browser
         log.debug("launch command: %r", " ".join(cmd))
         self._proc = subprocess.Popen(
             cmd,
             creationflags=subprocess.CREATE_NEW_PROCESS_GROUP if self._platform == "windows" else 0,
-            env=self.get_environ(bin_path),
+            env=prepare_environment(self._last_bin_path, sanitizer_logs, self._use_valgrind),
             shell=False,
             stderr=stderr,
             stdout=self._logs.get_fp("stdout"))
