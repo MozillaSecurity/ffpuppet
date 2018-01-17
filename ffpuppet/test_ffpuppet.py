@@ -87,6 +87,13 @@ class HTTPTestServer(object):
 
 
 class PuppetTests(TestCase): # pylint: disable=too-many-public-methods
+    @classmethod
+    def setUpClass(cls):
+        cls.tsrv = HTTPTestServer()
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.tsrv.shutdown()
 
     def setUp(self):
         fd, self.tmpfn = tempfile.mkstemp(prefix="ffp_test_log_")
@@ -113,9 +120,7 @@ class PuppetTests(TestCase): # pylint: disable=too-many-public-methods
         self.addCleanup(ffp.clean_up)
         self.assertEqual(ffp.launches, 0)
         self.assertEqual(ffp.returncode, 0)
-        tsrv = HTTPTestServer()
-        self.addCleanup(tsrv.shutdown)
-        ffp.launch(TESTFF_BIN, location=tsrv.get_addr())
+        ffp.launch(TESTFF_BIN, location=self.tsrv.get_addr())
         self.assertEqual(len(ffp._workers), 0) # pylint: disable=protected-access
         self.assertEqual(ffp.launches, 1)
         self.assertIsNone(ffp.wait(0))
@@ -169,9 +174,7 @@ class PuppetTests(TestCase): # pylint: disable=too-many-public-methods
         self.addCleanup(ffp.clean_up)
         ffp.close()
         ffp.save_logs(os.path.join(self.logs, "no_logs"))
-        tsrv = HTTPTestServer()
-        self.addCleanup(tsrv.shutdown)
-        ffp.launch(TESTFF_BIN, location=tsrv.get_addr())
+        ffp.launch(TESTFF_BIN, location=self.tsrv.get_addr())
         ffp.wait(0.25) # wait for log prints
         ffp.close()
         self.assertTrue(ffp._logs.closed) # pylint: disable=protected-access
@@ -246,9 +249,7 @@ class PuppetTests(TestCase): # pylint: disable=too-many-public-methods
         ffp = FFPuppet()
         self.addCleanup(ffp.clean_up)
         self.assertIsNone(ffp.clone_log("stdout", target_file=self.tmpfn))
-        tsrv = HTTPTestServer()
-        self.addCleanup(tsrv.shutdown)
-        ffp.launch(TESTFF_BIN, location=tsrv.get_addr())
+        ffp.launch(TESTFF_BIN, location=self.tsrv.get_addr())
         ffp.wait(0.25) # wait for log prints
         # make sure logs are available
         self.assertEqual(ffp.clone_log("stdout", target_file=self.tmpfn), self.tmpfn)
@@ -431,9 +432,7 @@ class PuppetTests(TestCase): # pylint: disable=too-many-public-methods
         "test calling save_logs() before close()"
         ffp = FFPuppet()
         self.addCleanup(ffp.clean_up)
-        tsrv = HTTPTestServer()
-        self.addCleanup(tsrv.shutdown)
-        ffp.launch(TESTFF_BIN, location=tsrv.get_addr())
+        ffp.launch(TESTFF_BIN, location=self.tsrv.get_addr())
         with self.assertRaisesRegex(RuntimeError, "Logs are still in use.+"):
             ffp.save_logs(self.logs)
 
@@ -461,12 +460,10 @@ class PuppetTests(TestCase): # pylint: disable=too-many-public-methods
         "test detecting invalid prefs file"
         with open(self.tmpfn, 'w') as prefs_fp:
             prefs_fp.write('//fftest_invalid_js\n')
-        tsrv = HTTPTestServer()
-        self.addCleanup(tsrv.shutdown)
         ffp = FFPuppet()
         self.addCleanup(ffp.clean_up)
         with self.assertRaisesRegex(LaunchError, "'.+?' is invalid"):
-            ffp.launch(TESTFF_BIN, location=tsrv.get_addr(), prefs_js=self.tmpfn)
+            ffp.launch(TESTFF_BIN, location=self.tsrv.get_addr(), prefs_js=self.tmpfn)
 
     def test_23(self):
         "test log_length()"
@@ -564,9 +561,7 @@ class PuppetTests(TestCase): # pylint: disable=too-many-public-methods
         "test minidump stack processing"
         ffp = FFPuppet()
         self.addCleanup(ffp.clean_up)
-        tsrv = HTTPTestServer()
-        self.addCleanup(tsrv.shutdown)
-        ffp.launch(TESTFF_BIN, location=tsrv.get_addr())
+        ffp.launch(TESTFF_BIN, location=self.tsrv.get_addr())
         # create "test.dmp" file
         out_dmp = [
             "OS|Linux|0.0.0 sys info...", "CPU|amd64|more info|8", "GPU|||", "Crash|SIGSEGV|0x7fff27aaeff8|0",
@@ -602,9 +597,7 @@ class PuppetTests(TestCase): # pylint: disable=too-many-public-methods
         "test empty minidump log"
         ffp = FFPuppet()
         self.addCleanup(ffp.clean_up)
-        tsrv = HTTPTestServer()
-        self.addCleanup(tsrv.shutdown)
-        ffp.launch(TESTFF_BIN, location=tsrv.get_addr())
+        ffp.launch(TESTFF_BIN, location=self.tsrv.get_addr())
         md_dir = os.path.join(ffp.profile, "minidumps")
         if not os.path.isdir(md_dir):
             os.mkdir(md_dir)
@@ -712,11 +705,9 @@ class PuppetTests(TestCase): # pylint: disable=too-many-public-methods
         "test multiprocess target"
         with open(self.tmpfn, "w") as prefs_fp:
             prefs_fp.write("//fftest_multi_proc\n")
-        tsrv = HTTPTestServer()
-        self.addCleanup(tsrv.shutdown)
         ffp = FFPuppet()
         self.addCleanup(ffp.clean_up)
-        ffp.launch(TESTFF_BIN, prefs_js=self.tmpfn, location=tsrv.get_addr())
+        ffp.launch(TESTFF_BIN, prefs_js=self.tmpfn, location=self.tsrv.get_addr())
         self.assertTrue(ffp.is_running())
         self.assertIsNone(ffp.wait(0))
         c_procs = Process(ffp.get_pid()).children()
@@ -736,7 +727,7 @@ class PuppetTests(TestCase): # pylint: disable=too-many-public-methods
         ffp = FFPuppet()
         self.assertEqual(ffp.returncode, 0)
         self.addCleanup(ffp.clean_up)
-        ffp.launch(TESTFF_BIN, prefs_js=self.tmpfn, location=tsrv.get_addr())
+        ffp.launch(TESTFF_BIN, prefs_js=self.tmpfn, location=self.tsrv.get_addr())
         ffp.wait(10)
         self.assertFalse(ffp.is_running())
         # verify private member is set when using returncode property
