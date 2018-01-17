@@ -55,7 +55,7 @@ class FFPuppet(object):
     def __init__(self, use_profile=None, use_valgrind=False, use_xvfb=False, use_gdb=False):
         self._abort_tokens = set() # tokens used to notify log scanner to kill the browser process
         self._last_bin_path = None
-        self._launches = 0 # number of times the browser has successfully been launched
+        self._launches = 0 # number of successful browser launches
         self._logs = PuppetLogger()
         self._platform = platform.system().lower()
         self._proc = None
@@ -533,9 +533,10 @@ class FFPuppet(object):
         self.reason = r_key
 
 
-    def get_launch_count(self):
+    @property
+    def launches(self):
         """
-        Get the count of successful launches
+        Get the number of successful launches
 
         @rtype: int
         @return: successful launch count

@@ -111,13 +111,13 @@ class PuppetTests(TestCase): # pylint: disable=too-many-public-methods
         "test basic launch and close"
         ffp = FFPuppet()
         self.addCleanup(ffp.clean_up)
-        self.assertEqual(ffp.get_launch_count(), 0)
+        self.assertEqual(ffp.launches, 0)
         self.assertEqual(ffp.returncode, 0)
         tsrv = HTTPTestServer()
         self.addCleanup(tsrv.shutdown)
         ffp.launch(TESTFF_BIN, location=tsrv.get_addr())
         self.assertEqual(len(ffp._workers), 0) # pylint: disable=protected-access
-        self.assertEqual(ffp.get_launch_count(), 1)
+        self.assertEqual(ffp.launches, 1)
         self.assertIsNone(ffp.wait(0))
         self.assertTrue(ffp.is_running())
         self.assertIsNone(ffp.reason)
@@ -139,6 +139,7 @@ class PuppetTests(TestCase): # pylint: disable=too-many-public-methods
             ffp.launch(TESTFF_BIN, prefs_js=self.tmpfn)
         self.assertEqual(ffp.wait(10), 1) # test crash returns 1
         ffp.close()
+        self.assertEqual(ffp.launches, 0)
         self.assertEqual(ffp.reason, ffp.RC_EXITED)
         self.assertEqual(ffp.returncode, 1)
 
