@@ -15,7 +15,7 @@ from xml.etree import ElementTree
 log = logging.getLogger("ffpuppet")  # pylint: disable=invalid-name
 
 __author__ = "Tyson Smith"
-__all__ = ("check_prefs", "create_profile", "poll_file")
+__all__ = ("check_prefs", "create_profile", "poll_file", "prepare_environment")
 
 
 class SanitizerConfig(object):

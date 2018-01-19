@@ -27,11 +27,24 @@ class PuppetLogger(object):
 
 
     def add_log(self, log_id, logfp=None):
+        """
+        Add a log file to the log manager.
+
+        @type log_id: String
+        @param log_id: The id (key) of the log to clone (stderr, stdout... etc).
+
+        @type logfp: file
+        @param logfp: logfp is a file object. If None is provided a new log file will be created.
+
+        @rtype: file
+        @return: file object of the newly added log file.
+        """
         assert log_id not in self._logs
         assert not self.closed
         if logfp is None:
             logfp = PuppetLogger.open_unique()
         self._logs[log_id] = logfp
+        return logfp
 
 
     def available_logs(self):

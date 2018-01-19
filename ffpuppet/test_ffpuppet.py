@@ -18,6 +18,7 @@ except ImportError:
 from psutil import Process
 
 from ffpuppet import FFPuppet, LaunchError
+from .minidump_parser import MinidumpParser
 
 logging.basicConfig(level=logging.DEBUG if bool(os.getenv("DEBUG")) else logging.INFO)
 log = logging.getLogger("ffp_test")
@@ -26,9 +27,10 @@ CWD = os.path.realpath(os.path.dirname(__file__))
 TESTFF_BIN = os.path.join(CWD, "testff", "testff.exe") if sys.platform.startswith('win') else os.path.join(CWD, "testff.py")
 TESTMDSW_BIN = os.path.join(CWD, "testmdsw", "testmdsw.exe") if sys.platform.startswith('win') else os.path.join(CWD, "testmdsw.py")
 
-FFPuppet.LOG_POLL_RATE = 0.01 # reduce this for testing
-FFPuppet.MDSW_BIN = TESTMDSW_BIN
-FFPuppet.MDSW_MAX_STACK = 8
+FFPuppet.LOG_POLL_RATE = 0.01
+FFPuppet.LOG_POLL_WAIT = 0.1
+MinidumpParser.MDSW_BIN = TESTMDSW_BIN
+MinidumpParser.MDSW_MAX_STACK = 8
 
 class TestCase(unittest.TestCase):
 
@@ -268,11 +270,11 @@ class PuppetTests(TestCase): # pylint: disable=too-many-public-methods
             self.assertEqual(ffp.clone_log("stdout", target_file=self.tmpfn), self.tmpfn)
             with open(self.tmpfn, "rb") as tmpfp:
                 self.assertTrue(tmpfp.read().startswith(orig))
-            ffp.clean_up()
         finally:
             if os.path.isfile(rnd_log):
                 os.remove(rnd_log)
         # verify clean_up() removed the logs
+        ffp.clean_up()
         self.assertIsNone(ffp.clone_log("stdout", target_file=self.tmpfn))
 
     def test_09(self):
@@ -347,7 +349,6 @@ class PuppetTests(TestCase): # pylint: disable=too-many-public-methods
 
     def test_14(self):
         "test launching under Xvfb"
-        ffp = None
         if not sys.platform.startswith("linux"):
             with self.assertRaisesRegex(EnvironmentError, "Xvfb is only supported on Linux"):
                 ffp = FFPuppet(use_xvfb=True)
@@ -459,12 +460,15 @@ class PuppetTests(TestCase): # pylint: disable=too-many-public-methods
     def test_22(self):
         "test parallel launches"
         ffps = list()
+        launch_threads = list()
         # use test pool size of 20
         for _ in range(20):
             ffps.append(FFPuppet())
             self.addCleanup(ffps[-1].clean_up)
-        for ffp in ffps:
-            ffp.launch(TESTFF_BIN)
+            launch_threads.append(threading.Thread(target=ffps[-1].launch, args=(TESTFF_BIN,)))
+            launch_threads[-1].start()
+        for lthread in launch_threads:
+            lthread.join()
         for ffp in ffps:
             self.assertTrue(ffp.is_running())
             ffp.close()
@@ -535,66 +539,6 @@ class PuppetTests(TestCase): # pylint: disable=too-many-public-methods
             self.assertFalse(os.path.isfile(t_log))
 
     def test_25(self):
-        "test minidump stack processing"
-        ffp = FFPuppet()
-        self.addCleanup(ffp.clean_up)
-        ffp.launch(TESTFF_BIN, location=self.tsrv.get_addr())
-        # create "test.dmp" file
-        out_dmp = [
-            "OS|Linux|0.0.0 sys info...", "CPU|amd64|more info|8", "GPU|||", "Crash|SIGSEGV|0x7fff27aaeff8|0",
-            "Module|firefox||firefox|a|0x1|0x1|1", "Module|firefox||firefox|a|0x1|0x2|1", "Module|firefox||firefox|a|0x1|0x3|1",
-            "  ", "", "0|0|blah|foo|a/bar.c|123|0x0", "0|1|blat|foo|a/bar.c|223|0x0", "0|2|blas|foo|a/bar.c|423|0x0",
-            "0|3|blas|foo|a/bar.c|423|0x0", "1|0|libpthread-2.23.so||||0xd360", "1|1|swrast_dri.so||||0x7237f3",
-            "1|2|libplds4.so|_fini|||0x163", "2|0|swrast_dri.so||||0x723657", "2|1|libpthread-2.23.so||||0x76ba",
-            "2|3|libc-2.23.so||||0x1073dd"]
-        md_dir = os.path.join(ffp.profile, "minidumps")
-        if not os.path.isdir(md_dir):
-            os.mkdir(md_dir)
-        ffp._last_bin_path = ffp.profile # pylint: disable=protected-access
-        sym_dir = os.path.join(ffp.profile, "symbols") # needs to exist to satisfy a check
-        if not os.path.isdir(sym_dir):
-            os.mkdir(sym_dir)
-        with open(os.path.join(md_dir, "test.dmp"), "w") as out_fp:
-            out_fp.write("\n".join(out_dmp))
-        # create a dummy file
-        with open(os.path.join(md_dir, "not_a_dmp.txt"), "w") as out_fp:
-            out_fp.write("this file should be ignored")
-        # process .dmp file
-        ffp.close()
-        ffp.save_logs(self.logs)
-        self.assertIn("log_minidump_01.txt", os.listdir(self.logs))
-        with open(os.path.join(self.logs, "log_minidump_01.txt"), "r") as in_fp:
-            md_lines = in_fp.read().splitlines()
-        self.assertEqual(len(set(out_dmp) - set(md_lines)), 11)
-        self.assertTrue(md_lines[-1].startswith("WARNING: Hit line output limit!"))
-        md_lines.pop() # remove the limit msg
-        self.assertEqual(len(md_lines), FFPuppet.MDSW_MAX_STACK)
-
-    def test_26(self):
-        "test empty minidump log"
-        ffp = FFPuppet()
-        self.addCleanup(ffp.clean_up)
-        ffp.launch(TESTFF_BIN, location=self.tsrv.get_addr())
-        md_dir = os.path.join(ffp.profile, "minidumps")
-        if not os.path.isdir(md_dir):
-            os.mkdir(md_dir)
-        ffp._last_bin_path = ffp.profile # pylint: disable=protected-access
-        sym_dir = os.path.join(ffp.profile, "symbols") # needs to exist to satisfy a check
-        if not os.path.isdir(sym_dir):
-            os.mkdir(sym_dir)
-        # create empty "test.dmp" file
-        with open(os.path.join(md_dir, "test.dmp"), "w") as _:
-            pass
-        # process .dmp file
-        ffp.close()
-        ffp.save_logs(self.logs)
-        self.assertIn("log_minidump_01.txt", os.listdir(self.logs))
-        with open(os.path.join(self.logs, "log_minidump_01.txt"), "r") as in_fp:
-            md_lines = in_fp.read()
-        self.assertTrue(md_lines.startswith("WARNING: minidump_stackwalk log was empty"))
-        self.assertEqual(len(md_lines.splitlines()), 1)
-
-    def test_27(self):
         "test multiple minidumps"
         ffp = FFPuppet()
         self.addCleanup(ffp.clean_up)
@@ -621,46 +565,7 @@ class PuppetTests(TestCase): # pylint: disable=too-many-public-methods
         self.assertIn("log_minidump_02.txt", logs)
         self.assertIn("log_minidump_03.txt", logs)
 
-    def test_28(self):
-        "test minidump register processing"
-        ffp = FFPuppet()
-        self.addCleanup(ffp.clean_up)
-        ffp.launch(TESTFF_BIN)
-        # create "test.dmp" file
-        out_dmp = [
-            "Crash reason:  SIGSEGV", "Crash address: 0x0", "Process uptime: not available", "",
-            "Thread 0 (crashed)", " 0  libxul.so + 0x123456788",
-            "    rax = 0xe5423423423fffe8   rdx = 0x0000000000000000",
-            "    rcx = 0x0000000000000000   rbx = 0xe54234234233e5e5",
-            "    rsi = 0x0000000000000000   rdi = 0x00007fedc31fe308",
-            "    rbp = 0x00007fffca0dab00   rsp = 0x00007fffca0daad0",
-            "     r8 = 0x0000000000000000    r9 = 0x0000000000000008",
-            "    r10 = 0xffff00ffffffffff   r11 = 0xffffff00ffffffff",
-            "    r12 = 0x0000743564566308   r13 = 0x00007fedce9d8000",
-            "    r14 = 0x0000000000000001   r15 = 0x0000000000000000", "    rip = 0x0000745666666ac",
-            "    Found by: given as instruction pointer in context", " 1  libxul.so + 0x1f4361c]", ""]
-        md_dir = os.path.join(ffp.profile, "minidumps")
-        if not os.path.isdir(md_dir):
-            os.mkdir(md_dir)
-        ffp._last_bin_path = ffp.profile # pylint: disable=protected-access
-        sym_dir = os.path.join(ffp.profile, "symbols") # needs to exist to satisfy a check
-        if not os.path.isdir(sym_dir):
-            os.mkdir(sym_dir)
-        with open(os.path.join(md_dir, "test.dmp"), "w") as out_fp:
-            out_fp.write("\n".join(out_dmp))
-        # process .dmp file
-        ffp.close()
-        ffp.save_logs(self.logs)
-        self.assertIn("log_minidump_01.txt", os.listdir(self.logs))
-        with open(os.path.join(self.logs, "log_minidump_01.txt"), "r") as in_fp:
-            md_lines = list()
-            for line in in_fp:
-                if "=" not in line:
-                    break
-                md_lines.append(line)
-        self.assertEqual(len(md_lines), 9) # only register info should be in here
-
-    def test_29(self):
+    def test_26(self):
         "test exhausting bootstrap ports"
         ffp = FFPuppet()
         self.addCleanup(ffp.clean_up)
@@ -678,7 +583,7 @@ class PuppetTests(TestCase): # pylint: disable=too-many-public-methods
             ffp.BS_PORT_MAX = 0xFFFF
             ffp.BS_PORT_MIN = 0x4000
 
-    def test_30(self):
+    def test_27(self):
         "test multiprocess target"
         with open(self.tmpfn, "w") as prefs_fp:
             prefs_fp.write("//fftest_multi_proc\n")
@@ -695,7 +600,7 @@ class PuppetTests(TestCase): # pylint: disable=too-many-public-methods
         self.assertFalse(ffp.is_running())
         self.assertIsNone(ffp.wait(0))
 
-    def test_31(self):
+    def test_28(self):
         "test returncode"
         with open(self.tmpfn, "w") as prefs_fp:
             prefs_fp.write("//fftest_exit_code_3\n")

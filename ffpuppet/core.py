@@ -26,6 +26,7 @@ except ImportError:
     pass
 
 from .helpers import create_profile, prepare_environment, poll_file
+from .minidump_parser import process_minidumps
 from .puppet_logger import PuppetLogger
 from .workers import log_scanner, log_size_limiter, memory_limiter
 
@@ -43,11 +44,8 @@ class FFPuppet(object):
     BS_PORT_MAX = 0xFFFF # bootstrap range
     BS_PORT_MIN = 0x2000 # bootstrap range
     LAUNCH_TIMEOUT_MIN = 10 # minimum amount of time to wait for the browser to launch
-    LOG_BUF_SIZE = 0x10000 # buffer size used to copy logs
-    LOG_CLOSE_TIMEOUT = 10
-    LOG_POLL_RATE = 1
-    MDSW_BIN = "minidump_stackwalk"
-    MDSW_MAX_STACK = 150
+    LOG_POLL_RATE = 0.1  # used with poll_file to wait for logs
+    LOG_POLL_WAIT = 1.0  # used with poll_file to wait for logs
     RC_CLOSED = "CLOSED"  # target was closed by call to FFPuppet close()
     RC_EXITED = "EXITED"  # target exited/crashed/aborted/assertion failure etc...
     RC_WORKER = "WORKER"  # target was closed by worker thread
@@ -94,14 +92,6 @@ class FFPuppet(object):
             except NameError:
                 raise EnvironmentError("Please install xvfbwrapper")
             self._xvfb.start()
-
-        # check for minidump_stackwalk binary
-        try:
-            with open(os.devnull, "w") as null_fp:
-                subprocess.call([self.MDSW_BIN], stdout=null_fp, stderr=null_fp)
-            self._have_mdsw = True
-        except OSError:
-            self._have_mdsw = False
 
 
     def add_abort_token(self, token):
@@ -157,111 +147,6 @@ class FFPuppet(object):
         WARNING: This will likely go away in the near future
         """
         return self.reason is not None
-
-
-    def _dump_minidump_stacks(self):
-        log.debug("symbolize minidumps")
-
-        if self.profile is None:
-            log.debug("can't symbolize: profile is None")
-            return
-
-        minidumps_path = os.path.join(self.profile, "minidumps")
-        if not os.path.isdir(minidumps_path):
-            log.debug("can't symbolize: no minidumps folder in profile")
-            return
-
-        if self._last_bin_path is None:
-            log.debug("can't symbolize: no value for bin_path")
-            return
-
-        symbols_path = os.path.join(self._last_bin_path, "symbols")
-
-        found = 0
-        for fname in os.listdir(minidumps_path):
-            if not fname.endswith(".dmp"):
-                continue
-            found += 1
-
-            if not self._have_mdsw:
-                log.warning("Found a minidump, but can't process it without minidump_stackwalk."
-                            " See README.md for how to obtain it.")
-                break
-            elif not os.path.isdir(symbols_path):
-                log.warning("Can't symbolize, %r does not exist", symbols_path)
-                break
-
-            md_log = "minidump_%02d" % found
-            self._logs.add_log(md_log)
-            dump_path = os.path.join(minidumps_path, fname)
-            poll_file(dump_path)
-            minidump_log = self._logs.get_fp(md_log)
-
-            # collect register info from minidump
-            log.debug("calling minidump_stackwalk on %s", dump_path)
-            with tempfile.TemporaryFile() as out_fp, open(os.devnull, "w") as null_fp:
-                # get register info
-                ret_val = subprocess.call([self.MDSW_BIN, dump_path, symbols_path],
-                                          stdout=out_fp, stderr=null_fp)
-                if ret_val != 0:
-                    log.warning("minidump_stackwalk returned %r", ret_val)
-
-                out_fp.seek(0)
-                found_registers = False
-                for line in out_fp: # pylint: disable=not-an-iterable
-                    if not found_registers:
-                        # look for the beginning of the register dump
-                        if b"(crashed)" in line:
-                            found_registers = True
-                        continue
-                    line = line.lstrip()
-                    if line.startswith(b"0"):
-                        continue # skip first line
-                    if b"=" not in line:
-                        break # we reached the end
-                    minidump_log.write(line)
-                log.debug("collected register info: %r", found_registers)
-
-            # collect stack trace from minidump
-            log.debug("calling minidump_stackwalk -m on %s", dump_path)
-            with tempfile.TemporaryFile() as out_fp, open(os.devnull, "w") as null_fp:
-                ret_val = subprocess.call([self.MDSW_BIN, "-m", dump_path, symbols_path],
-                                          stdout=out_fp, stderr=null_fp)
-                if ret_val != 0:
-                    log.warning("minidump_stackwalk -m returned %r", ret_val)
-
-                out_fp.seek(0)
-                crash_thread = None
-                line_count = 0 # lines added to the log so far
-                for line in out_fp: # pylint: disable=not-an-iterable
-                    if not line.rstrip() or line.startswith(b"Module|"):
-                        continue # ignore line
-
-                    # check if this is a stack entry (starts with '#|')
-                    try:
-                        t_id = int(line.split(b"|")[0])
-                        # assume that the first entry in the stack is the crash_thread
-                        # NOTE: an alternative would be to parse the 'Crash|' line
-                        if crash_thread is None:
-                            crash_thread = t_id
-                        elif t_id != crash_thread:
-                            break
-                    except ValueError:
-                        pass # not a stack entry
-
-                    minidump_log.write(line)
-                    line_count += 1
-                    if line_count >= self.MDSW_MAX_STACK:
-                        log.warning("MDSW_MAX_STACK (%d) limit reached", self.MDSW_MAX_STACK)
-                        minidump_log.write(b"WARNING: Hit line output limit!")
-                        break
-
-                if line_count < 1:
-                    log.warning("minidump_stackwalk log was empty")
-                    minidump_log.write(b"WARNING: minidump_stackwalk log was empty")
-
-        if found > 1:
-            log.warning("Found %d minidumps! Expecting 0 or 1", found)
 
 
     def log_length(self, log_id):
@@ -431,11 +316,15 @@ class FFPuppet(object):
                 if not fname.startswith(self._logs.LOG_ASAN_PREFIX):
                     continue
                 tmp_file = os.path.join(self._logs.working_path, fname)
-                poll_file(tmp_file)
+                poll_file(tmp_file, poll_rate=self.LOG_POLL_RATE, idle_wait=self.LOG_POLL_WAIT)
                 self._logs.add_log(fname, open(tmp_file, "rb"))
 
             # check for minidumps in the profile and dump them if possible
-            self._dump_minidump_stacks()
+            if self.profile is not None:
+                process_minidumps(
+                    os.path.join(self.profile, "minidumps"),
+                    os.path.join(self._last_bin_path, "symbols"),
+                    self._logs.add_log)
 
         if self._proc is not None:
             stderr_log_fp.write(("[ffpuppet] Exit code: %r\n" % self._returncode).encode("utf-8"))
