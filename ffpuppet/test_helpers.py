@@ -284,8 +284,26 @@ class HelperTests(TestCase): # pylint: disable=too-many-public-methods
 
     def test_06(self):
         "test prepare_environment()"
-        env = prepare_environment("", "blah", True)
+        env = prepare_environment("", "blah")
         self.assertIn("ASAN_OPTIONS", env)
         self.assertIn("LSAN_OPTIONS", env)
         self.assertIn("UBSAN_OPTIONS", env)
         self.assertIn("RUST_BACKTRACE", env)
+
+    def test_07(self):
+        "test prepare_environment() using some predefined environment variables"
+        pre = {
+            "RUST_BACKTRACE":None,  # remove
+            "TEST_FAKE":None,  # remove non existing entry
+            "TEST_VAR":"123",  # add
+            "MOZ_GDB_SLEEP":"2"}  # update
+        env = prepare_environment("", "blah", pre)
+        self.assertIn("ASAN_OPTIONS", env)
+        self.assertIn("LSAN_OPTIONS", env)
+        self.assertIn("UBSAN_OPTIONS", env)
+        self.assertIn("TEST_VAR", env)
+        self.assertEqual(env["TEST_VAR"], "123")
+        self.assertIn("MOZ_GDB_SLEEP", env)
+        self.assertEqual(env["MOZ_GDB_SLEEP"], "2")
+        self.assertNotIn("RUST_BACKTRACE", env)
+        self.assertNotIn("TEST_FAKE", env)

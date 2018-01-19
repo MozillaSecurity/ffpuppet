@@ -11,7 +11,6 @@ import re
 import shutil
 import socket
 import subprocess
-import tempfile
 import time
 
 try:  # py 2-3 compatibility
@@ -433,13 +432,19 @@ class FFPuppet(object):
         return cmd
 
 
-    def launch(self, bin_path, launch_timeout=300, location=None, log_limit=0, memory_limit=0,
-               prefs_js=None, safe_mode=False, extension=None):
+    def launch(self, bin_path, env_mod=None, launch_timeout=300, location=None, log_limit=0,
+               memory_limit=0, prefs_js=None, safe_mode=False, extension=None):
         """
         Launch a new browser process.
 
         @type bin_path: String
         @param bin_path: Path to the Firefox binary
+
+        @type env_mod: dict
+        @param env_mod: Environment modifier. Add, remove and update entries in the prepared
+                        environment via this dict. Add and update using key, value pairs where
+                        value is a string and to remove set the value to None. If it is None no
+                        extra modifications are made.
 
         @type launch_timeout: int
         @param launch_timeout: Timeout in seconds for launching the browser
@@ -510,6 +515,12 @@ class FFPuppet(object):
             bin_path,
             additional_args=launch_args)
 
+        if self._use_valgrind:
+            if env_mod is None:
+                env_mod = dict()
+            # https://developer.gimp.org/api/2.0/glib/glib-running.html#G_DEBUG
+            env_mod["G_DEBUG"] = "gc-friendly"
+
         # open logs
         self._logs.reset() # clean up existing log files
         self._logs.add_log("stderr")
@@ -525,7 +536,7 @@ class FFPuppet(object):
         self._proc = subprocess.Popen(
             cmd,
             creationflags=subprocess.CREATE_NEW_PROCESS_GROUP if self._platform == "windows" else 0,
-            env=prepare_environment(self._last_bin_path, sanitizer_logs, self._use_valgrind),
+            env=prepare_environment(self._last_bin_path, sanitizer_logs, env_mod=env_mod),
             shell=False,
             stderr=stderr,
             stdout=self._logs.get_fp("stdout"))

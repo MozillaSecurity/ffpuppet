@@ -92,7 +92,8 @@ def configure_sanitizers(env, target_dir, log_path):
     #asan_config.add("detect_stack_use_after_scope", "true")
     asan_config.add("detect_leaks", "false")
     asan_config.add("disable_coredump", "true")
-    asan_config.add("log_path", "'%s'" % log_path)
+    # log_path is required for logging to function properly
+    asan_config.add("log_path", "'%s'" % log_path, overwrite=True)
     asan_config.add("sleep_before_dying", "0")
     asan_config.add("strict_init_order", "true")
     asan_config.add("symbolize", "true")
@@ -216,7 +217,7 @@ def create_profile(extension=None, prefs_js=None, template=None):
     return profile
 
 
-def prepare_environment(target_dir, sanitizer_log, valgrind_enabled):
+def prepare_environment(target_dir, sanitizer_log, env_mod=None):
     """
     Get the string environment that is used when launching the browser.
 
@@ -226,16 +227,16 @@ def prepare_environment(target_dir, sanitizer_log, valgrind_enabled):
     @type sanitizer_log: String
     @param sanitizer_log: Log prefix set with ASAN_OPTIONS=log_path=<sanitizer_log>
 
-    @type valgrind_enabled: bool
-    @param valgrind_enabled: Valgrind will be used during the run
+    @type env_mod: dict
+    @param env_mod: Environment modifier. Add, remove and update entries in the prepared
+                    environment via this dict. Add and update using key, value pairs where
+                    value is a string and to remove set the value to None. If it is None no
+                    extra modifications are made.
 
     @rtype: dict
     @return: A dict representing the string environment
     """
     env = dict(os.environ)
-    if valgrind_enabled:
-        # https://developer.gimp.org/api/2.0/glib/glib-running.html#G_DEBUG
-        env["G_DEBUG"] = "gc-friendly"
 
     # https://developer.gimp.org/api/2.0/glib/glib-running.html#G_SLICE
     env["G_SLICE"] = "always-malloc"
@@ -258,6 +259,15 @@ def prepare_environment(target_dir, sanitizer_log, valgrind_enabled):
         env["RUST_BACKTRACE"] = "full"
 
     configure_sanitizers(env, target_dir, sanitizer_log)
+
+    if env_mod is not None:
+        assert isinstance(env_mod, dict)
+        for env_name, env_value in env_mod.items():
+            if env_value is not None:
+                assert isinstance(env_value, str)
+                env[env_name] = env_value
+            elif env_name in env:
+                del env[env_name]
 
     return env
 
