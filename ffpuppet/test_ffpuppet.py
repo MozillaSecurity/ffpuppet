@@ -209,7 +209,7 @@ class PuppetTests(TestCase): # pylint: disable=too-many-public-methods
         ffp = FFPuppet()
         self.addCleanup(ffp.clean_up)
         self.assertIsNone(ffp.get_pid())
-        ffp.launch(TESTFF_BIN)
+        ffp.launch(TESTFF_BIN, location=self.tsrv.get_addr())
         self.assertGreater(ffp.get_pid(), 0)
         ffp.close()
         self.assertIsNone(ffp.get_pid())
@@ -219,7 +219,7 @@ class PuppetTests(TestCase): # pylint: disable=too-many-public-methods
         ffp = FFPuppet()
         self.addCleanup(ffp.clean_up)
         self.assertFalse(ffp.is_running())
-        ffp.launch(TESTFF_BIN)
+        ffp.launch(TESTFF_BIN, location=self.tsrv.get_addr())
         self.assertTrue(ffp.is_running())
         ffp.close()
         self.assertFalse(ffp.is_running())
@@ -231,7 +231,7 @@ class PuppetTests(TestCase): # pylint: disable=too-many-public-methods
         self.addCleanup(ffp.clean_up)
         # call when ffp._proc is None
         self.assertIsNone(ffp.wait())
-        ffp.launch(TESTFF_BIN)
+        ffp.launch(TESTFF_BIN, location=self.tsrv.get_addr())
         # call when ffp._proc is running
         self.assertTrue(ffp.is_running())
         self.assertIsNone(ffp.wait(0))
@@ -283,7 +283,7 @@ class PuppetTests(TestCase): # pylint: disable=too-many-public-methods
         self.addCleanup(ffp.clean_up)
         with open(self.tmpfn, 'w') as prefs:
             prefs.write('//fftest_memory\n')
-        ffp.launch(TESTFF_BIN, prefs_js=self.tmpfn, memory_limit=0x100000) # 1MB
+        ffp.launch(TESTFF_BIN, location=self.tsrv.get_addr(), prefs_js=self.tmpfn, memory_limit=0x100000) # 1MB
         self.assertIsNotNone(ffp.wait(30))
         ffp.close()
         self.assertIsNotNone(ffp.returncode)
@@ -297,12 +297,12 @@ class PuppetTests(TestCase): # pylint: disable=too-many-public-methods
         ffp = FFPuppet()
         self.addCleanup(ffp.clean_up)
         for _ in range(10):
-            ffp.launch(TESTFF_BIN, prefs_js=self.tmpfn)
+            ffp.launch(TESTFF_BIN, location=self.tsrv.get_addr())
             ffp.close()
         # call 2x without calling close()
-        ffp.launch(TESTFF_BIN, prefs_js=self.tmpfn)
+        ffp.launch(TESTFF_BIN, location=self.tsrv.get_addr())
         with self.assertRaisesRegex(LaunchError, "Process is already running"):
-            ffp.launch(TESTFF_BIN, prefs_js=self.tmpfn)
+            ffp.launch(TESTFF_BIN)
         ffp.close()
 
     def test_11(self):
@@ -315,7 +315,7 @@ class PuppetTests(TestCase): # pylint: disable=too-many-public-methods
         with self.assertRaisesRegex(TypeError, "Expecting 'str' or 're._pattern_type' got: 'NoneType'"):
             ffp.add_abort_token(None)
         ffp.add_abort_token("###!!! ASSERTION:")
-        ffp.launch(TESTFF_BIN, prefs_js=self.tmpfn)
+        ffp.launch(TESTFF_BIN, location=self.tsrv.get_addr(), prefs_js=self.tmpfn)
         self.assertIsNotNone(ffp.wait(10))
         ffp.close()
         self.assertEqual(ffp.reason, ffp.RC_WORKER)
@@ -327,21 +327,19 @@ class PuppetTests(TestCase): # pylint: disable=too-many-public-methods
     def test_12(self):
         "test using an existing profile directory"
         prf_dir = tempfile.mkdtemp(prefix="ffp_test_prof_")
+        self.addCleanup(shutil.rmtree, prf_dir)
         ffp = FFPuppet(use_profile=prf_dir)
         self.addCleanup(ffp.clean_up)
-        try:
-            ffp.launch(TESTFF_BIN)
-            ffp.clean_up()
-            self.assertTrue(os.path.isdir(prf_dir))
-        finally:
-            shutil.rmtree(prf_dir)
+        ffp.launch(TESTFF_BIN)
+        ffp.clean_up()
+        self.assertTrue(os.path.isdir(prf_dir))
 
     def test_13(self):
         "test calling close() and clean_up() in multiple states"
         ffp = FFPuppet()
         self.addCleanup(ffp.clean_up)
         ffp.close()
-        ffp.launch(TESTFF_BIN)
+        ffp.launch(TESTFF_BIN, location=self.tsrv.get_addr())
         self.assertIsNone(ffp.reason)
         ffp.close()
         ffp.clean_up()
@@ -460,19 +458,14 @@ class PuppetTests(TestCase): # pylint: disable=too-many-public-methods
     def test_22(self):
         "test parallel launches"
         ffps = list()
-        launch_threads = list()
         # use test pool size of 20
         for _ in range(20):
             ffps.append(FFPuppet())
             self.addCleanup(ffps[-1].clean_up)
-            launch_threads.append(threading.Thread(target=ffps[-1].launch, args=(TESTFF_BIN,)))
-            launch_threads[-1].start()
-        for lthread in launch_threads:
-            lthread.join()
+            ffps[-1].launch(TESTFF_BIN, location=self.tsrv.get_addr())
         for ffp in ffps:
-            self.assertTrue(ffp.is_running())
             ffp.close()
-            self.assertFalse(ffp.is_running())
+            self.assertEqual(ffp.reason, ffp.RC_CLOSED)
 
     def test_23(self):
         "test hitting log size limit"
