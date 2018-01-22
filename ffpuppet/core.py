@@ -1,12 +1,8 @@
-#!/usr/bin/env python2
-
 # This Source Code Form is subject to the terms of the Mozilla Public
 # License, v. 2.0. If a copy of the MPL was not distributed with this
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
-import argparse
 import errno
-import json
 import logging
 import os
 import platform
@@ -15,9 +11,8 @@ import re
 import shutil
 import socket
 import subprocess
-import tempfile
 import time
-from xml.etree import ElementTree
+
 try:  # py 2-3 compatibility
     from urllib import pathname2url  # pylint: disable=no-name-in-module
 except ImportError:
@@ -29,6 +24,8 @@ try:
 except ImportError:
     pass
 
+from .helpers import create_profile, prepare_environment, poll_file
+from .minidump_parser import process_minidumps
 from .puppet_logger import PuppetLogger
 from .workers import log_scanner, log_size_limiter, memory_limiter
 
@@ -46,11 +43,8 @@ class FFPuppet(object):
     BS_PORT_MAX = 0xFFFF # bootstrap range
     BS_PORT_MIN = 0x2000 # bootstrap range
     LAUNCH_TIMEOUT_MIN = 10 # minimum amount of time to wait for the browser to launch
-    LOG_BUF_SIZE = 0x10000 # buffer size used to copy logs
-    LOG_CLOSE_TIMEOUT = 10
-    LOG_POLL_RATE = 1
-    MDSW_BIN = "minidump_stackwalk"
-    MDSW_MAX_STACK = 150
+    LOG_POLL_RATE = 0.1  # used with poll_file to wait for logs
+    LOG_POLL_WAIT = 1.0  # used with poll_file to wait for logs
     RC_CLOSED = "CLOSED"  # target was closed by call to FFPuppet close()
     RC_EXITED = "EXITED"  # target exited/crashed/aborted/assertion failure etc...
     RC_WORKER = "WORKER"  # target was closed by worker thread
@@ -58,11 +52,12 @@ class FFPuppet(object):
     def __init__(self, use_profile=None, use_valgrind=False, use_xvfb=False, use_gdb=False):
         self._abort_tokens = set() # tokens used to notify log scanner to kill the browser process
         self._last_bin_path = None
-        self._launches = 0 # number of times the browser has successfully been launched
+        self._launches = 0 # number of successful browser launches
         self._logs = PuppetLogger()
         self._platform = platform.system().lower()
         self._proc = None
         self._profile_template = use_profile # profile that is used as a template
+        self._returncode = 0 # return code of target process
         self._use_valgrind = use_valgrind
         self._use_gdb = use_gdb
         self._workers = list() # collection of threads and processes
@@ -96,91 +91,6 @@ class FFPuppet(object):
             except NameError:
                 raise EnvironmentError("Please install xvfbwrapper")
             self._xvfb.start()
-
-        # check for minidump_stackwalk binary
-        try:
-            with open(os.devnull, "w") as null_fp:
-                subprocess.call([self.MDSW_BIN], stdout=null_fp, stderr=null_fp)
-            self._have_mdsw = True
-        except OSError:
-            self._have_mdsw = False
-
-
-    def get_environ(self, target_bin):
-        """
-        Get the string environment that is used when launching the browser.
-
-        @type bin_path: String
-        @param bin_path: Path to the Firefox binary
-
-        @rtype: dict
-        @return: A dict representing the string environment
-        """
-        env = dict(os.environ)
-        if self._use_valgrind:
-            # https://developer.gimp.org/api/2.0/glib/glib-running.html#G_DEBUG
-            env["G_DEBUG"] = "gc-friendly"
-
-        # https://developer.gimp.org/api/2.0/glib/glib-running.html#G_SLICE
-        env["G_SLICE"] = "always-malloc"
-        env["MOZ_CC_RUN_DURING_SHUTDOWN"] = "1"
-        env["MOZ_CRASHREPORTER"] = "1"
-        env["MOZ_CRASHREPORTER_NO_REPORT"] = "1"
-        env["MOZ_DISABLE_CONTENT_SANDBOX"] = "1"
-        env["MOZ_DISABLE_GMP_SANDBOX"] = "1"
-        env["MOZ_DISABLE_GPU_SANDBOX"] = "1"
-        env["MOZ_DISABLE_NPAPI_SANDBOX"] = "1"
-        env["MOZ_GDB_SLEEP"] = "0"
-        env["XRE_NO_WINDOWS_CRASH_DIALOG"] = "1"
-        env["XPCOM_DEBUG_BREAK"] = "warn"
-
-        # setup Address Sanitizer options if not set manually
-        # https://github.com/google/sanitizers/wiki/AddressSanitizerFlags
-        if "ASAN_OPTIONS" not in env:
-            env["ASAN_OPTIONS"] = ":".join((
-                "abort_on_error=true",
-                #"alloc_dealloc_mismatch=false", # different defaults per OS
-                "allocator_may_return_null=true",
-                "check_initialization_order=true",
-                #"check_malloc_usable_size=false", # defaults True
-                #"detect_stack_use_after_return=true", # can't launch firefox with this enabled
-                "disable_coredump=true",
-                "log_path='%s'" % os.path.join(self._logs.working_path, self._logs.LOG_ASAN_PREFIX),
-                "sleep_before_dying=0",
-                "strict_init_order=true",
-                #"strict_memcmp=false", # defaults True
-                "symbolize=true"))
-
-        # default to environment definition
-        if "ASAN_SYMBOLIZER_PATH" in env:
-            env["ASAN_SYMBOLIZER_PATH"] = os.environ["ASAN_SYMBOLIZER_PATH"]
-            env["MSAN_SYMBOLIZER_PATH"] = os.environ["ASAN_SYMBOLIZER_PATH"]
-            if not os.path.isfile(env["ASAN_SYMBOLIZER_PATH"]):
-                log.warning("Invalid ASAN_SYMBOLIZER_PATH (%s)", env["ASAN_SYMBOLIZER_PATH"])
-        else:
-            # ASAN_SYMBOLIZER_PATH only needs to be set on platforms other than Windows
-            if self._platform == "windows":
-                if not os.path.join(os.path.dirname(target_bin), "llvm-symbolizer.exe"):
-                    log.warning("llvm-symbolizer.exe should be next to the target binary")
-            else:
-                symbolizer_bin = os.path.join(os.path.dirname(target_bin), "llvm-symbolizer")
-                if os.path.isfile(symbolizer_bin):
-                    env["ASAN_SYMBOLIZER_PATH"] = symbolizer_bin
-                    env["MSAN_SYMBOLIZER_PATH"] = symbolizer_bin
-
-        # https://bugzilla.mozilla.org/show_bug.cgi?id=1305151
-        # skia assertions are easily hit and mostly due to precision, disable them.
-        if "MOZ_SKIA_DISABLE_ASSERTS" not in env:
-            env["MOZ_SKIA_DISABLE_ASSERTS"] = "1"
-
-        if "RUST_BACKTRACE" not in env:
-            env["RUST_BACKTRACE"] = "full"
-
-        # setup Undefined Behavior Sanitizer options if not set manually
-        if "UBSAN_OPTIONS" not in env:
-            env["UBSAN_OPTIONS"] = "print_stacktrace=1"
-
-        return env
 
 
     def add_abort_token(self, token):
@@ -238,149 +148,6 @@ class FFPuppet(object):
         return self.reason is not None
 
 
-    def _dump_minidump_stacks(self):
-        log.debug("symbolize minidumps")
-
-        if self.profile is None:
-            log.debug("can't symbolize: profile is None")
-            return
-
-        minidumps_path = os.path.join(self.profile, "minidumps")
-        if not os.path.isdir(minidumps_path):
-            log.debug("can't symbolize: no minidumps folder in profile")
-            return
-
-        if self._last_bin_path is None:
-            log.debug("can't symbolize: no value for bin_path")
-            return
-
-        symbols_path = os.path.join(self._last_bin_path, "symbols")
-
-        found = 0
-        for fname in os.listdir(minidumps_path):
-            if not fname.endswith(".dmp"):
-                continue
-            found += 1
-
-            if not self._have_mdsw:
-                log.warning("Found a minidump, but can't process it without minidump_stackwalk."
-                            " See README.md for how to obtain it.")
-                break
-            elif not os.path.isdir(symbols_path):
-                log.warning("Can't symbolize, %r does not exist", symbols_path)
-                break
-
-            md_log = "minidump_%02d" % found
-            self._logs.add_log(md_log)
-            dump_path = os.path.join(minidumps_path, fname)
-            self.poll_file(dump_path)
-            minidump_log = self._logs.get_fp(md_log)
-
-            # collect register info from minidump
-            log.debug("calling minidump_stackwalk on %s", dump_path)
-            with tempfile.TemporaryFile() as out_fp, open(os.devnull, "w") as null_fp:
-                # get register info
-                ret_val = subprocess.call([self.MDSW_BIN, dump_path, symbols_path],
-                                          stdout=out_fp, stderr=null_fp)
-                if ret_val != 0:
-                    log.warning("minidump_stackwalk returned %r", ret_val)
-
-                out_fp.seek(0)
-                found_registers = False
-                for line in out_fp: # pylint: disable=not-an-iterable
-                    if not found_registers:
-                        # look for the beginning of the register dump
-                        if b"(crashed)" in line:
-                            found_registers = True
-                        continue
-                    line = line.lstrip()
-                    if line.startswith(b"0"):
-                        continue # skip first line
-                    if b"=" not in line:
-                        break # we reached the end
-                    minidump_log.write(line)
-                log.debug("collected register info: %r", found_registers)
-
-            # collect stack trace from minidump
-            log.debug("calling minidump_stackwalk -m on %s", dump_path)
-            with tempfile.TemporaryFile() as out_fp, open(os.devnull, "w") as null_fp:
-                ret_val = subprocess.call([self.MDSW_BIN, "-m", dump_path, symbols_path],
-                                          stdout=out_fp, stderr=null_fp)
-                if ret_val != 0:
-                    log.warning("minidump_stackwalk -m returned %r", ret_val)
-
-                out_fp.seek(0)
-                crash_thread = None
-                line_count = 0 # lines added to the log so far
-                for line in out_fp: # pylint: disable=not-an-iterable
-                    if not line.rstrip() or line.startswith(b"Module|"):
-                        continue # ignore line
-
-                    # check if this is a stack entry (starts with '#|')
-                    try:
-                        t_id = int(line.split(b"|")[0])
-                        # assume that the first entry in the stack is the crash_thread
-                        # NOTE: an alternative would be to parse the 'Crash|' line
-                        if crash_thread is None:
-                            crash_thread = t_id
-                        elif t_id != crash_thread:
-                            break
-                    except ValueError:
-                        pass # not a stack entry
-
-                    minidump_log.write(line)
-                    line_count += 1
-                    if line_count >= self.MDSW_MAX_STACK:
-                        log.warning("MDSW_MAX_STACK (%d) limit reached", self.MDSW_MAX_STACK)
-                        minidump_log.write(b"WARNING: Hit line output limit!")
-                        break
-
-                if line_count < 1:
-                    log.warning("minidump_stackwalk log was empty")
-                    minidump_log.write(b"WARNING: minidump_stackwalk log was empty")
-
-        if found > 1:
-            log.warning("Found %d minidumps! Expecting 0 or 1", found)
-
-
-    @staticmethod
-    def poll_file(filename, poll_rate=0.1, idle_wait=1.5, timeout=60):
-        """
-        Wait for file modification to complete. This is done by monitoring the
-        last modified time of the specified file.
-        NOTE: This depends on file system data being updated and this might not be uniform
-        across platforms, even different file systems on the same platform may act differently.
-
-        @type filename: String
-        @param filename: Name of the file to poll.
-
-        @type poll_rate: float
-        @param poll_rate: Frequency to check the file modification time.
-
-        @type idle_wait: float
-        @param idle_wait: Amount of time that must elapse without file modification to exit.
-
-        @type timeout: float
-        @param timeout: Amount of time in seconds to poll, None will poll forever.
-
-        @rtype: int
-        @return: file size in bytes or None on failure/timeout.
-        """
-
-        assert timeout is None or timeout > idle_wait, "timeout must be greater than idle_wait time"
-        assert poll_rate <= idle_wait, "poll_rate must be less then or equal to idle_wait"
-        if not os.path.isfile(filename):
-            log.debug("Cannot poll %r. File does not exist", filename)
-            return None
-        start_time = time.time()
-        while time.time() - os.stat(filename).st_mtime < idle_wait:
-            if timeout is not None and start_time + timeout < time.time():
-                log.warning("%r was still being modified after %0.2f seconds", filename, timeout)
-                return None
-            time.sleep(poll_rate)
-        return os.stat(filename).st_size
-
-
     def log_length(self, log_id):
         """
         Get the length of the current browser log.
@@ -403,7 +170,12 @@ class FFPuppet(object):
         @rtype: int or None
         @return: process returncode if the process has run and exited otherwise None
         """
-        return None if self._proc is None else self._proc.poll()
+
+        if self._returncode is None:
+            assert self._proc is not None, "_proc and _returncode are both None"
+            # cache returncode value if available
+            self._returncode = self._proc.poll()
+        return self._returncode
 
 
     def save_logs(self, log_path):
@@ -515,7 +287,7 @@ class FFPuppet(object):
                     self._terminate()
             else:
                 r_key = self.RC_EXITED
-            self.wait()
+            self._returncode = self.wait()
         else:
             log.debug("firefox process was 'None'")
 
@@ -525,7 +297,6 @@ class FFPuppet(object):
 
         log.debug("copying worker logs to stderr and cleaning up")
         stderr_log_fp = self._logs.get_fp("stderr")
-
         for worker in self._workers:
             if worker.aborted.is_set():
                 r_key = self.RC_WORKER
@@ -544,15 +315,18 @@ class FFPuppet(object):
                 if not fname.startswith(self._logs.LOG_ASAN_PREFIX):
                     continue
                 tmp_file = os.path.join(self._logs.working_path, fname)
-                self.poll_file(tmp_file)
+                poll_file(tmp_file, poll_rate=self.LOG_POLL_RATE, idle_wait=self.LOG_POLL_WAIT)
                 self._logs.add_log(fname, open(tmp_file, "rb"))
 
             # check for minidumps in the profile and dump them if possible
-            self._dump_minidump_stacks()
+            if self.profile is not None:
+                process_minidumps(
+                    os.path.join(self.profile, "minidumps"),
+                    os.path.join(self._last_bin_path, "symbols"),
+                    self._logs.add_log)
 
         if self._proc is not None:
-            self._logs.get_fp("stderr").write(
-                ("[ffpuppet] Exit code: %r\n" % self._proc.poll()).encode("utf-8"))
+            stderr_log_fp.write(("[ffpuppet] Exit code: %r\n" % self._returncode).encode("utf-8"))
             self._proc = None
 
         # close browser logger
@@ -567,9 +341,10 @@ class FFPuppet(object):
         self.reason = r_key
 
 
-    def get_launch_count(self):
+    @property
+    def launches(self):
         """
-        Get the count of successful launches
+        Get the number of successful launches
 
         @rtype: int
         @return: successful launch count
@@ -657,153 +432,19 @@ class FFPuppet(object):
         return cmd
 
 
-    def check_prefs(self, input_prefs):
-        """
-        Check that the current prefs.js file in use by the browser contains all the requested prefs.
-
-        NOTE: There will be false positives if input_prefs does not adhere to the formatting that
-        is used in prefs.js file generated by the browser.
-
-        @type input_prefs: String
-        @param input_prefs: Path to prefs.js file that contains prefs that should be merged
-                            into the prefs.js file generated by the browser
-
-        @rtype: bool
-        @return: True if all prefs in input_prefs are merged otherwise False
-        """
-
-        if self.profile is None or not os.path.isfile(os.path.join(self.profile, "prefs.js")):
-            log.debug("prefs.js not in profile: %r", self.profile)
-            return False
-
-        enabled_prefs = list()
-        with open(os.path.join(self.profile, "prefs.js"), "r") as prefs_fp:
-            for e_pref in prefs_fp:
-                e_pref = e_pref.strip()
-                if e_pref.startswith("user_pref("):
-                    enabled_prefs.append(e_pref)
-
-        with open(input_prefs, "r") as prefs_fp:
-            missing_prefs = 0
-            for r_pref in prefs_fp:
-                r_pref = r_pref.strip()
-                if not r_pref.startswith("user_pref("):
-                    continue
-                found = False
-                for e_pref in enabled_prefs:
-                    if r_pref.startswith(e_pref):
-                        found = True
-                        break
-                if found:
-                    continue
-                log.debug("pref not set: %r", r_pref)
-                missing_prefs += 1
-
-        log.debug("%r pref(s) not set", missing_prefs)
-        return missing_prefs < 1
-
-
-    @staticmethod
-    def create_profile(extension=None, prefs_js=None, template=None):
-        """
-        Create a profile to be used with Firefox
-
-        @type extension: String, or list of Strings
-        @param extension: Path to an extension (e.g. DOMFuzz fuzzPriv extension) to be installed.
-
-        @type prefs_js: String
-        @param prefs_js: Path to a prefs.js file to install in the Firefox profile.
-
-        @type template: String
-        @param template: Path to an existing profile directory to use.
-
-        @rtype: String
-        @return: Path to directory to be used as a profile
-        """
-
-        profile = tempfile.mkdtemp(prefix="ffprof_")
-        log.debug("profile directory: %r", profile)
-
-        if template is not None:
-            log.debug("using profile template: %r", template)
-            shutil.rmtree(profile) # reuse the directory name
-            if not os.path.isdir(template):
-                raise IOError("Cannot find template profile: %r" % template)
-            shutil.copytree(template, profile)
-            invalid_prefs = os.path.join(profile, "Invalidprefs.js")
-            # if Invalidprefs.js was copied from the template profile remove it
-            if os.path.isfile(invalid_prefs):
-                os.remove(invalid_prefs)
-
-        if prefs_js is not None:
-            log.debug("using prefs.js: %r", prefs_js)
-            if not os.path.isfile(prefs_js):
-                shutil.rmtree(profile, True) # clean up on failure
-                raise IOError("prefs.js file does not exist: %r" % prefs_js)
-            shutil.copyfile(prefs_js, os.path.join(profile, "prefs.js"))
-
-            # times.json only needs to be created when using a custom pref.js
-            times_json = os.path.join(profile, "times.json")
-            if not os.path.isfile(times_json):
-                with open(times_json, "w") as times_fp:
-                    times_fp.write('{"created":%d}' % (int(time.time()) * 1000))
-
-        # extension support
-        try:
-            if extension is None:
-                extensions = []
-            elif isinstance(extension, (list, tuple)):
-                extensions = extension
-            else:
-                extensions = [extension]
-            if extensions and not os.path.isdir(os.path.join(profile, "extensions")):
-                os.mkdir(os.path.join(profile, "extensions"))
-            for ext in extensions:
-                if os.path.isfile(ext) and ext.endswith(".xpi"):
-                    shutil.copyfile(
-                        ext,
-                        os.path.join(profile, "extensions", os.path.basename(ext)))
-                elif os.path.isdir(ext):
-                    # read manifest to see what the folder should be named
-                    ext_name = None
-                    if os.path.isfile(os.path.join(ext, "manifest.json")):
-                        try:
-                            with open(os.path.join(ext, "manifest.json")) as manifest:
-                                manifest = json.load(manifest)
-                            ext_name = manifest["applications"]["gecko"]["id"]
-                        except (IOError, KeyError, ValueError) as exc:
-                            log.debug("Failed to parse manifest.json: %s", exc)
-                    elif os.path.isfile(os.path.join(ext, "install.rdf")):
-                        try:
-                            xmlns = {"x": "http://www.w3.org/1999/02/22-rdf-syntax-ns#",
-                                     "em": "http://www.mozilla.org/2004/em-rdf#"}
-                            tree = ElementTree.parse(os.path.join(ext, "install.rdf"))
-                            assert tree.getroot().tag == "{%s}RDF" % xmlns["x"]
-                            ids = tree.findall("./x:Description/em:id", namespaces=xmlns)
-                            assert len(ids) == 1
-                            ext_name = ids[0].text
-                        except (AssertionError, IOError, ElementTree.ParseError) as exc:
-                            log.debug("Failed to parse install.rdf: %s", exc)
-                    if ext_name is None:
-                        raise RuntimeError("Failed to find extension id in manifest: %r" % ext)
-                    shutil.copytree(
-                        os.path.abspath(ext),
-                        os.path.join(profile, "extensions", ext_name))
-                else:
-                    raise RuntimeError("Unknown extension: %r" % ext)
-        except:
-            shutil.rmtree(profile, True) # clean up on failure
-            raise
-        return profile
-
-
-    def launch(self, bin_path, launch_timeout=300, location=None, log_limit=0, memory_limit=0,
-               prefs_js=None, safe_mode=False, extension=None):
+    def launch(self, bin_path, env_mod=None, launch_timeout=300, location=None, log_limit=0,
+               memory_limit=0, prefs_js=None, safe_mode=False, extension=None):
         """
         Launch a new browser process.
 
         @type bin_path: String
         @param bin_path: Path to the Firefox binary
+
+        @type env_mod: dict
+        @param env_mod: Environment modifier. Add, remove and update entries in the prepared
+                        environment via this dict. Add and update using key, value pairs where
+                        value is a string and to remove set the value to None. If it is None no
+                        extra modifications are made.
 
         @type launch_timeout: int
         @param launch_timeout: Timeout in seconds for launching the browser
@@ -852,11 +493,12 @@ class FFPuppet(object):
         memory_limit = max(memory_limit, 0)
 
         self.reason = None
+        self._returncode = None
         launch_timeout = max(launch_timeout, self.LAUNCH_TIMEOUT_MIN) # force minimum launch timeout
         log.debug("launch timeout: %d", launch_timeout)
 
         # create and modify a profile
-        self.profile = self.create_profile(
+        self.profile = create_profile(
             extension=extension,
             prefs_js=prefs_js,
             template=self._profile_template)
@@ -873,6 +515,12 @@ class FFPuppet(object):
             bin_path,
             additional_args=launch_args)
 
+        if self._use_valgrind:
+            if env_mod is None:
+                env_mod = dict()
+            # https://developer.gimp.org/api/2.0/glib/glib-running.html#G_DEBUG
+            env_mod["G_DEBUG"] = "gc-friendly"
+
         # open logs
         self._logs.reset() # clean up existing log files
         self._logs.add_log("stderr")
@@ -882,13 +530,13 @@ class FFPuppet(object):
         stderr.write(" ".join(cmd).encode("utf-8"))
         stderr.write(b"\n\n")
         stderr.flush()
-
+        sanitizer_logs = os.path.join(self._logs.working_path, self._logs.LOG_ASAN_PREFIX)
         # launch the browser
         log.debug("launch command: %r", " ".join(cmd))
         self._proc = subprocess.Popen(
             cmd,
             creationflags=subprocess.CREATE_NEW_PROCESS_GROUP if self._platform == "windows" else 0,
-            env=self.get_environ(bin_path),
+            env=prepare_environment(self._last_bin_path, sanitizer_logs, env_mod=env_mod),
             shell=False,
             stderr=stderr,
             stdout=self._logs.get_fp("stdout"))
@@ -1029,151 +677,3 @@ class FFPuppet(object):
                 break
             time.sleep(0.1)
         return None
-
-
-def _parse_args(argv=None):
-    parser = argparse.ArgumentParser(description="Firefox launcher/wrapper")
-    parser.add_argument(
-        "binary",
-        help="Firefox binary to execute")
-    parser.add_argument(
-        "-a", "--abort-token", action="append", default=list(),
-        help="Scan the log for the given value and close browser on detection. " \
-             "For example '-a ###!!! ASSERTION:' would be used to detect soft assertions.")
-    parser.add_argument(
-        "-d", "--dump", action="store_true",
-        help="Display browser log on process exit")
-    parser.add_argument(
-        "-e", "--extension", action="append",
-        help="Install the fuzzPriv extension (specify path to funfuzz/dom/extension)")
-    parser.add_argument(
-        "-g", "--gdb", action="store_true",
-        help="Use GDB (Linux only)")
-    parser.add_argument(
-        "--ignore-crashes", action="store_true",
-        help="Do not close the browser when a crash is detected (e10s only)")
-    parser.add_argument(
-        "-l", "--log",
-        help="Location to save log files")
-    parser.add_argument(
-        "--log-limit", type=int,
-        help="Log file size limit in MBs (default: 'no limit')")
-    parser.add_argument(
-        "-m", "--memory", type=int,
-        help="Process memory limit in MBs")
-    parser.add_argument(
-        "-p", "--prefs",
-        help="prefs.js file to use")
-    parser.add_argument(
-        "-P", "--profile",
-        help="Profile to use. (default: a temporary profile is created)")
-    parser.add_argument(
-        "--safe-mode", action="store_true",
-        help="Launch browser in 'safe-mode'. WARNING: Launching in safe mode blocks with a " \
-             "dialog that must be dismissed manually.")
-    parser.add_argument(
-        "-t", "--timeout", type=int, default=300,
-        help="Number of seconds to wait for the browser to become " \
-             "responsive after launching. (default: %(default)s)")
-    parser.add_argument(
-        "-u", "--url",
-        help="Server URL or local file to load.")
-    parser.add_argument(
-        "--valgrind", action="store_true",
-        help="Use Valgrind (Linux only)")
-    parser.add_argument(
-        "-v", "--verbose", action="store_true",
-        help="Output includes debug prints")
-    parser.add_argument(
-        "--xvfb", action="store_true",
-        help="Use Xvfb (Linux only)")
-    return parser.parse_args(argv)
-
-
-def _dump_to_console(log_dir, dump_limit=0x20000):
-    # order logs, make sure log_stderr is on the end
-    log_list = os.listdir(log_dir)
-    log_list.sort() # sort alphabetically
-    order = ("log_stdout", "log_stderr")
-    for l_order in order:
-        found = None
-        for fname in log_list:
-            if fname.startswith(l_order):
-                found = fname
-                break
-        # move to the end of the print list
-        if found and log_list[-1] != found:
-            log_list.remove(found)
-            log_list.append(found)
-
-    with tempfile.SpooledTemporaryFile(max_size=0x40000, mode="w+") as out_fp:
-        for fname in log_list:
-            full_path = os.path.join(log_dir, fname)
-            fsize = os.stat(full_path).st_size / 1024.0
-            out_fp.write("\n[Dumping log %r (%0.2fKB)]\n" % (fname, fsize))
-            with open(full_path, "rb") as log_fp:
-                out_fp.write(log_fp.read(dump_limit).decode("ascii", errors="ignore"))
-            if out_fp.tell() > dump_limit:
-                out_fp.write("\nOutput exceeds %dKB! Log tailed. " % (dump_limit / 1024))
-                out_fp.write("Use '--log' to capture full log.")
-                break
-        # python 3.2 and up only supports seeking from the start unless in binary mode
-        dump_pos = max((out_fp.tell() - dump_limit), 0)
-        out_fp.seek(dump_pos)
-        return out_fp.read()
-
-
-def main(argv=None): # pylint: disable=missing-docstring
-    args = _parse_args(argv)
-
-    # set output verbosity
-    if args.verbose or bool(os.getenv("DEBUG")):
-        log_level = logging.DEBUG
-        log_fmt = "%(levelname).1s %(name)s [%(asctime)s] %(message)s"
-    else:
-        log_level = logging.INFO
-        log_fmt = "[%(asctime)s] %(message)s"
-    logging.basicConfig(format=log_fmt, datefmt="%Y-%m-%d %H:%M:%S", level=log_level)
-
-    ffp = FFPuppet(
-        use_profile=args.profile,
-        use_valgrind=args.valgrind,
-        use_xvfb=args.xvfb,
-        use_gdb=args.gdb)
-    for a_token in args.abort_token:
-        ffp.add_abort_token(a_token)
-    if not args.ignore_crashes:
-        ffp.add_abort_token(
-            re.compile(r"###!!!\s*\[Parent\].+?Error:\s*\(.+?name=PBrowser::Msg_Destroy\)"))
-
-    try:
-        ffp.launch(
-            args.binary,
-            location=args.url,
-            launch_timeout=args.timeout,
-            log_limit=args.log_limit * 1024 * 1024 if args.log_limit else 0,
-            memory_limit=args.memory * 1024 * 1024 if args.memory else 0,
-            prefs_js=args.prefs,
-            safe_mode=args.safe_mode,
-            extension=args.extension)
-        if args.prefs is not None and os.path.isfile(args.prefs):
-            ffp.check_prefs(args.prefs)
-        log.info("Running Firefox (pid: %d)...", ffp.get_pid())
-        ffp.wait()
-    except KeyboardInterrupt:
-        log.info("Ctrl+C detected.")
-    finally:
-        log.info("Shutting down...")
-        ffp.close()
-        log.info("Firefox process closed")
-        if args.log is not None:
-            ffp.save_logs(args.log)
-        if args.dump:
-            log_dir = tempfile.mkdtemp(prefix="ffp_log_")
-            try:
-                ffp.save_logs(log_dir)
-                log.info("Dumping browser log...\n%s", _dump_to_console(log_dir))
-            finally:
-                if os.path.isdir(log_dir):
-                    shutil.rmtree(log_dir)
-        ffp.clean_up()

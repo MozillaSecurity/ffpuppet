@@ -17,8 +17,8 @@ except ImportError:
 
 from psutil import Process
 
-from ffpuppet import FFPuppet, LaunchError, main
-
+from ffpuppet import FFPuppet, LaunchError
+from .minidump_parser import MinidumpParser
 
 logging.basicConfig(level=logging.DEBUG if bool(os.getenv("DEBUG")) else logging.INFO)
 log = logging.getLogger("ffp_test")
@@ -27,9 +27,10 @@ CWD = os.path.realpath(os.path.dirname(__file__))
 TESTFF_BIN = os.path.join(CWD, "testff", "testff.exe") if sys.platform.startswith('win') else os.path.join(CWD, "testff.py")
 TESTMDSW_BIN = os.path.join(CWD, "testmdsw", "testmdsw.exe") if sys.platform.startswith('win') else os.path.join(CWD, "testmdsw.py")
 
-FFPuppet.LOG_POLL_RATE = 0.01 # reduce this for testing
-FFPuppet.MDSW_BIN = TESTMDSW_BIN
-FFPuppet.MDSW_MAX_STACK = 8
+FFPuppet.LOG_POLL_RATE = 0.01
+FFPuppet.LOG_POLL_WAIT = 0.1
+MinidumpParser.MDSW_BIN = TESTMDSW_BIN
+MinidumpParser.MDSW_MAX_STACK = 8
 
 class TestCase(unittest.TestCase):
 
@@ -88,6 +89,13 @@ class HTTPTestServer(object):
 
 
 class PuppetTests(TestCase): # pylint: disable=too-many-public-methods
+    @classmethod
+    def setUpClass(cls):
+        cls.tsrv = HTTPTestServer()
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.tsrv.shutdown()
 
     def setUp(self):
         fd, self.tmpfn = tempfile.mkstemp(prefix="ffp_test_log_")
@@ -112,19 +120,18 @@ class PuppetTests(TestCase): # pylint: disable=too-many-public-methods
         "test basic launch and close"
         ffp = FFPuppet()
         self.addCleanup(ffp.clean_up)
-        self.assertEqual(ffp.get_launch_count(), 0)
-        tsrv = HTTPTestServer()
-        self.addCleanup(tsrv.shutdown)
-        ffp.launch(TESTFF_BIN, location=tsrv.get_addr())
+        self.assertEqual(ffp.launches, 0)
+        self.assertEqual(ffp.returncode, 0)
+        ffp.launch(TESTFF_BIN, location=self.tsrv.get_addr())
         self.assertEqual(len(ffp._workers), 0) # pylint: disable=protected-access
-        self.assertEqual(ffp.get_launch_count(), 1)
+        self.assertEqual(ffp.launches, 1)
         self.assertIsNone(ffp.wait(0))
         self.assertTrue(ffp.is_running())
         self.assertIsNone(ffp.reason)
         self.assertIsNone(ffp.returncode)
         ffp.close()
         self.assertEqual(ffp.reason, ffp.RC_CLOSED)
-        self.assertIsNone(ffp.returncode)
+        self.assertIsNotNone(ffp.returncode)
         self.assertIsNone(ffp._proc) # pylint: disable=protected-access
         self.assertFalse(ffp.is_running())
         self.assertIsNone(ffp.wait(10))
@@ -138,9 +145,10 @@ class PuppetTests(TestCase): # pylint: disable=too-many-public-methods
         with self.assertRaisesRegex(LaunchError, "Failure during browser startup"):
             ffp.launch(TESTFF_BIN, prefs_js=self.tmpfn)
         self.assertEqual(ffp.wait(10), 1) # test crash returns 1
-        self.assertEqual(ffp.returncode, 1)
         ffp.close()
+        self.assertEqual(ffp.launches, 0)
         self.assertEqual(ffp.reason, ffp.RC_EXITED)
+        self.assertEqual(ffp.returncode, 1)
 
     def test_03(self):
         "test hang on start"
@@ -168,9 +176,7 @@ class PuppetTests(TestCase): # pylint: disable=too-many-public-methods
         self.addCleanup(ffp.clean_up)
         ffp.close()
         ffp.save_logs(os.path.join(self.logs, "no_logs"))
-        tsrv = HTTPTestServer()
-        self.addCleanup(tsrv.shutdown)
-        ffp.launch(TESTFF_BIN, location=tsrv.get_addr())
+        ffp.launch(TESTFF_BIN, location=self.tsrv.get_addr())
         ffp.wait(0.25) # wait for log prints
         ffp.close()
         self.assertTrue(ffp._logs.closed) # pylint: disable=protected-access
@@ -203,7 +209,7 @@ class PuppetTests(TestCase): # pylint: disable=too-many-public-methods
         ffp = FFPuppet()
         self.addCleanup(ffp.clean_up)
         self.assertIsNone(ffp.get_pid())
-        ffp.launch(TESTFF_BIN)
+        ffp.launch(TESTFF_BIN, location=self.tsrv.get_addr())
         self.assertGreater(ffp.get_pid(), 0)
         ffp.close()
         self.assertIsNone(ffp.get_pid())
@@ -213,7 +219,7 @@ class PuppetTests(TestCase): # pylint: disable=too-many-public-methods
         ffp = FFPuppet()
         self.addCleanup(ffp.clean_up)
         self.assertFalse(ffp.is_running())
-        ffp.launch(TESTFF_BIN)
+        ffp.launch(TESTFF_BIN, location=self.tsrv.get_addr())
         self.assertTrue(ffp.is_running())
         ffp.close()
         self.assertFalse(ffp.is_running())
@@ -225,7 +231,7 @@ class PuppetTests(TestCase): # pylint: disable=too-many-public-methods
         self.addCleanup(ffp.clean_up)
         # call when ffp._proc is None
         self.assertIsNone(ffp.wait())
-        ffp.launch(TESTFF_BIN)
+        ffp.launch(TESTFF_BIN, location=self.tsrv.get_addr())
         # call when ffp._proc is running
         self.assertTrue(ffp.is_running())
         self.assertIsNone(ffp.wait(0))
@@ -234,8 +240,8 @@ class PuppetTests(TestCase): # pylint: disable=too-many-public-methods
         self.assertFalse(ffp.is_running())
         self.assertIsNotNone(ffp.wait(0))  # with a timeout of zero
         self.assertIsNotNone(ffp.wait())  # without a timeout
-        self.assertIsNotNone(ffp.returncode)
         ffp.close()
+        self.assertIsNotNone(ffp.returncode)
         with self.assertRaisesRegex(AssertionError, ""):
             ffp._terminate()  # pylint: disable=protected-access
         self.assertIsNone(ffp.wait(None))
@@ -245,9 +251,7 @@ class PuppetTests(TestCase): # pylint: disable=too-many-public-methods
         ffp = FFPuppet()
         self.addCleanup(ffp.clean_up)
         self.assertIsNone(ffp.clone_log("stdout", target_file=self.tmpfn))
-        tsrv = HTTPTestServer()
-        self.addCleanup(tsrv.shutdown)
-        ffp.launch(TESTFF_BIN, location=tsrv.get_addr())
+        ffp.launch(TESTFF_BIN, location=self.tsrv.get_addr())
         ffp.wait(0.25) # wait for log prints
         # make sure logs are available
         self.assertEqual(ffp.clone_log("stdout", target_file=self.tmpfn), self.tmpfn)
@@ -266,11 +270,11 @@ class PuppetTests(TestCase): # pylint: disable=too-many-public-methods
             self.assertEqual(ffp.clone_log("stdout", target_file=self.tmpfn), self.tmpfn)
             with open(self.tmpfn, "rb") as tmpfp:
                 self.assertTrue(tmpfp.read().startswith(orig))
-            ffp.clean_up()
         finally:
             if os.path.isfile(rnd_log):
                 os.remove(rnd_log)
         # verify clean_up() removed the logs
+        ffp.clean_up()
         self.assertIsNone(ffp.clone_log("stdout", target_file=self.tmpfn))
 
     def test_09(self):
@@ -279,10 +283,10 @@ class PuppetTests(TestCase): # pylint: disable=too-many-public-methods
         self.addCleanup(ffp.clean_up)
         with open(self.tmpfn, 'w') as prefs:
             prefs.write('//fftest_memory\n')
-        ffp.launch(TESTFF_BIN, prefs_js=self.tmpfn, memory_limit=0x100000) # 1MB
+        ffp.launch(TESTFF_BIN, location=self.tsrv.get_addr(), prefs_js=self.tmpfn, memory_limit=0x100000) # 1MB
         self.assertIsNotNone(ffp.wait(30))
-        self.assertIsNotNone(ffp.returncode)
         ffp.close()
+        self.assertIsNotNone(ffp.returncode)
         self.assertEqual(ffp.reason, ffp.RC_WORKER)
         ffp.save_logs(self.logs)
         with open(os.path.join(self.logs, "log_stderr.txt"), "rb") as log_fp:
@@ -293,12 +297,12 @@ class PuppetTests(TestCase): # pylint: disable=too-many-public-methods
         ffp = FFPuppet()
         self.addCleanup(ffp.clean_up)
         for _ in range(10):
-            ffp.launch(TESTFF_BIN, prefs_js=self.tmpfn)
+            ffp.launch(TESTFF_BIN, location=self.tsrv.get_addr())
             ffp.close()
         # call 2x without calling close()
-        ffp.launch(TESTFF_BIN, prefs_js=self.tmpfn)
+        ffp.launch(TESTFF_BIN, location=self.tsrv.get_addr())
         with self.assertRaisesRegex(LaunchError, "Process is already running"):
-            ffp.launch(TESTFF_BIN, prefs_js=self.tmpfn)
+            ffp.launch(TESTFF_BIN)
         ffp.close()
 
     def test_11(self):
@@ -311,11 +315,11 @@ class PuppetTests(TestCase): # pylint: disable=too-many-public-methods
         with self.assertRaisesRegex(TypeError, "Expecting 'str' or 're._pattern_type' got: 'NoneType'"):
             ffp.add_abort_token(None)
         ffp.add_abort_token("###!!! ASSERTION:")
-        ffp.launch(TESTFF_BIN, prefs_js=self.tmpfn)
+        ffp.launch(TESTFF_BIN, location=self.tsrv.get_addr(), prefs_js=self.tmpfn)
         self.assertIsNotNone(ffp.wait(10))
-        self.assertIsNotNone(ffp.returncode)
         ffp.close()
         self.assertEqual(ffp.reason, ffp.RC_WORKER)
+        self.assertIsNotNone(ffp.returncode)
         ffp.save_logs(self.logs)
         with open(os.path.join(self.logs, "log_stderr.txt"), "r") as log_fp:
             self.assertIn("TOKEN_LOCATED", log_fp.read())
@@ -323,52 +327,26 @@ class PuppetTests(TestCase): # pylint: disable=too-many-public-methods
     def test_12(self):
         "test using an existing profile directory"
         prf_dir = tempfile.mkdtemp(prefix="ffp_test_prof_")
+        self.addCleanup(shutil.rmtree, prf_dir)
         ffp = FFPuppet(use_profile=prf_dir)
         self.addCleanup(ffp.clean_up)
-        try:
-            ffp.launch(TESTFF_BIN)
-            ffp.clean_up()
-            self.assertTrue(os.path.isdir(prf_dir))
-        finally:
-            shutil.rmtree(prf_dir)
+        ffp.launch(TESTFF_BIN)
+        ffp.clean_up()
+        self.assertTrue(os.path.isdir(prf_dir))
 
     def test_13(self):
         "test calling close() and clean_up() in multiple states"
         ffp = FFPuppet()
         self.addCleanup(ffp.clean_up)
         ffp.close()
-        ffp.launch(TESTFF_BIN)
+        ffp.launch(TESTFF_BIN, location=self.tsrv.get_addr())
         self.assertIsNone(ffp.reason)
         ffp.close()
         ffp.clean_up()
         ffp.close()
 
     def test_14(self):
-        "test manually setting ASAN_SYMBOLIZER_PATH"
-        os.environ["ASAN_SYMBOLIZER_PATH"] = "foo/bar"
-        ffp = FFPuppet()
-        env = ffp.get_environ("fake/bin/path")
-        ffp.clean_up()
-        os.environ.pop("ASAN_SYMBOLIZER_PATH", None)
-        self.assertEqual(env["ASAN_SYMBOLIZER_PATH"], "foo/bar")
-
-    @unittest.skipIf(sys.platform.startswith('win'), "ASAN_SYMBOLIZER_PATH not set automatically on Windows")
-    def test_15(self):
-        "test automatically using bundled llvm-symbolizer"
-        test_bin = "llvm-symbolizer"
-        test_dir = tempfile.mkdtemp()
-        with open(os.path.join(test_dir, test_bin), "w") as log_fp:
-            log_fp.write("test")
-        ffp = FFPuppet()
-        env = ffp.get_environ(os.path.join(test_dir, "fake_bin"))
-        ffp.clean_up()
-        shutil.rmtree(test_dir)
-        self.assertIn("ASAN_SYMBOLIZER_PATH", env)
-        self.assertEqual(env["ASAN_SYMBOLIZER_PATH"], os.path.join(test_dir, test_bin))
-
-    def test_16(self):
         "test launching under Xvfb"
-        ffp = None
         if not sys.platform.startswith("linux"):
             with self.assertRaisesRegex(EnvironmentError, "Xvfb is only supported on Linux"):
                 ffp = FFPuppet(use_xvfb=True)
@@ -376,7 +354,7 @@ class PuppetTests(TestCase): # pylint: disable=too-many-public-methods
             ffp = FFPuppet(use_xvfb=True)
             self.addCleanup(ffp.clean_up)
 
-    def test_17(self):
+    def test_15(self):
         "test passing a file and a non existing file to launch() via location"
         ffp = FFPuppet()
         self.addCleanup(ffp.clean_up)
@@ -399,14 +377,14 @@ class PuppetTests(TestCase): # pylint: disable=too-many-public-methods
         self.assertFalse(location.startswith("/"))
         self.assertEqual(os.path.normpath(os.path.join("/", location)), fname)
 
-    def test_18(self):
+    def test_16(self):
         "test passing nonexistent file to launch() via prefs_js"
         ffp = FFPuppet()
         self.addCleanup(ffp.clean_up)
         with self.assertRaisesRegex(IOError, "prefs.js file does not exist"):
             ffp.launch(TESTFF_BIN, prefs_js="fake_file.js")
 
-    def test_19(self):
+    def test_17(self):
         "test launching with gdb"
         if not sys.platform.startswith("linux"):
             with self.assertRaisesRegex(EnvironmentError, "GDB is only supported on Linux"):
@@ -426,47 +404,15 @@ class PuppetTests(TestCase): # pylint: disable=too-many-public-methods
             self.assertRegex(log_data, br"[Inferior \d+ (process \d+) exited with code \d+]")
             self.assertRegex(log_data, br"\+quit_with_code")
 
-    def test_20(self):
-        "test create_profile()"
-        with self.assertRaisesRegex(IOError, "Cannot find template profile: 'fake_dir'"):
-            FFPuppet.create_profile(template="fake_dir")
-
-        with self.assertRaisesRegex(IOError, "prefs.js file does not exist: 'fake_prefs'"):
-            FFPuppet.create_profile(prefs_js="fake_prefs")
-
-        # try creating a profile from scratch, does nothing but create a directory to be populated
-        prof = FFPuppet.create_profile()
-        self.assertTrue(os.path.isdir(prof))
-        contents = os.listdir(prof)
-        shutil.rmtree(prof)
-        self.assertEqual(len(contents), 0)
-
-        # create dummy profile
-        prf_dir = tempfile.mkdtemp(prefix="ffp_test_prof_")
-        invalid_js = os.path.join(prf_dir, "Invalidprefs.js")
-        with open(invalid_js, "w") as log_fp:
-            log_fp.write("blah!")
-        # try creating a profile from a template
-        prof = FFPuppet.create_profile(prefs_js=self.tmpfn, template=prf_dir)
-        shutil.rmtree(prf_dir)
-        self.assertTrue(os.path.isdir(prof))
-        contents = os.listdir(prof)
-        shutil.rmtree(prof)
-        self.assertIn("prefs.js", contents)
-        self.assertIn("times.json", contents)
-        self.assertNotIn("Invalidprefs.js", contents)
-
-    def test_21(self):
+    def test_18(self):
         "test calling save_logs() before close()"
         ffp = FFPuppet()
         self.addCleanup(ffp.clean_up)
-        tsrv = HTTPTestServer()
-        self.addCleanup(tsrv.shutdown)
-        ffp.launch(TESTFF_BIN, location=tsrv.get_addr())
+        ffp.launch(TESTFF_BIN, location=self.tsrv.get_addr())
         with self.assertRaisesRegex(RuntimeError, "Logs are still in use.+"):
             ffp.save_logs(self.logs)
 
-    def test_22(self):
+    def test_19(self):
         "test launching with Valgrind"
         if not sys.platform.startswith("linux"):
             with self.assertRaisesRegex(EnvironmentError, "Valgrind is only supported on Linux"):
@@ -486,51 +432,16 @@ class PuppetTests(TestCase): # pylint: disable=too-many-public-methods
             self.assertRegex(log_data, br"valgrind -q")
             self.assertRegex(log_data, br"\[ffpuppet\] Exit code: 0")
 
-    def test_23(self):
-        "test check_prefs()"
-        with open(self.tmpfn, 'w') as prefs_fp: # browser prefs.js dummy
-            prefs_fp.write('// comment line\n')
-            prefs_fp.write('# comment line\n')
-            prefs_fp.write(' \n\n')
-            prefs_fp.write('user_pref("a.a", 0);\n')
-            prefs_fp.write('user_pref("a.b", "test");\n')
-            prefs_fp.write('user_pref("a.c", true);\n')
-        ffp = FFPuppet()
-        self.addCleanup(ffp.clean_up)
-        self.assertFalse(ffp.check_prefs(self.tmpfn)) # test with profile == None
-        try:
-            fd, custom_prefs = tempfile.mkstemp(prefix="ffp_test_log_")
-            os.close(fd)
-            with open(custom_prefs, 'w') as prefs_fp: # custom prefs.js
-                prefs_fp.write('// comment line\n')
-                prefs_fp.write('# comment line\n')
-                prefs_fp.write('/* comment block.\n')
-                prefs_fp.write('*\n')
-                prefs_fp.write(' \n\n')
-                prefs_fp.write('user_pref("a.a", 0); // test comment\n')
-                prefs_fp.write('user_pref("a.c", true);\n')
-            ffp.launch(TESTFF_BIN, prefs_js=self.tmpfn)
-            self.assertTrue(ffp.check_prefs(custom_prefs))
-            # test detects missing prefs
-            with open(custom_prefs, 'w') as prefs_fp: # custom prefs.js
-                prefs_fp.write('user_pref("a.a", 0);\n')
-                prefs_fp.write('user_pref("b.a", false);\n')
-            self.assertFalse(ffp.check_prefs(custom_prefs))
-        finally:
-            os.remove(custom_prefs)
-
-    def test_24(self):
+    def test_20(self):
         "test detecting invalid prefs file"
         with open(self.tmpfn, 'w') as prefs_fp:
             prefs_fp.write('//fftest_invalid_js\n')
-        tsrv = HTTPTestServer()
-        self.addCleanup(tsrv.shutdown)
         ffp = FFPuppet()
         self.addCleanup(ffp.clean_up)
         with self.assertRaisesRegex(LaunchError, "'.+?' is invalid"):
-            ffp.launch(TESTFF_BIN, location=tsrv.get_addr(), prefs_js=self.tmpfn)
+            ffp.launch(TESTFF_BIN, location=self.tsrv.get_addr(), prefs_js=self.tmpfn)
 
-    def test_25(self):
+    def test_21(self):
         "test log_length()"
         ffp = FFPuppet()
         self.addCleanup(ffp.clean_up)
@@ -544,21 +455,19 @@ class PuppetTests(TestCase): # pylint: disable=too-many-public-methods
         # verify clean_up() removed the logs
         self.assertIsNone(ffp.log_length("stderr"))
 
-    def test_26(self):
+    def test_22(self):
         "test parallel launches"
         ffps = list()
         # use test pool size of 20
         for _ in range(20):
             ffps.append(FFPuppet())
             self.addCleanup(ffps[-1].clean_up)
+            ffps[-1].launch(TESTFF_BIN, location=self.tsrv.get_addr())
         for ffp in ffps:
-            ffp.launch(TESTFF_BIN)
-        for ffp in ffps:
-            self.assertTrue(ffp.is_running())
             ffp.close()
-            self.assertFalse(ffp.is_running())
+            self.assertEqual(ffp.reason, ffp.RC_CLOSED)
 
-    def test_27(self):
+    def test_23(self):
         "test hitting log size limit"
         ffp = FFPuppet()
         self.addCleanup(ffp.clean_up)
@@ -570,7 +479,7 @@ class PuppetTests(TestCase): # pylint: disable=too-many-public-methods
         self.assertIsNotNone(ffp.returncode)
         ffp.close()
         self.assertEqual(ffp.reason, ffp.RC_WORKER)
-        self.assertIsNone(ffp.returncode)
+        self.assertIsNotNone(ffp.returncode)
         ffp.save_logs(self.logs)
         total_size = 0
         for fname in os.listdir(self.logs):
@@ -580,7 +489,7 @@ class PuppetTests(TestCase): # pylint: disable=too-many-public-methods
         with open(os.path.join(self.logs, "log_stderr.txt"), "r") as log_fp:
             self.assertIn("LOG_SIZE_LIMIT_EXCEEDED", log_fp.read())
 
-    def test_28(self):
+    def test_24(self):
         "test collecting and cleaning up ASan logs"
         ffp = FFPuppet()
         self.addCleanup(ffp.clean_up)
@@ -622,206 +531,7 @@ class PuppetTests(TestCase): # pylint: disable=too-many-public-methods
         for t_log in test_logs:
             self.assertFalse(os.path.isfile(t_log))
 
-    def test_29(self):
-        "test minidump stack processing"
-        ffp = FFPuppet()
-        self.addCleanup(ffp.clean_up)
-        tsrv = HTTPTestServer()
-        self.addCleanup(tsrv.shutdown)
-        ffp.launch(TESTFF_BIN, location=tsrv.get_addr())
-        # create "test.dmp" file
-        out_dmp = [
-            "OS|Linux|0.0.0 sys info...", "CPU|amd64|more info|8", "GPU|||", "Crash|SIGSEGV|0x7fff27aaeff8|0",
-            "Module|firefox||firefox|a|0x1|0x1|1", "Module|firefox||firefox|a|0x1|0x2|1", "Module|firefox||firefox|a|0x1|0x3|1",
-            "  ", "", "0|0|blah|foo|a/bar.c|123|0x0", "0|1|blat|foo|a/bar.c|223|0x0", "0|2|blas|foo|a/bar.c|423|0x0",
-            "0|3|blas|foo|a/bar.c|423|0x0", "1|0|libpthread-2.23.so||||0xd360", "1|1|swrast_dri.so||||0x7237f3",
-            "1|2|libplds4.so|_fini|||0x163", "2|0|swrast_dri.so||||0x723657", "2|1|libpthread-2.23.so||||0x76ba",
-            "2|3|libc-2.23.so||||0x1073dd"]
-        md_dir = os.path.join(ffp.profile, "minidumps")
-        if not os.path.isdir(md_dir):
-            os.mkdir(md_dir)
-        ffp._last_bin_path = ffp.profile # pylint: disable=protected-access
-        sym_dir = os.path.join(ffp.profile, "symbols") # needs to exist to satisfy a check
-        if not os.path.isdir(sym_dir):
-            os.mkdir(sym_dir)
-        with open(os.path.join(md_dir, "test.dmp"), "w") as out_fp:
-            out_fp.write("\n".join(out_dmp))
-        # create a dummy file
-        with open(os.path.join(md_dir, "not_a_dmp.txt"), "w") as out_fp:
-            out_fp.write("this file should be ignored")
-        # process .dmp file
-        ffp.close()
-        ffp.save_logs(self.logs)
-        self.assertIn("log_minidump_01.txt", os.listdir(self.logs))
-        with open(os.path.join(self.logs, "log_minidump_01.txt"), "r") as in_fp:
-            md_lines = in_fp.read().splitlines()
-        self.assertEqual(len(set(out_dmp) - set(md_lines)), 11)
-        self.assertTrue(md_lines[-1].startswith("WARNING: Hit line output limit!"))
-        md_lines.pop() # remove the limit msg
-        self.assertEqual(len(md_lines), FFPuppet.MDSW_MAX_STACK)
-
-    def test_30(self):
-        "test poll_file()"
-        def populate_file(filename, size, end_token, delay, abort):
-            open(filename, "wb").close()
-            while True:
-                with open(filename, "ab") as out_fp:
-                    out_fp.write(b"a")
-                    out_fp.flush()
-                if os.stat(filename).st_size >= size:
-                    break
-                if abort.is_set():
-                    return
-                time.sleep(delay)
-            with open(filename, "ab") as out_fp:
-                out_fp.write(end_token)
-        abort_evt = threading.Event()
-        e_token = b"EOF"
-        # test with invalid file
-        self.assertIsNone(FFPuppet.poll_file("invalid_file"))
-        # wait for a file to finish being written
-        t_size = 10
-        w_thread = threading.Thread(
-            target=populate_file,
-            args=(self.tmpfn, t_size, e_token, 0.1, abort_evt))
-        w_thread.start()
-        try:
-            FFPuppet.poll_file(self.tmpfn)
-        finally:
-            abort_evt.set()
-            w_thread.join()
-            abort_evt.clear()
-        with open(self.tmpfn, "rb") as in_fp:
-            data = in_fp.read()
-        self.assertEqual(len(data), t_size + len(e_token))
-        self.assertTrue(data.endswith(e_token))
-        # timeout while waiting for a file to finish being written
-        t_size = 100
-        w_thread = threading.Thread(
-            target=populate_file,
-            args=(self.tmpfn, t_size, e_token, 0.05, abort_evt))
-        w_thread.start()
-        try:
-            result = FFPuppet.poll_file(self.tmpfn, idle_wait=1.99, timeout=2)
-        finally:
-            abort_evt.set()
-            w_thread.join()
-            abort_evt.clear()
-        with open(self.tmpfn, "rb") as in_fp:
-            data = in_fp.read()
-        self.assertIsNone(result)
-        self.assertLess(len(data), t_size + len(e_token))
-        self.assertFalse(data.endswith(e_token))
-
-    def test_31(self):
-        "test create_profile() extension support"
-
-        # create a profile with a non-existent ext
-        with self.assertRaisesRegex(RuntimeError, "Unknown extension: 'fake_ext'"):
-            FFPuppet.create_profile(extension="fake_ext")
-
-        # create a profile with an xpi ext
-        with open("xpi-ext.xpi", "w"):
-            pass
-        self.addCleanup(os.unlink, "xpi-ext.xpi")
-        prof = FFPuppet.create_profile(extension="xpi-ext.xpi")
-        self.addCleanup(shutil.rmtree, prof)
-        self.assertEqual(os.listdir(prof), ["extensions"])
-        self.assertEqual(os.listdir(os.path.join(prof, "extensions")), ["xpi-ext.xpi"])
-
-        # create a profile with an unknown ext
-        os.mkdir("dummy_ext")
-        self.addCleanup(os.rmdir, "dummy_ext")
-        with self.assertRaisesRegex(RuntimeError, "Failed to find extension id in manifest: 'dummy_ext'"):
-            FFPuppet.create_profile(extension="dummy_ext")
-
-        # create a profile with a bad legacy ext
-        os.mkdir("bad_legacy")
-        self.addCleanup(shutil.rmtree, "bad_legacy")
-        with open(os.path.join("bad_legacy", "install.rdf"), "w"):
-            pass
-        with self.assertRaisesRegex(RuntimeError, "Failed to find extension id in manifest: 'bad_legacy'"):
-            FFPuppet.create_profile(extension="bad_legacy")
-
-        # create a profile with a good legacy ext
-        os.mkdir("good_legacy")
-        self.addCleanup(shutil.rmtree, "good_legacy")
-        with open(os.path.join("good_legacy", "install.rdf"), "w") as manifest:
-            manifest.write("""<?xml version="1.0"?>
-                              <RDF xmlns="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
-                                   xmlns:em="http://www.mozilla.org/2004/em-rdf#">
-                                <Description about="urn:mozilla:install-manifest">
-                                  <em:id>good-ext-id</em:id>
-                                </Description>
-                              </RDF>""")
-        with open(os.path.join("good_legacy", "example.js"), "w"):
-            pass
-        prof = FFPuppet.create_profile(extension="good_legacy")
-        self.addCleanup(shutil.rmtree, prof)
-        self.assertEqual(os.listdir(prof), ["extensions"])
-        self.assertEqual(os.listdir(os.path.join(prof, "extensions")), ["good-ext-id"])
-        self.assertEqual(set(os.listdir(os.path.join(prof, "extensions", "good-ext-id"))),
-                         {"install.rdf", "example.js"})
-
-        # create a profile with a bad webext
-        os.mkdir("bad_webext")
-        self.addCleanup(shutil.rmtree, "bad_webext")
-        with open(os.path.join("bad_webext", "manifest.json"), "w"):
-            pass
-        with self.assertRaisesRegex(RuntimeError, "Failed to find extension id in manifest: 'bad_webext'"):
-            FFPuppet.create_profile(extension="bad_webext")
-
-        # create a profile with a good webext
-        os.mkdir("good_webext")
-        self.addCleanup(shutil.rmtree, "good_webext")
-        with open(os.path.join("good_webext", "manifest.json"), "w") as manifest:
-            manifest.write("""{"applications": {"gecko": {"id": "good-webext-id"}}}""")
-        with open(os.path.join("good_webext", "example.js"), "w"):
-            pass
-        prof = FFPuppet.create_profile(extension="good_webext")
-        self.addCleanup(shutil.rmtree, prof)
-        self.assertEqual(os.listdir(prof), ["extensions"])
-        self.assertEqual(os.listdir(os.path.join(prof, "extensions")), ["good-webext-id"])
-        self.assertEqual(set(os.listdir(os.path.join(prof, "extensions", "good-webext-id"))),
-                         {"manifest.json", "example.js"})
-
-        # create a profile with multiple extensions
-        prof = FFPuppet.create_profile(extension=["good_webext", "good_legacy"])
-        self.addCleanup(shutil.rmtree, prof)
-        self.assertEqual(os.listdir(prof), ["extensions"])
-        self.assertEqual(set(os.listdir(os.path.join(prof, "extensions"))), {"good-ext-id", "good-webext-id"})
-        self.assertEqual(set(os.listdir(os.path.join(prof, "extensions", "good-webext-id"))),
-                         {"manifest.json", "example.js"})
-        self.assertEqual(set(os.listdir(os.path.join(prof, "extensions", "good-ext-id"))),
-                         {"install.rdf", "example.js"})
-
-    def test_32(self):
-        "test empty minidump log"
-        ffp = FFPuppet()
-        self.addCleanup(ffp.clean_up)
-        tsrv = HTTPTestServer()
-        self.addCleanup(tsrv.shutdown)
-        ffp.launch(TESTFF_BIN, location=tsrv.get_addr())
-        md_dir = os.path.join(ffp.profile, "minidumps")
-        if not os.path.isdir(md_dir):
-            os.mkdir(md_dir)
-        ffp._last_bin_path = ffp.profile # pylint: disable=protected-access
-        sym_dir = os.path.join(ffp.profile, "symbols") # needs to exist to satisfy a check
-        if not os.path.isdir(sym_dir):
-            os.mkdir(sym_dir)
-        # create empty "test.dmp" file
-        with open(os.path.join(md_dir, "test.dmp"), "w") as _:
-            pass
-        # process .dmp file
-        ffp.close()
-        ffp.save_logs(self.logs)
-        self.assertIn("log_minidump_01.txt", os.listdir(self.logs))
-        with open(os.path.join(self.logs, "log_minidump_01.txt"), "r") as in_fp:
-            md_lines = in_fp.read()
-        self.assertTrue(md_lines.startswith("WARNING: minidump_stackwalk log was empty"))
-        self.assertEqual(len(md_lines.splitlines()), 1)
-
-    def test_33(self):
+    def test_25(self):
         "test multiple minidumps"
         ffp = FFPuppet()
         self.addCleanup(ffp.clean_up)
@@ -848,46 +558,7 @@ class PuppetTests(TestCase): # pylint: disable=too-many-public-methods
         self.assertIn("log_minidump_02.txt", logs)
         self.assertIn("log_minidump_03.txt", logs)
 
-    def test_34(self):
-        "test minidump register processing"
-        ffp = FFPuppet()
-        self.addCleanup(ffp.clean_up)
-        ffp.launch(TESTFF_BIN)
-        # create "test.dmp" file
-        out_dmp = [
-            "Crash reason:  SIGSEGV", "Crash address: 0x0", "Process uptime: not available", "",
-            "Thread 0 (crashed)", " 0  libxul.so + 0x123456788",
-            "    rax = 0xe5423423423fffe8   rdx = 0x0000000000000000",
-            "    rcx = 0x0000000000000000   rbx = 0xe54234234233e5e5",
-            "    rsi = 0x0000000000000000   rdi = 0x00007fedc31fe308",
-            "    rbp = 0x00007fffca0dab00   rsp = 0x00007fffca0daad0",
-            "     r8 = 0x0000000000000000    r9 = 0x0000000000000008",
-            "    r10 = 0xffff00ffffffffff   r11 = 0xffffff00ffffffff",
-            "    r12 = 0x0000743564566308   r13 = 0x00007fedce9d8000",
-            "    r14 = 0x0000000000000001   r15 = 0x0000000000000000", "    rip = 0x0000745666666ac",
-            "    Found by: given as instruction pointer in context", " 1  libxul.so + 0x1f4361c]", ""]
-        md_dir = os.path.join(ffp.profile, "minidumps")
-        if not os.path.isdir(md_dir):
-            os.mkdir(md_dir)
-        ffp._last_bin_path = ffp.profile # pylint: disable=protected-access
-        sym_dir = os.path.join(ffp.profile, "symbols") # needs to exist to satisfy a check
-        if not os.path.isdir(sym_dir):
-            os.mkdir(sym_dir)
-        with open(os.path.join(md_dir, "test.dmp"), "w") as out_fp:
-            out_fp.write("\n".join(out_dmp))
-        # process .dmp file
-        ffp.close()
-        ffp.save_logs(self.logs)
-        self.assertIn("log_minidump_01.txt", os.listdir(self.logs))
-        with open(os.path.join(self.logs, "log_minidump_01.txt"), "r") as in_fp:
-            md_lines = list()
-            for line in in_fp:
-                if "=" not in line:
-                    break
-                md_lines.append(line)
-        self.assertEqual(len(md_lines), 9) # only register info should be in here
-
-    def test_35(self):
+    def test_26(self):
         "test exhausting bootstrap ports"
         ffp = FFPuppet()
         self.addCleanup(ffp.clean_up)
@@ -905,15 +576,13 @@ class PuppetTests(TestCase): # pylint: disable=too-many-public-methods
             ffp.BS_PORT_MAX = 0xFFFF
             ffp.BS_PORT_MIN = 0x4000
 
-    def test_36(self):
+    def test_27(self):
         "test multiprocess target"
         with open(self.tmpfn, "w") as prefs_fp:
             prefs_fp.write("//fftest_multi_proc\n")
-        tsrv = HTTPTestServer()
-        self.addCleanup(tsrv.shutdown)
         ffp = FFPuppet()
         self.addCleanup(ffp.clean_up)
-        ffp.launch(TESTFF_BIN, prefs_js=self.tmpfn, location=tsrv.get_addr())
+        ffp.launch(TESTFF_BIN, prefs_js=self.tmpfn, location=self.tsrv.get_addr())
         self.assertTrue(ffp.is_running())
         self.assertIsNone(ffp.wait(0))
         c_procs = Process(ffp.get_pid()).children()
@@ -924,48 +593,24 @@ class PuppetTests(TestCase): # pylint: disable=too-many-public-methods
         self.assertFalse(ffp.is_running())
         self.assertIsNone(ffp.wait(0))
 
-    def test_37(self):
+    def test_28(self):
         "test returncode"
         with open(self.tmpfn, "w") as prefs_fp:
             prefs_fp.write("//fftest_exit_code_3\n")
         tsrv = HTTPTestServer()
         self.addCleanup(tsrv.shutdown)
         ffp = FFPuppet()
+        self.assertEqual(ffp.returncode, 0)
         self.addCleanup(ffp.clean_up)
-        ffp.launch(TESTFF_BIN, prefs_js=self.tmpfn, location=tsrv.get_addr())
+        ffp.launch(TESTFF_BIN, prefs_js=self.tmpfn, location=self.tsrv.get_addr())
         ffp.wait(10)
+        self.assertFalse(ffp.is_running())
+        # verify private member is set when using returncode property
+        self.assertIsNone(ffp._returncode)  # pylint: disable=protected-access
         self.assertEqual(ffp.returncode, 3)
+        self.assertEqual(ffp._returncode, 3)  # pylint: disable=protected-access
+        # verify private member is set when calling close()
+        ffp._returncode = None  # pylint: disable=protected-access
         ffp.close()
         self.assertEqual(ffp.reason, ffp.RC_EXITED)
-        self.assertIsNone(ffp.returncode)
-
-class ScriptTests(TestCase):
-
-    def setUp(self):
-        self.tmpdir = tempfile.mkdtemp(prefix="ffp_test")
-
-    def tearDown(self):
-        if os.path.isdir(self.tmpdir):
-            shutil.rmtree(self.tmpdir)
-
-    def test_01(self):
-        "test calling main with '-h'"
-        with self.assertRaisesRegex(SystemExit, "0"):
-            main(["-h"])
-
-    def test_02(self):
-        "test calling main with test binary/script"
-        out_logs = os.path.join(self.tmpdir, "logs")
-        prefs = os.path.join(self.tmpdir, "pref.js")
-        with open(prefs, "w") as prefs_fp:
-            prefs_fp.write("//fftest_exit_code_0\n")
-        main([TESTFF_BIN, "-d", "-l", out_logs, "-p", prefs])
-        self.assertTrue(os.path.isdir(out_logs))
-        self.assertGreater(len(os.listdir(out_logs)), 0)
-
-    def test_03(self):
-        "test calling main with test binary/script"
-        prefs = os.path.join(self.tmpdir, "pref.js")
-        with open(prefs, "w") as prefs_fp:
-            prefs_fp.write("//fftest_big_log\n")
-        main([TESTFF_BIN, "-v", "-d", "-p", prefs, "--log-limit", "1", "-a", "blah_test"])
+        self.assertEqual(ffp.returncode, 3)
