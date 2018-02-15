@@ -4,6 +4,7 @@ FFPuppet
 [![Build Status](https://api.travis-ci.org/MozillaSecurity/ffpuppet.svg)](https://travis-ci.org/MozillaSecurity/ffpuppet)
 [![Coverage Status](https://coveralls.io/repos/github/MozillaSecurity/ffpuppet/badge.svg)](https://coveralls.io/github/MozillaSecurity/ffpuppet)
 [![Build status](https://ci.appveyor.com/api/projects/status/7r1sx0iad8wksfmw/branch/master?svg=true)](https://ci.appveyor.com/project/tysmith/ffpuppet/branch/master)
+[![IRC](https://img.shields.io/badge/IRC-%23fuzzing-1e72ff.svg?style=flat)](https://www.irccloud.com/invite?channel=%23fuzzing&amp;hostname=irc.mozilla.org&amp;port=6697&amp;ssl=1)
 
 FFPuppet is a python module that automates browser process related tasks to aid in fuzzing.
 
@@ -17,7 +18,7 @@ At this time no modules are required to run FFPuppet however some features may n
     pip install --user -e <ffpuppet_repo>
 
 ##### Installing python modules
-  
+
     pip install -r requirements.txt
 
 Linux requires `xvfb` in order to run headless (this is not the same as Firefox's `-headless` mode).
@@ -28,8 +29,8 @@ Linux requires `xvfb` in order to run headless (this is not the same as Firefox'
 
 ##### Installing minidump_stackwalk
 
-`minidump_stackwalk` is used to extract a crash report when the browser crashes without a debugger (GDB) or
-instrumentation (Valgrind/Asan). If desired, `minidump_stackwalk` should be installed in the users path after obtaining
+`minidump_stackwalk` is used to extract a crash report when the browser crashes without a debugger (GDB/Valgrind) or
+instrumentation (ASan). If desired, `minidump_stackwalk` should be installed in the users path after obtaining
 it from [tooltool](https://wiki.mozilla.org/ReleaseEngineering/Applications/Tooltool). Choose the appropriate platform
 from [tooltool-manifests](https://hg.mozilla.org/mozilla-central/file/tip/testing/config/tooltool-manifests) in the
 mozilla-central tree, then open or download `releng.manifest`. Either use `tooltool.py fetch -m releng.manifest` or
