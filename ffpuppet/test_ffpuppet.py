@@ -292,8 +292,8 @@ class PuppetTests(TestCase): # pylint: disable=too-many-public-methods
         ffp.save_logs(self.logs)
         worker_log = os.path.join(self.logs, "log_ffp_worker_memory_limiter.txt")
         self.assertTrue(os.path.isfile(worker_log))
-        with open(os.path.join(worker_log), "rb") as log_fp:
-            self.assertRegex(log_fp.read(), b"MEMORY_LIMIT_EXCEEDED")
+        with open(worker_log, "rb") as log_fp:
+            self.assertIn(b"MEMORY_LIMIT_EXCEEDED", log_fp.read())
 
     def test_10(self):
         "test calling launch() multiple times"
@@ -327,8 +327,8 @@ class PuppetTests(TestCase): # pylint: disable=too-many-public-methods
         ffp.save_logs(self.logs)
         worker_log = os.path.join(self.logs, "log_ffp_worker_log_scanner.txt")
         self.assertTrue(os.path.isfile(worker_log))
-        with open(os.path.join(worker_log), "rb") as log_fp:
-            self.assertIn("TOKEN_LOCATED", log_fp.read())
+        with open(worker_log, "rb") as log_fp:
+            self.assertIn(b"TOKEN_LOCATED", log_fp.read())
 
     def test_12(self):
         "test using an existing profile directory"
