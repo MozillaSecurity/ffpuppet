@@ -19,9 +19,11 @@ Installation
 
     pip install -r requirements.txt
 
-Linux requires `xvfb` in order to run headless (this is not the same as Firefox's `-headless` mode).
+##### Xvfb on Linux
 
-##### Ubuntu
+On Linux `xvfb` can be used in order to run headless (this is not the same as Firefox's `-headless` mode).
+
+To install `xvfb` on Ubuntu run:
 
     apt-get install xvfb
 
