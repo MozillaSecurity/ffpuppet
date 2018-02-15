@@ -13,7 +13,7 @@ Installation
 
 ##### To install after cloning the repository
 
-    pip install --user -e <ffpuppet_repo>
+    pip install --user -e <ffpuppet_repository>
 
 ##### Installing python modules
 
@@ -42,17 +42,17 @@ on Windows).
 Browser Builds
 --------------
 
-If you are looking for builds to use with FFPuppet there are a few options.
+If you are looking for builds to use with FFPuppet here are a few options.
 
 ##### Taskcluster
 
-Taskcluster has a collection of many different types of builds for multiple platforms and branches.
+Taskcluster has a collection of many different build types for multiple platforms and branches.
 An index of the latest mozilla-central builds can be found [here](https://tools.taskcluster.net/index/gecko.v2.mozilla-central.latest.firefox). Or you can use [fuzzfetch](https://github.com/MozillaSecurity/fuzzfetch)
 which is very helpful in automation.
 
 ##### Build your own
 
-If you would like to compile your own build instruction can be found [here](https://developer.mozilla.org/en-US/docs/Mozilla/Developer_guide/Build_Instructions/Simple_Firefox_build)
+If you would like to compile your own build instructions can be found [here](https://developer.mozilla.org/en-US/docs/Mozilla/Developer_guide/Build_Instructions/Simple_Firefox_build)
 
 
 Usage
@@ -112,6 +112,6 @@ optional arguments:
 
 ##### Replaying a test case
 
-    python -m ffpuppet <firefox-bin> -p <prefs.js> -d -u <test_case>
+    python -m ffpuppet <firefox_binary> -p <custom_prefs.js> -d -u <testcase>
 
 This will open the provided test case file in Firefox using the provided prefs.js file and any log data (stderr, stdout, ASan logs... etc) will be dumped to the console when the browser process terminates.
