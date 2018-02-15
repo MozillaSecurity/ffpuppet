@@ -1,17 +1,15 @@
 FFPuppet
-=======
+========
 
 [![Build Status](https://api.travis-ci.org/MozillaSecurity/ffpuppet.svg)](https://travis-ci.org/MozillaSecurity/ffpuppet)
-[![Coverage Status](https://coveralls.io/repos/github/MozillaSecurity/ffpuppet/badge.svg)](https://coveralls.io/github/MozillaSecurity/ffpuppet)
 [![Build status](https://ci.appveyor.com/api/projects/status/7r1sx0iad8wksfmw/branch/master?svg=true)](https://ci.appveyor.com/project/tysmith/ffpuppet/branch/master)
+[![Coverage Status](https://coveralls.io/repos/github/MozillaSecurity/ffpuppet/badge.svg)](https://coveralls.io/github/MozillaSecurity/ffpuppet)
 [![IRC](https://img.shields.io/badge/IRC-%23fuzzing-1e72ff.svg?style=flat)](https://www.irccloud.com/invite?channel=%23fuzzing&amp;hostname=irc.mozilla.org&amp;port=6697&amp;ssl=1)
 
-FFPuppet is a python module that automates browser process related tasks to aid in fuzzing.
+FFPuppet is a python module that automates browser process related tasks to aid in fuzzing. Happy bug hunting!
 
 Installation
 ------------
-
-At this time no modules are required to run FFPuppet however some features may not be available.
 
 ##### To install after cloning the repository
 
@@ -37,6 +35,22 @@ mozilla-central tree, then open or download `releng.manifest`. Either use `toolt
 copy the digest from the file and download it from `https://api.pub.build.mozilla.org/tooltool/sha512/<digest>`.
 In either case, the file should be renamed to `minidump_stackwalk` and marked executable (or `minidump_stackwalk.exe`
 on Windows).
+
+
+Browser Builds
+--------------
+
+If you are looking for builds to use with FFPuppet there are a few options.
+
+##### Taskcluster
+
+Taskcluster has a collection of many different types of builds for multiple platforms and branches.
+An index of the latest mozilla-central builds can be found [here](https://tools.taskcluster.net/index/gecko.v2.mozilla-central.latest.firefox). Or you can use [fuzzfetch](https://github.com/MozillaSecurity/fuzzfetch)
+which is very helpful in automation.
+
+##### Build your own
+
+If you would like to compile your own build instruction can be found [here](https://developer.mozilla.org/en-US/docs/Mozilla/Developer_guide/Build_Instructions/Simple_Firefox_build)
 
 
 Usage
