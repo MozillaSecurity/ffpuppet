@@ -31,9 +31,9 @@ class BaseWorker(object):
         self.log_fp.close()
 
 
-    def collect_log(self, dst_fp):
+    def dump_log(self, dst_fp):
         if self._worker is not None and self._worker.is_alive():
-            raise RuntimeError("Worker must exit before collecting log")
+            raise RuntimeError("Worker must exit before dumping log")
         self.log_fp.seek(0)
         shutil.copyfileobj(self.log_fp, dst_fp, self.READ_BUF)
 

@@ -269,7 +269,7 @@ class FFPuppet(object):
         @return: None
         """
 
-        log.debug("close(force_close=%s) called", "True" if force_close else "False")
+        log.debug("close(force_close=%r) called", force_close)
         if self.reason is not None:
             self._logs.close() # make sure browser logs are also closed
             return
@@ -291,21 +291,13 @@ class FFPuppet(object):
         else:
             log.debug("firefox process was 'None'")
 
-        log.debug("joining %d worker(s)...", len(self._workers))
+        log.debug("cleaning up %d worker(s)...", len(self._workers))
         for worker in self._workers:
             worker.join()
-
-        log.debug("copying worker logs to stderr and cleaning up")
-        stderr_log_fp = self._logs.get_fp("stderr")
-        for worker in self._workers:
             if worker.aborted.is_set():
                 r_key = self.RC_WORKER
-
             if not force_close and worker.log_available():
-                stderr_log_fp.write(b"\n")
-                stderr_log_fp.write(("[ffpuppet worker]: %s\n" % worker.name).encode("utf-8"))
-                worker.collect_log(dst_fp=stderr_log_fp)
-                stderr_log_fp.write(b"\n")
+                worker.dump_log(dst_fp=self._logs.add_log("ffp_worker_%s" % worker.name))
             worker.clean_up()
         self._workers = list()
 
@@ -326,7 +318,8 @@ class FFPuppet(object):
                     self._logs.add_log)
 
         if self._proc is not None:
-            stderr_log_fp.write(("[ffpuppet] Exit code: %r\n" % self._returncode).encode("utf-8"))
+            self._logs.get_fp("stderr").write(
+                ("[ffpuppet] Exit code: %r\n" % self._returncode).encode("utf-8"))
             self._proc = None
 
         # close browser logger
@@ -523,9 +516,8 @@ class FFPuppet(object):
 
         # open logs
         self._logs.reset() # clean up existing log files
-        self._logs.add_log("stderr")
         self._logs.add_log("stdout")
-        stderr = self._logs.get_fp("stderr")
+        stderr = self._logs.add_log("stderr")
         stderr.write(b"[ffpuppet] Launch command: ")
         stderr.write(" ".join(cmd).encode("utf-8"))
         stderr.write(b"\n\n")
