@@ -187,12 +187,12 @@ class PuppetTests(TestCase): # pylint: disable=too-many-public-methods
         log_dir = os.path.join(self.logs, "some_dir") # nonexistent directory
         ffp.save_logs(log_dir)
         self.assertTrue(os.path.isdir(log_dir))
-        dir_list = os.listdir(log_dir)
-        self.assertIn("log_stderr.txt", dir_list)
-        self.assertIn("log_stdout.txt", dir_list)
+        log_list = os.listdir(log_dir)
+        self.assertIn("log_stderr.txt", log_list)
+        self.assertIn("log_stdout.txt", log_list)
         with open(os.path.join(log_dir, "log_stdout.txt"), "r") as log_fp:
             self.assertIn("url: http://", log_fp.read().strip())
-        for fname in os.listdir(log_dir):
+        for fname in log_list:
             with open(os.path.join(log_dir, fname)) as log_fp:
                 log_data = log_fp.read().splitlines()
             if fname.startswith("log_stderr"):
@@ -288,9 +288,12 @@ class PuppetTests(TestCase): # pylint: disable=too-many-public-methods
         ffp.close()
         self.assertIsNotNone(ffp.returncode)
         self.assertEqual(ffp.reason, ffp.RC_WORKER)
+        self.assertEqual(len(ffp.available_logs()), 3)
         ffp.save_logs(self.logs)
-        with open(os.path.join(self.logs, "log_stderr.txt"), "rb") as log_fp:
-            self.assertRegex(log_fp.read(), b"MEMORY_LIMIT_EXCEEDED")
+        worker_log = os.path.join(self.logs, "log_ffp_worker_memory_limiter.txt")
+        self.assertTrue(os.path.isfile(worker_log))
+        with open(worker_log, "rb") as log_fp:
+            self.assertIn(b"MEMORY_LIMIT_EXCEEDED", log_fp.read())
 
     def test_10(self):
         "test calling launch() multiple times"
@@ -320,9 +323,12 @@ class PuppetTests(TestCase): # pylint: disable=too-many-public-methods
         ffp.close()
         self.assertEqual(ffp.reason, ffp.RC_WORKER)
         self.assertIsNotNone(ffp.returncode)
+        self.assertEqual(len(ffp.available_logs()), 3)
         ffp.save_logs(self.logs)
-        with open(os.path.join(self.logs, "log_stderr.txt"), "r") as log_fp:
-            self.assertIn("TOKEN_LOCATED", log_fp.read())
+        worker_log = os.path.join(self.logs, "log_ffp_worker_log_scanner.txt")
+        self.assertTrue(os.path.isfile(worker_log))
+        with open(worker_log, "rb") as log_fp:
+            self.assertIn(b"TOKEN_LOCATED", log_fp.read())
 
     def test_12(self):
         "test using an existing profile directory"
@@ -483,10 +489,10 @@ class PuppetTests(TestCase): # pylint: disable=too-many-public-methods
         ffp.save_logs(self.logs)
         total_size = 0
         for fname in os.listdir(self.logs):
-            self.assertIn(fname, ["log_stderr.txt", "log_stdout.txt"])
+            self.assertIn(fname, ["log_ffp_worker_log_size_limiter.txt", "log_stderr.txt", "log_stdout.txt"])
             total_size += os.stat(os.path.join(self.logs, fname)).st_size
         self.assertLess(limit, total_size)
-        with open(os.path.join(self.logs, "log_stderr.txt"), "r") as log_fp:
+        with open(os.path.join(self.logs, "log_ffp_worker_log_size_limiter.txt"), "r") as log_fp:
             self.assertIn("LOG_SIZE_LIMIT_EXCEEDED", log_fp.read())
 
     def test_24(self):
