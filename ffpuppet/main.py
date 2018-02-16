@@ -62,7 +62,8 @@ def parse_args(argv=None):
         help="Display browser logs on process exit")
     parser.add_argument(
         "-e", "--extension", action="append",
-        help="Install the fuzzPriv extension (specify path to funfuzz/dom/extension)")
+        help="Use the fuzzPriv extension. Specify the path to the xpi or the directory " \
+             "containing the unpacked extension.")
     parser.add_argument(
         "-g", "--gdb", action="store_true",
         help="Use GDB (Linux only)")

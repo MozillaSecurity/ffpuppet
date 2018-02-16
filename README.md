@@ -38,6 +38,17 @@ copy the digest from the file and download it from `https://api.pub.build.mozill
 In either case, the file should be renamed to `minidump_stackwalk` and marked executable (or `minidump_stackwalk.exe`
 on Windows).
 
+##### fuzzPriv Extension
+
+This provides access to operations that are helpful when fuzzing such as calling the garbage collector.
+At the moment there are two versions:
+
+The [legacy](https://github.com/MozillaSecurity/fuzzpriv/tree/legacy) version (the fuzzPriv you know and love)
+can only be used with Nighty, mozilla-central builds and old versions of Firefox. The xpi is available [here](https://www.squarefree.com/extensions/domFuzzLite3.xpi).
+
+The [WebExtension](https://github.com/MozillaSecurity/fuzzpriv/tree/master) version can be used with any build
+that supports WebExtensions but certain features are only available when combined with [fuzzing builds](https://tools.taskcluster.net/index/gecko.v2.mozilla-central.latest.firefox/linux64-fuzzing-asan-opt).
+
 
 Browser Builds
 --------------
@@ -47,8 +58,8 @@ If you are looking for builds to use with FFPuppet here are a few options.
 ##### Taskcluster
 
 Taskcluster has a collection of many different build types for multiple platforms and branches.
-An index of the latest mozilla-central builds can be found [here](https://tools.taskcluster.net/index/gecko.v2.mozilla-central.latest.firefox). Or you can use [fuzzfetch](https://github.com/MozillaSecurity/fuzzfetch)
-which is very helpful in automation.
+An index of the latest mozilla-central builds can be found [here](https://tools.taskcluster.net/index/gecko.v2.mozilla-central.latest.firefox).
+Or you can use [fuzzfetch](https://github.com/MozillaSecurity/fuzzfetch) which is very helpful in automation.
 
 ##### Build your own
 
@@ -83,8 +94,8 @@ optional arguments:
                         used to detect soft assertions.
   -d, --dump            Display browser logs on process exit
   -e EXTENSION, --extension EXTENSION
-                        Install the fuzzPriv extension (specify path to
-                        funfuzz/dom/extension)
+                        Use the fuzzPriv extension. Specify the path to the
+                        xpi or the directory containing the unpacked extension.
   -g, --gdb             Use GDB (Linux only)
   --ignore-crashes      Do not close the browser when a crash is detected
                         (e10s only)
