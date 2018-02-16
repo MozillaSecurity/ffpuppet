@@ -81,7 +81,7 @@ optional arguments:
                         Scan the log for the given value and close browser on
                         detection. For example '-a ###!!! ASSERTION:' would be
                         used to detect soft assertions.
-  -d, --dump            Display browser log on process exit
+  -d, --dump            Display browser logs on process exit
   -e EXTENSION, --extension EXTENSION
                         Install the fuzzPriv extension (specify path to
                         funfuzz/dom/extension)
@@ -90,14 +90,15 @@ optional arguments:
                         (e10s only)
   -l LOG, --log LOG     Location to save log files
   --log-limit LOG_LIMIT
-                        Log file size limit in MBs (default: 'no limit')
+                        Log file size limit in MBs (default: no limit)
   -m MEMORY, --memory MEMORY
-                        Process memory limit in MBs
+                        Process memory limit in MBs (default: no limit)
   -p PREFS, --prefs PREFS
-                        prefs.js file to use
+                        Custom prefs.js file to use (default: profile default)
   -P PROFILE, --profile PROFILE
-                        Profile to use. (default: a temporary profile is
-                        created)
+                        Profile to use. This is non-destructive. A copy of the
+                        target profile will be used. (default: new temporary
+                        profile is created)
   --safe-mode           Launch browser in 'safe-mode'. WARNING: Launching in
                         safe mode blocks with a dialog that must be dismissed
                         manually.

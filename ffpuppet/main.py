@@ -59,7 +59,7 @@ def parse_args(argv=None):
              "For example '-a ###!!! ASSERTION:' would be used to detect soft assertions.")
     parser.add_argument(
         "-d", "--dump", action="store_true",
-        help="Display browser log on process exit")
+        help="Display browser logs on process exit")
     parser.add_argument(
         "-e", "--extension", action="append",
         help="Install the fuzzPriv extension (specify path to funfuzz/dom/extension)")
@@ -74,16 +74,17 @@ def parse_args(argv=None):
         help="Location to save log files")
     parser.add_argument(
         "--log-limit", type=int,
-        help="Log file size limit in MBs (default: 'no limit')")
+        help="Log file size limit in MBs (default: no limit)")
     parser.add_argument(
         "-m", "--memory", type=int,
-        help="Process memory limit in MBs")
+        help="Process memory limit in MBs (default: no limit)")
     parser.add_argument(
         "-p", "--prefs",
-        help="prefs.js file to use")
+        help="Custom prefs.js file to use (default: profile default)")
     parser.add_argument(
         "-P", "--profile",
-        help="Profile to use. (default: a temporary profile is created)")
+        help="Profile to use. This is non-destructive. A copy of the target profile " \
+             "will be used. (default: new temporary profile is created)")
     parser.add_argument(
         "--safe-mode", action="store_true",
         help="Launch browser in 'safe-mode'. WARNING: Launching in safe mode blocks with a " \
