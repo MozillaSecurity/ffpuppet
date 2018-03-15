@@ -6,7 +6,7 @@ import os
 import threading
 import time
 
-from psutil import NoSuchProcess, Process
+from psutil import AccessDenied, NoSuchProcess, Process
 
 from . import puppet_worker
 
@@ -41,7 +41,7 @@ class MemoryLimiterWorker(puppet_worker.BaseWorker):
 
         try:
             process = Process(target_pid)
-        except NoSuchProcess:
+        except (AccessDenied, NoSuchProcess):
             return
 
         while puppet.is_running():
@@ -56,9 +56,9 @@ class MemoryLimiterWorker(puppet_worker.BaseWorker):
                         cur_rss = child.memory_info().rss
                         total_usage += cur_rss
                         proc_info.append((child.pid, cur_rss))
-                    except NoSuchProcess:
+                    except (AccessDenied, NoSuchProcess):
                         pass
-            except NoSuchProcess:
+            except (AccessDenied, NoSuchProcess):
                 break  # process is dead?
 
             if total_usage >= limit:
