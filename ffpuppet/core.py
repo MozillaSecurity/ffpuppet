@@ -32,10 +32,25 @@ from .workers import log_scanner, log_size_limiter, memory_limiter
 log = logging.getLogger("ffpuppet")  # pylint: disable=invalid-name
 
 __author__ = "Tyson Smith"
-__all__ = ("FFPuppet", "LaunchError")
+__all__ = ("FFPuppet", "BrowserTimeoutError", "BrowserTerminatedError", "LaunchError")
 
 
 class LaunchError(Exception):
+    """
+    Raised when the browser process does not appear to be in a functional state during launch
+    """
+    pass
+
+class BrowserTerminatedError(LaunchError):
+    """
+    Raised when the browser process goes away during launch
+    """
+    pass
+
+class BrowserTimeoutError(LaunchError):
+    """
+    Raised when the browser process appears to hang during launch
+    """
     pass
 
 
@@ -535,6 +550,7 @@ class FFPuppet(object):
         log.debug("launched firefox with pid: %d", self._proc.pid)
 
         self._bootstrap_finish(init_soc, timeout=launch_timeout, url=location)
+
         log.debug("bootstrap complete")
 
         if prefs_js is not None and os.path.isfile(os.path.join(self.profile, "Invalidprefs.js")):
@@ -613,11 +629,11 @@ class FFPuppet(object):
                     conn.settimeout(timeout)
                 except socket.timeout:
                     if (time.time() - timer_start) >= timeout:
-                        raise LaunchError("Launching browser timed out (%ds)" % timeout)
+                        raise BrowserTimeoutError("Launching browser timed out (%ds)" % timeout)
                     elif not self.is_running():
-                        raise LaunchError("Failure during browser startup")
-                    continue # browser is alive but we have not received a connection
-                break # received connection
+                        raise BrowserTerminatedError("Failure during browser startup")
+                    continue  # browser is alive but we have not received a connection
+                break  # received connection
 
             log.debug("waiting to receive browser test connection data")
             while len(conn.recv(4096)) == 4096:
@@ -636,7 +652,7 @@ class FFPuppet(object):
             raise LaunchError("Failed to launch browser: %s" % soc_e)
 
         except socket.timeout:
-            raise LaunchError("Test connection timed out (%ds)" % timeout)
+            raise BrowserTimeoutError("Test connection timed out (%ds)" % timeout)
 
         finally:
             if conn is not None:

@@ -17,7 +17,7 @@ except ImportError:
 
 from psutil import Process
 
-from ffpuppet import FFPuppet, LaunchError
+from ffpuppet import BrowserTimeoutError, BrowserTerminatedError, FFPuppet, LaunchError
 from .minidump_parser import MinidumpParser
 
 logging.basicConfig(level=logging.DEBUG if bool(os.getenv("DEBUG")) else logging.INFO)
@@ -142,10 +142,10 @@ class PuppetTests(TestCase): # pylint: disable=too-many-public-methods
         self.addCleanup(ffp.clean_up)
         with open(self.tmpfn, 'w') as prefs:
             prefs.write('//fftest_startup_crash\n')
-        with self.assertRaisesRegex(LaunchError, "Failure during browser startup"):
+        with self.assertRaisesRegex(BrowserTerminatedError, "Failure during browser startup"):
             ffp.launch(TESTFF_BIN, prefs_js=self.tmpfn)
-        self.assertEqual(ffp.wait(10), 1) # test crash returns 1
         ffp.close()
+        self.assertFalse(ffp.is_running())  # process should be gone
         self.assertEqual(ffp.launches, 0)
         self.assertEqual(ffp.reason, ffp.RC_EXITED)
         self.assertEqual(ffp.returncode, 1)
@@ -160,7 +160,7 @@ class PuppetTests(TestCase): # pylint: disable=too-many-public-methods
             with open(self.tmpfn, 'w') as prefs:
                 prefs.write('//fftest_startup_hang\n')
             start = time.time()
-            with self.assertRaisesRegex(LaunchError, "Launching browser timed out"):
+            with self.assertRaisesRegex(BrowserTimeoutError, "Launching browser timed out"):
                 ffp.launch(TESTFF_BIN, prefs_js=self.tmpfn, launch_timeout=1)
             duration = time.time() - start
             ffp.close()
