@@ -31,7 +31,8 @@ class SanitizerConfig(object):
         if key not in env:
             return None
         assert isinstance(env[key], str)
-        for option in env[key].split(" :"):
+        assert " " not in env[key], "%s should not contain spaces, join options with ':'" % key
+        for option in env[key].split(":"):
             try:
                 opt_name, opt_value = option.split("=")
                 self._options[opt_name] = opt_value
