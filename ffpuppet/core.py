@@ -163,7 +163,7 @@ class FFPuppet(object):
         return self.reason is not None
 
 
-    def appears_health(self):
+    def appears_healthy(self):
         """
         Check if the browser has crash reports but the process still running.
 

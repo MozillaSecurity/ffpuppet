@@ -127,7 +127,7 @@ class PuppetTests(TestCase): # pylint: disable=too-many-public-methods
         self.assertEqual(ffp.launches, 1)
         self.assertIsNone(ffp.wait(0))
         self.assertTrue(ffp.is_running())
-        self.assertTrue(ffp.appears_health())
+        self.assertTrue(ffp.appears_healthy())
         self.assertIsNone(ffp.reason)
         self.assertIsNone(ffp.returncode)
         ffp.close()
@@ -135,7 +135,7 @@ class PuppetTests(TestCase): # pylint: disable=too-many-public-methods
         self.assertIsNotNone(ffp.returncode)
         self.assertIsNone(ffp._proc) # pylint: disable=protected-access
         self.assertFalse(ffp.is_running())
-        self.assertFalse(ffp.appears_health())
+        self.assertFalse(ffp.appears_healthy())
         self.assertIsNone(ffp.wait(10))
 
     def test_02(self):
@@ -524,7 +524,7 @@ class PuppetTests(TestCase): # pylint: disable=too-many-public-methods
             log_fp.write(" (pc 0x7f4c0bb54c67 bp 0x7f4c07bea380 sp 0x7f4c07bea360 T2)\n") # must be 2nd line
             for _ in range(4): # pad out to 6 lines
                 log_fp.write("filler line\n")
-        self.assertFalse(ffp.appears_health())
+        self.assertFalse(ffp.appears_healthy())
         self.assertTrue(ffp.is_running())
         ffp.close()
         ffp.save_logs(self.logs)
@@ -559,7 +559,7 @@ class PuppetTests(TestCase): # pylint: disable=too-many-public-methods
             out_fp.write("2a\n2b")
         with open(os.path.join(md_dir, "test3.dmp"), "w") as out_fp:
             out_fp.write("3a\n3b")
-        self.assertFalse(ffp.appears_health())
+        self.assertFalse(ffp.appears_healthy())
         # process .dmp file
         ffp.close()
         ffp.save_logs(self.logs)
