@@ -163,6 +163,34 @@ class FFPuppet(object):
         return self.reason is not None
 
 
+    def appears_health(self):
+        """
+        Check if the browser has crash reports but the process still running.
+
+        @rtype: bool
+        @return: True if the browser process is running and no crash reports can
+                 be found otherwise False.
+        """
+
+        # the process is closed
+        if self.reason is not None or not self.is_running():
+            return False
+
+        # check for *San logs
+        if os.path.isdir(self._logs.working_path):
+            for fname in os.listdir(self._logs.working_path):
+                if fname.startswith(self._logs.LOG_ASAN_PREFIX):
+                    return False
+
+        # check for minidumps
+        if os.path.isdir(os.path.join(self.profile, "minidumps")):
+            for fname in os.listdir(os.path.join(self.profile, "minidumps")):
+                if ".dmp" in fname:
+                    return False
+
+        return True
+
+
     def log_length(self, log_id):
         """
         Get the length of the current browser log.
