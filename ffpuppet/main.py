@@ -5,9 +5,9 @@
 import argparse
 import logging
 import os
-import re
 import shutil
 import tempfile
+import time
 
 from .core import FFPuppet
 from .helpers import check_prefs
@@ -139,7 +139,8 @@ def main(argv=None): # pylint: disable=missing-docstring
         if args.prefs is not None and os.path.isfile(args.prefs):
             check_prefs(os.path.join(ffp.profile, "prefs.js"), args.prefs)
         log.info("Running Firefox (pid: %d)...", ffp.get_pid())
-        ffp.wait()
+        while ffp.is_healthy():
+            time.sleep(0.25)
     except KeyboardInterrupt:
         log.info("Ctrl+C detected.")
     finally:
