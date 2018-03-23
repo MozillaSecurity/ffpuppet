@@ -5,7 +5,7 @@ if __name__ == '__main__':
     with open('requirements.txt') as f:
         requires = f.read().strip().splitlines()
     setup(name="ffpuppet",
-          version="0.5.1",
+          version="0.5.2",
           install_requires=requires,
           url='https://github.com/MozillaSecurity/ffpuppet',
           license='MPL 2.0',
