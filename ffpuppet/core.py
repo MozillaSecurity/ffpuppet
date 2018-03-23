@@ -24,7 +24,7 @@ try:
 except ImportError:
     pass
 
-from .helpers import create_profile, prepare_environment, poll_file
+from .helpers import create_profile, prepare_environment
 from .minidump_parser import process_minidumps
 from .puppet_logger import PuppetLogger
 from .workers import log_scanner, log_size_limiter, memory_limiter
@@ -58,8 +58,7 @@ class FFPuppet(object):
     BS_PORT_MAX = 0xFFFF # bootstrap range
     BS_PORT_MIN = 0x2000 # bootstrap range
     LAUNCH_TIMEOUT_MIN = 10 # minimum amount of time to wait for the browser to launch
-    LOG_POLL_RATE = 0.1  # used with poll_file to wait for logs
-    LOG_POLL_WAIT = 1.0  # used with poll_file to wait for logs
+    PROCESS_WAIT = 15  # max amount of time to wait for child processes to dump logs and terminate
     RC_CLOSED = "CLOSED"  # target was closed by call to FFPuppet close()
     RC_EXITED = "EXITED"  # target exited/crashed/aborted/assertion failure etc...
     RC_WORKER = "WORKER"  # target was closed by worker thread
@@ -163,7 +162,7 @@ class FFPuppet(object):
         return self.reason is not None
 
 
-    def appears_healthy(self):
+    def is_healthy(self):
         """
         Check if the browser has crash reports but the process still running.
 
@@ -320,6 +319,21 @@ class FFPuppet(object):
         r_key = self.RC_CLOSED  # reason the process was terminated
         if self._proc is not None:
             log.debug("firefox pid: %r", self._proc.pid)
+
+            # this is hacky but I don't know how else to tell if
+            # the logs have been fully dumped to disk
+            # hopefully this can be replaced with pref
+            if not self.is_healthy():
+                try:
+                    children = psutil.Process(self._proc.pid).children()
+                    wait_time = time.time() + self.PROCESS_WAIT
+                    while time.time() < wait_time and self.is_running() and children:
+                        if any(not child.is_running() for child in children):
+                            break
+                        time.sleep(0.25)
+                except psutil.NoSuchProcess:
+                    pass  # there is nothing we can do here
+
             # terminate the browser process if needed
             if self.is_running():
                 r_key = self.RC_CLOSED
@@ -350,7 +364,6 @@ class FFPuppet(object):
                 if not fname.startswith(self._logs.LOG_ASAN_PREFIX):
                     continue
                 tmp_file = os.path.join(self._logs.working_path, fname)
-                poll_file(tmp_file, poll_rate=self.LOG_POLL_RATE, idle_wait=self.LOG_POLL_WAIT)
                 self._logs.add_log(fname, open(tmp_file, "rb"))
 
             # check for minidumps in the profile and dump them if possible
@@ -658,7 +671,7 @@ class FFPuppet(object):
                 except socket.timeout:
                     if (time.time() - timer_start) >= timeout:
                         raise BrowserTimeoutError("Launching browser timed out (%ds)" % timeout)
-                    elif not self.appears_healthy():
+                    elif not self.is_healthy():
                         raise BrowserTerminatedError("Failure during browser startup")
                     continue  # browser is alive but we have not received a connection
                 break  # received connection
