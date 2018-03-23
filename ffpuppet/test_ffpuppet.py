@@ -624,3 +624,30 @@ class PuppetTests(TestCase): # pylint: disable=too-many-public-methods
         ffp.close()
         self.assertEqual(ffp.reason, ffp.RC_EXITED)
         self.assertEqual(ffp.returncode, 3)
+
+    def test_29(self):
+        "test launching with RR"
+        if not sys.platform.startswith("linux"):
+            with self.assertRaisesRegex(EnvironmentError, "RR is only supported on Linux"):
+                FFPuppet(use_rr=True)
+        else:
+            # TODO: this can hang if ptrace is blocked by seccomp
+            proc = subprocess.Popen(["rr", "check"], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            stdout, stderr = proc.communicate()
+            proc.wait()
+            if "Unable to open performance counter" in stderr:
+                self.skipTest("This machine doesn't support performance counters needed by RR")
+            ffp = FFPuppet(use_rr=True)
+            self.addCleanup(ffp.clean_up)
+            rr_dir = tempfile.mkdtemp(prefix="test_ffp_rr")
+            bin_path = str(subprocess.check_output(["which", "echo"]).strip().decode("ascii"))
+            # launch will fail b/c 'echo' will exit right away but that's fine
+            with self.assertRaisesRegex(LaunchError, "Failure during browser startup"):
+                self.assertEqual(ffp.launch(bin_path, env_mod={"_RR_TRACE_DIR": rr_dir}), 0)
+            ffp.close()
+            ffp.save_logs(self.logs)
+            with open(os.path.join(self.logs, "log_stderr.txt"), "rb") as log_fp:
+                log_data = log_fp.read()
+            # verify RR ran and executed the script
+            self.assertRegex(log_data, br"rr record")
+            self.assertRegex(log_data, br"\[ffpuppet\] Exit code: 0")

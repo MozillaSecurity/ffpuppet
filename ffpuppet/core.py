@@ -64,7 +64,7 @@ class FFPuppet(object):
     RC_EXITED = "EXITED"  # target exited/crashed/aborted/assertion failure etc...
     RC_WORKER = "WORKER"  # target was closed by worker thread
 
-    def __init__(self, use_profile=None, use_valgrind=False, use_xvfb=False, use_gdb=False):
+    def __init__(self, use_profile=None, use_valgrind=False, use_xvfb=False, use_gdb=False, use_rr=False):
         self._abort_tokens = set() # tokens used to notify log scanner to kill the browser process
         self._last_bin_path = None
         self._launches = 0 # number of successful browser launches
@@ -75,6 +75,7 @@ class FFPuppet(object):
         self._returncode = 0 # return code of target process
         self._use_valgrind = use_valgrind
         self._use_gdb = use_gdb
+        self._use_rr = use_rr
         self._workers = list() # collection of threads and processes
         self._xvfb = None
         self.profile = None # path to profile
@@ -97,6 +98,15 @@ class FFPuppet(object):
                     subprocess.call(["gdb", "--version"], stdout=null_fp, stderr=null_fp)
             except OSError:
                 raise EnvironmentError("Please install GDB")
+
+        if use_rr:
+            if not self._platform.startswith("linux"):
+                raise EnvironmentError("RR is only supported on Linux")
+            try:
+                with open(os.devnull, "w") as null_fp:
+                    subprocess.check_call(["rr", "--version"], stdout=null_fp, stderr=null_fp)
+            except OSError:
+                raise EnvironmentError("Please install RR")
 
         if use_xvfb:
             if not self._platform.startswith("linux"):
@@ -464,6 +474,9 @@ class FFPuppet(object):
                 "-return-child-result",
                 "-batch",
                 "--args"] + cmd # enable gdb
+
+        if self._use_rr:
+            cmd = ["rr", "record"] + cmd
 
         return cmd
 
