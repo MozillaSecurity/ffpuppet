@@ -658,7 +658,7 @@ class FFPuppet(object):
                 except socket.timeout:
                     if (time.time() - timer_start) >= timeout:
                         raise BrowserTimeoutError("Launching browser timed out (%ds)" % timeout)
-                    elif not self.is_running():
+                    elif not self.appears_healthy():
                         raise BrowserTerminatedError("Failure during browser startup")
                     continue  # browser is alive but we have not received a connection
                 break  # received connection
