@@ -38,7 +38,7 @@ class LogSizeLimiterWorker(puppet_worker.BaseWorker):
             current_size = err_size + out_size
             if current_size > max_size:
                 self.aborted.set()
-                puppet._terminate(5)  # TODO: this could fail, use psutil.
+                puppet._terminate(5)  # pylint: disable=protected-access
                 self.log_fp.write(("LOG_SIZE_LIMIT_EXCEEDED: %d\n" % current_size).encode("utf-8"))
                 self.log_fp.write(("Current Limit: %d (%dMB)\n" % (max_size, max_size/1048576)).encode("utf-8"))
                 self.log_fp.write(("stderr log: %d (%dMB)\n" % (err_size, err_size/1048576)).encode("utf-8"))
