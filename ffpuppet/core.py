@@ -24,7 +24,7 @@ try:
 except ImportError:
     pass
 
-from .helpers import create_profile, prepare_environment
+from .helpers import create_profile, prepare_environment, poll_file
 from .minidump_parser import process_minidumps
 from .puppet_logger import PuppetLogger
 from .workers import log_scanner, log_size_limiter, memory_limiter
@@ -58,7 +58,8 @@ class FFPuppet(object):
     BS_PORT_MAX = 0xFFFF # bootstrap range
     BS_PORT_MIN = 0x2000 # bootstrap range
     LAUNCH_TIMEOUT_MIN = 10 # minimum amount of time to wait for the browser to launch
-    PROCESS_WAIT = 15  # max amount of time to wait for child processes to dump logs and terminate
+    LOG_POLL_RATE = 0.1  # used with poll_file to wait for logs
+    LOG_POLL_WAIT = 2.0  # used with poll_file to wait for logs
     RC_CLOSED = "CLOSED"  # target was closed by call to FFPuppet close()
     RC_EXITED = "EXITED"  # target exited/crashed/aborted/assertion failure etc...
     RC_WORKER = "WORKER"  # target was closed by worker thread
@@ -175,19 +176,25 @@ class FFPuppet(object):
         if self.reason is not None or not self.is_running():
             return False
 
+        return False if self._find_dumps() else True
+
+
+    def _find_dumps(self):
+        dumps = list()
         # check for *San logs
         if os.path.isdir(self._logs.working_path):
             for fname in os.listdir(self._logs.working_path):
                 if fname.startswith(self._logs.LOG_ASAN_PREFIX):
-                    return False
+                    dumps.append(os.path.join(self._logs.working_path, fname))
 
         # check for minidumps
-        if os.path.isdir(os.path.join(self.profile, "minidumps")):
-            for fname in os.listdir(os.path.join(self.profile, "minidumps")):
+        md_path = os.path.join(self.profile, "minidumps")
+        if os.path.isdir(md_path):
+            for fname in os.listdir(md_path):
                 if ".dmp" in fname:
-                    return False
+                    dumps.append(os.path.join(md_path, fname))
 
-        return True
+        return dumps
 
 
     def log_length(self, log_id):
@@ -324,15 +331,9 @@ class FFPuppet(object):
             # the logs have been fully dumped to disk
             # hopefully this can be replaced with pref
             if not self.is_healthy():
-                try:
-                    children = psutil.Process(self._proc.pid).children()
-                    wait_time = time.time() + self.PROCESS_WAIT
-                    while time.time() < wait_time and self.is_running() and children:
-                        if any(not child.is_running() for child in children):
-                            break
-                        time.sleep(0.25)
-                except psutil.NoSuchProcess:
-                    pass  # there is nothing we can do here
+                log.debug("is_healthy() check failed, waiting for known logs to be completed")
+                for fname in self._find_dumps():
+                    poll_file(fname, poll_rate=self.LOG_POLL_RATE, idle_wait=self.LOG_POLL_WAIT)
 
             # terminate the browser process if needed
             if self.is_running():

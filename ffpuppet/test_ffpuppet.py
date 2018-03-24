@@ -27,7 +27,8 @@ CWD = os.path.realpath(os.path.dirname(__file__))
 TESTFF_BIN = os.path.join(CWD, "testff", "testff.exe") if sys.platform.startswith('win') else os.path.join(CWD, "testff.py")
 TESTMDSW_BIN = os.path.join(CWD, "testmdsw", "testmdsw.exe") if sys.platform.startswith('win') else os.path.join(CWD, "testmdsw.py")
 
-FFPuppet.PROCESS_WAIT = 0.1
+FFPuppet.LOG_POLL_RATE = 0.01
+FFPuppet.LOG_POLL_WAIT = 0.1
 MinidumpParser.MDSW_BIN = TESTMDSW_BIN
 MinidumpParser.MDSW_MAX_STACK = 8
 
