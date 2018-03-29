@@ -84,6 +84,9 @@ def parse_args(argv=None):
         help="Profile to use. This is non-destructive. A copy of the target profile " \
              "will be used. (default: new temporary profile is created)")
     parser.add_argument(
+        "--rr", action="store_true",
+        help="Use RR (Linux only)")
+    parser.add_argument(
         "--safe-mode", action="store_true",
         help="Launch browser in 'safe-mode'. WARNING: Launching in safe mode blocks with a " \
              "dialog that must be dismissed manually.")
@@ -122,7 +125,8 @@ def main(argv=None): # pylint: disable=missing-docstring
         use_profile=args.profile,
         use_valgrind=args.valgrind,
         use_xvfb=args.xvfb,
-        use_gdb=args.gdb)
+        use_gdb=args.gdb,
+        use_rr=args.rr)
     for a_token in args.abort_token:
         ffp.add_abort_token(a_token)
 
