@@ -26,9 +26,8 @@ addons:
       - valgrind
 
 before_install:
-  - PLATFORM=$(uname -m)
-  - LATEST_VERSION="$(curl -Ls 'https://api.github.com/repos/mozilla/rr/releases/latest' | python -c "import sys,json; sys.stdout.write(json.load(sys.stdin)['tag_name'])")"
-  - if [[ $TRAVIS_OS_NAME == "linux" ]]; then sudo sysctl kernel.perf_event_paranoid=1; curl -L -o /tmp/rr.deb "https://github.com/mozilla/rr/releases/download/$LATEST_VERSION/rr-$LATEST_VERSION-Linux-$PLATFORM.deb"; sudo dpkg -i /tmp/rr.deb; rm /tmp/rr.deb; fi
+  - if [[ $TRAVIS_OS_NAME == "linux" ]]; then LATEST_VERSION="$(curl -Ls 'https://api.github.com/repos/mozilla/rr/releases/latest' | python -c "import sys,json; sys.stdout.write(json.load(sys.stdin)['tag_name'])")"; fi
+  - if [[ $TRAVIS_OS_NAME == "linux" ]]; then sudo sysctl kernel.perf_event_paranoid=1; curl -L -o /tmp/rr.deb "https://github.com/mozilla/rr/releases/download/$LATEST_VERSION/rr-$LATEST_VERSION-Linux-$(uname -m).deb"; sudo dpkg -i /tmp/rr.deb; rm /tmp/rr.deb; fi
   - if [[ $TRAVIS_OS_NAME == "osx" ]]; then pip2 install pytest; fi
   - if [[ $TRAVIS_OS_NAME == "osx" ]]; then pip2 install -r requirements.txt; else pip install -r requirements.txt; fi
   - if [[ $TRAVIS_OS_NAME == "linux" ]] && [ $TRAVIS_PYTHON_VERSION == 2.7 -o $TRAVIS_PYTHON_VERSION == 3.5 ]; then pip install pylint pytest-cov python-coveralls; fi
