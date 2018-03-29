@@ -635,7 +635,7 @@ class PuppetTests(TestCase): # pylint: disable=too-many-public-methods
             proc = subprocess.Popen(["rr", "check"], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
             stdout, stderr = proc.communicate()
             proc.wait()
-            if "Unable to open performance counter" in stderr:
+            if b"Unable to open performance counter" in stderr:
                 self.skipTest("This machine doesn't support performance counters needed by RR")
             ffp = FFPuppet(use_rr=True)
             self.addCleanup(ffp.clean_up)
