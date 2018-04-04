@@ -25,7 +25,7 @@ try:
 except ImportError:
     pass
 
-from .helpers import create_profile, prepare_environment, poll_file
+from .helpers import create_profile, onerror, prepare_environment, poll_file
 from .minidump_parser import process_minidumps
 from .puppet_logger import PuppetLogger
 from .workers import log_scanner, log_size_limiter, memory_limiter
@@ -34,30 +34,6 @@ log = logging.getLogger("ffpuppet")  # pylint: disable=invalid-name
 
 __author__ = "Tyson Smith"
 __all__ = ("FFPuppet", "BrowserTimeoutError", "BrowserTerminatedError", "LaunchError")
-
-
-def onerror(func, path, _exc_info):
-    """
-    Error handler for `shutil.rmtree`.
-
-    If the error is due to an access error (read only file)
-    it attempts to add write permission and then retries.
-
-    If the error is for another reason it re-raises the error.
-
-    Copyright Michael Foord 2004
-    Released subject to the BSD License
-    ref: http://www.voidspace.org.uk/python/recipebook.shtml#utils
-
-    Usage : `shutil.rmtree(path, onerror=onerror)`
-    """
-    if not os.access(path, os.W_OK):
-        # Is the error an access error?
-        os.chmod(path, stat.S_IWUSR)
-        func(path)
-    else:
-        # this should only ever be called from an exception context
-        raise  # pylint: disable=misplaced-bare-raise
 
 
 class LaunchError(Exception):
