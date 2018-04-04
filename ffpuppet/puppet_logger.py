@@ -17,19 +17,34 @@ __all__ = ("PuppetLogger")
 
 
 class PuppetLogger(object):
+    LOG_ASAN_PREFIX = "ffp_asan_%d.log" % os.getpid() # prefix for ASan logs
     LOG_BUF_SIZE = 0x10000 # buffer size used to copy logs
 
     def __init__(self):
         self._logs = dict()
         self.closed = False
+        self.working_path = tempfile.mkdtemp(prefix="ffplogs_")
 
 
     def add_log(self, log_id, logfp=None):
+        """
+        Add a log file to the log manager.
+
+        @type log_id: String
+        @param log_id: The id (key) of the log to clone (stderr, stdout... etc).
+
+        @type logfp: file
+        @param logfp: logfp is a file object. If None is provided a new log file will be created.
+
+        @rtype: file
+        @return: file object of the newly added log file.
+        """
         assert log_id not in self._logs
         assert not self.closed
         if logfp is None:
             logfp = PuppetLogger.open_unique()
         self._logs[log_id] = logfp
+        return logfp
 
 
     def available_logs(self):
@@ -54,6 +69,10 @@ class PuppetLogger(object):
             if lfp.name is not None and os.path.isfile(lfp.name):
                 os.remove(lfp.name)
         self._logs = dict()
+
+        if self.working_path is not None and os.path.isdir(self.working_path):
+            shutil.rmtree(self.working_path)
+        self.working_path = None
 
 
     def clone_log(self, log_id, offset=None, target_file=None):
@@ -161,6 +180,7 @@ class PuppetLogger(object):
         """
         self.clean_up()
         self.closed = False
+        self.working_path = tempfile.mkdtemp(prefix="ffplogs_")
 
 
     def save_logs(self, log_path):

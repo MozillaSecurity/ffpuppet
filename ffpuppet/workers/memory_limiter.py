@@ -3,14 +3,10 @@
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
 import os
-import platform
 import threading
 import time
 
-try:
-    import psutil
-except ImportError:
-    psutil = None
+from psutil import AccessDenied, NoSuchProcess, Process
 
 from . import puppet_worker
 
@@ -22,66 +18,57 @@ class MemoryLimiterWorker(puppet_worker.BaseWorker):
     MemoryLimiterWorker intended to be used with ffpuppet to limit the about of memory
     used by the browser process.
     """
-    available = psutil is not None
     name = os.path.splitext(os.path.basename(__file__))[0]
 
-    def start(self, process_id, memory_limit):
-        self._worker = threading.Thread(target=_run, args=(process_id, memory_limit, self.log_fp))
+    def start(self, puppet, memory_limit):
+        self._worker = threading.Thread(target=self._run, args=(puppet, memory_limit))
         self._worker.start()
 
 
-def _run(process_id, limit, log_fp):
-    """
-    _run(process_id, limit, log_fp) -> None
-    Use psutil to actively monitor the amount of memory in use by the process with the
-    matching process_id. If that amount exceeds limit the process will be terminated.
-    Information is collected and stored to log_fp.
+    def _run(self, puppet, limit):
+        """
+        _run(puppet, limit) -> None
+        Use psutil to actively monitor the amount of memory in use by the process with the
+        matching target process ID. If that amount exceeds limit the process will be terminated.
+        Information is collected and stored to log_fp.
 
-    returns None
-    """
+        returns None
+        """
 
-    plat = platform.system().lower()
-    try:
-        process = psutil.Process(process_id)
-    except psutil.NoSuchProcess:
-        return
+        target_pid = puppet.get_pid()
+        if target_pid is None:
+            return
 
-    while process.is_running():
-        proc_info = list()
-        total_usage = 0
         try:
-            cur_rss = process.memory_info().rss
-            total_usage += cur_rss
-            proc_info.append((process.pid, cur_rss))
-            for child in process.children(recursive=True):
-                try:
-                    cur_rss = child.memory_info().rss
-                    total_usage += cur_rss
-                    proc_info.append((child.pid, cur_rss))
-                except psutil.NoSuchProcess:
-                    pass
-        except psutil.NoSuchProcess:
-            break # process is dead?
+            process = Process(target_pid)
+        except (AccessDenied, NoSuchProcess):
+            return
 
-        if total_usage >= limit:
+        while puppet.is_running():
+            proc_info = list()
+            total_usage = 0
             try:
-                process.kill()
-                process.wait()
-            except psutil.NoSuchProcess:
-                pass # process is dead?
+                cur_rss = process.memory_info().rss
+                total_usage += cur_rss
+                proc_info.append((process.pid, cur_rss))
+                for child in process.children():
+                    try:
+                        cur_rss = child.memory_info().rss
+                        total_usage += cur_rss
+                        proc_info.append((child.pid, cur_rss))
+                    except (AccessDenied, NoSuchProcess):
+                        pass
+            except (AccessDenied, NoSuchProcess):
+                break  # process is dead?
 
-            if plat == "linux":
-                mem_hog = (0, 0) # process using the most memory
+            if total_usage >= limit:
+                self.aborted.set()
+                puppet._terminate(5)  # pylint: disable=protected-access
+                self.log_fp.write(("MEMORY_LIMIT_EXCEEDED: %d\n" % total_usage).encode("utf-8"))
+                self.log_fp.write(("Current Limit: %d (%dMB)\n" % (limit, limit/1048576)).encode("utf-8"))
+                self.log_fp.write(("Parent PID: %d\n" % target_pid).encode("utf-8"))
                 for pid, proc_usage in proc_info:
-                    if mem_hog[1] < proc_usage:
-                        mem_hog = (pid, proc_usage)
-                log_fp.write(puppet_worker.gdb_log_dumpper(mem_hog[0]))
-                log_fp.write(b"\n")
-            log_fp.write(("MEMORY_LIMIT_EXCEEDED: %d\n" % total_usage).encode("utf-8"))
-            log_fp.write(("Current Limit: %d (%dMB)\n" % (limit, limit/1048576)).encode("utf-8"))
-            log_fp.write(("Parent PID: %d\n" % process_id).encode("utf-8"))
-            for pid, proc_usage in proc_info:
-                log_fp.write(("-> PID %6d: %10d\n" % (pid, proc_usage)).encode("utf-8"))
-            break
+                    self.log_fp.write(("-> PID %6d: %10d\n" % (pid, proc_usage)).encode("utf-8"))
+                break
 
-        time.sleep(0.1) # check 10x a second
+            time.sleep(0.25)  # check maximum 4x per second

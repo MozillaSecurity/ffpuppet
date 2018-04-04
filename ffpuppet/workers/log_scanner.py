@@ -19,46 +19,47 @@ class LogScannerWorker(puppet_worker.BaseWorker):
     name = os.path.splitext(os.path.basename(__file__))[0]
 
     def start(self, puppet):
-        self._worker = threading.Thread(target=_run, args=(puppet, self.log_fp))
+        self._worker = threading.Thread(target=self._run, args=(puppet,))
         self._worker.start()
 
 
-def _run(puppet, log_fp):
-    """
-    _run(puppet, log_fp) -> None
+    def _run(self, puppet):
+        """
+        _run(puppet) -> None
 
-    returns None
-    """
+        returns None
+        """
 
-    # logs to scan
-    logs = (
-        {"fname": puppet._logs.get_fp("stderr").name, "lbuf": "", "offset": 0},
-        {"fname": puppet._logs.get_fp("stdout").name, "lbuf": "", "offset": 0})
+        # logs to scan
+        logs = (
+            {"fname": puppet._logs.get_fp("stderr").name, "lbuf": "", "offset": 0},
+            {"fname": puppet._logs.get_fp("stdout").name, "lbuf": "", "offset": 0})
 
-    while puppet.is_running():
-        for log in logs:
-            # check if file has new data
-            if os.stat(log["fname"]).st_size <= log["offset"]:
-                continue
-            # collect new data
-            with open(log["fname"], "r") as scan_fp:
-                scan_fp.seek(log["offset"], os.SEEK_SET)
-                data = scan_fp.read(0x20000) # 128KB
-                log["offset"] = scan_fp.tell()
-            # prepend chunk of previously read line to data
-            if log["lbuf"]:
-                data = "".join([log["lbuf"], data])
+        while puppet.is_running():
+            for log in logs:
+                # check if file has new data
+                if os.stat(log["fname"]).st_size <= log["offset"]:
+                    continue
+                # collect new data
+                with open(log["fname"], "r") as scan_fp:
+                    scan_fp.seek(log["offset"], os.SEEK_SET)
+                    data = scan_fp.read(0x20000)  # 128KB
+                    log["offset"] = scan_fp.tell()
+                # prepend chunk of previously read line to data
+                if log["lbuf"]:
+                    data = "".join([log["lbuf"], data])
 
-            for token in puppet._abort_tokens:
-                match = token.search(data)
-                if match:
-                    puppet._terminate(5)
-                    log_fp.write(("TOKEN_LOCATED: %s\n" % match.group()).encode("utf-8"))
-                    return
+                for token in puppet._abort_tokens:  # pylint: disable=protected-access
+                    match = token.search(data)
+                    if match:
+                        self.aborted.set()
+                        puppet._terminate(5)  # pylint: disable=protected-access
+                        self.log_fp.write(("TOKEN_LOCATED: %s\n" % match.group()).encode("utf-8"))
+                        return
 
-            try:
-                log["lbuf"] = data.rsplit("\n", 1)[1]
-            except IndexError:
-                log["lbuf"] = data
+                try:
+                    log["lbuf"] = data.rsplit("\n", 1)[1]
+                except IndexError:
+                    log["lbuf"] = data
 
-        time.sleep(0.05) # don't be a CPU hog
+            time.sleep(0.05)  # don't be a CPU hog
