@@ -218,3 +218,48 @@ class MinidumpParserTests(TestCase):  # pylint: disable=too-many-public-methods
             out_fp.write("0|0|blah|foo|a/bar.c|123|0x0\n")
         process_minidumps(self.tmpdir, self.tmpdir, self.lgr.create)
         self.assertEqual(self.lgr.count, 2)
+
+    def test_10(self):
+        "test process_minidumps() with FFP_DEBUG_MDSW set"
+        try:
+            os.environ["FFP_DEBUG_MDSW"] = "1"
+            with open(os.path.join(self.tmpdir, "test.dmp"), "w") as out_fp:
+                out_fp.write("OS|Linux|0.0.0 sys info...\n")
+                out_fp.write("Module|firefox||firefox|a|0x1|0x3|1\n")
+                out_fp.write("  \n")
+                out_fp.write("\n")
+                out_fp.write("0|0|blah|foo|a/bar.c|123|0x0\n")
+                out_fp.write("0|1|blat|foo|a/bar.c|223|0x0\n")
+                out_fp.write("JUNK\n")
+                out_fp.write("0|3|blas|foo|a/bar.c|423|0x0\n")
+                out_fp.write("1|0|libpthread-2.23.so||||0xd360\n")
+            process_minidumps(self.tmpdir, self.tmpdir, self.lgr.create)
+            self.assertEqual(self.lgr.count, 2)
+            self.assertTrue(any(fname.startswith("raw_mdsw_") for fname in self.lgr._files))  # pylint: disable=protected-access
+        finally:
+            os.environ.pop("FFP_DEBUG_MDSW")
+
+    def test_11(self):
+        "test _read_stacktrace() with raw_fp set"
+        with open(self.tmpfn, "r+") as out_fp:
+            out_fp.write("OS|Linux|0.0.0 sys info...\n")
+            out_fp.write("Crash|SIGSEGV|0x7fff27aaeff8|0\n")
+            out_fp.write("output junk\n")
+            out_fp.write("0|0|blah|foo|a/bar.c|123|0x0\n")
+            out_fp.write("0|1|blat|foo|a/bar.c|223|0x0\n")
+            out_fp.write("more junk\n")
+            out_fp.write("0|2|blas|foo|a/bar.c|423|0x0\n")
+            out_fp.write("0|3|blas|foo|a/bar.c|423|0x0\n")
+
+        mdp = MinidumpParser(self.tmpdir)
+        mdp.symbols_path = self.tmpdir  # usually set internally
+        md_lines = list()
+        with tempfile.TemporaryFile() as log_fp, tempfile.TemporaryFile() as raw_fp:
+            mdp._read_stacktrace(self.tmpfn, log_fp, raw_fp=raw_fp)  # pylint: disable=protected-access
+            raw_fp.seek(0, os.SEEK_END)
+            self.assertEqual(os.path.getsize(self.tmpfn), raw_fp.tell())
+            log_fp.seek(0)
+            md_lines = log_fp.readlines()
+        self.assertEqual(len(md_lines), 6)  # only the interesting stack info should be in here
+        self.assertTrue(md_lines[-4].startswith(b"0|0|"))
+        self.assertTrue(md_lines[-1].startswith(b"0|3|"))

@@ -4,6 +4,7 @@
 
 import logging
 import os
+import shutil
 import subprocess
 import tempfile
 
@@ -27,18 +28,28 @@ class MinidumpParser(object):
         self.dump_path = scan_path
         self.dump_files = {fname for fname in os.listdir(self.dump_path) if fname.endswith(".dmp")}
         self.symbols_path = None
+        self._include_raw = os.environ.get("FFP_DEBUG_MDSW") is not None
 
 
-    def _call_mdsw(self, dump_file, out_fp, extra_flags=None):
+    def _call_mdsw(self, dump_file, out_fp, extra_flags=None, include_stderr=False):
         cmd = [MinidumpParser.MDSW_BIN]
-        if extra_flags is not None:
-            cmd += extra_flags
+        if extra_flags is None:
+            extra_flags = list()
+        cmd += extra_flags
         cmd.append(dump_file)
         cmd.append(self.symbols_path)
-        with open(os.devnull, "w") as null_fp:
-            ret_val = subprocess.call(cmd, stdout=out_fp, stderr=null_fp)
-            if ret_val != 0:
-                log.warning("minidump_stackwalk -m returned %r", ret_val)
+
+        try:
+            err_fp = out_fp if include_stderr else open(os.devnull, "w")
+            ret_val = subprocess.call(cmd, stdout=out_fp, stderr=err_fp)
+        finally:
+            if not include_stderr:
+                # close devnull
+                err_fp.close()
+
+        if ret_val != 0:
+            log.warning("minidump_stackwalk %s returned %r", " ".join(extra_flags), ret_val)
+
         out_fp.seek(0)
 
 
@@ -62,14 +73,18 @@ class MinidumpParser(object):
             log.debug("collected register info: %r", found_registers)
 
 
-    def _read_stacktrace(self, dump_file, log_fp):
+    def _read_stacktrace(self, dump_file, log_fp, raw_fp=None):
         log.debug("calling minidump_stackwalk -m on %s", dump_file)
         with tempfile.TemporaryFile() as out_fp:
-            self._call_mdsw(dump_file, out_fp, extra_flags=["-m"])
+            include_stderr = raw_fp is not None
+            self._call_mdsw(dump_file, out_fp, extra_flags=["-m"], include_stderr=include_stderr)
+            if raw_fp is not None:
+                shutil.copyfileobj(out_fp, raw_fp, 0x10000)  # read in 64K chunks
+                out_fp.seek(0)
             crash_thread = None
             line_count = 0  # lines added to the log so far
             for line in out_fp:  # pylint: disable=not-an-iterable
-                if not line.rstrip() or line.startswith(b"Module|"):
+                if "|" not in line or line.startswith(b"Module|"):
                     continue # ignore line
 
                 # check if this is a stack entry (starts with '#|')
@@ -102,7 +117,9 @@ class MinidumpParser(object):
             file_path = os.path.join(self.dump_path, fname)
             poll_file(file_path, poll_rate=self.POLL_RATE, idle_wait=self.POLL_WAIT)
             self._read_registers(file_path, log_fp)
-            self._read_stacktrace(file_path, log_fp)
+            # create log for raw mdsw stack output if needed
+            raw_fp = cb_create_log("raw_mdsw_%02d" % count) if self._include_raw else None
+            self._read_stacktrace(file_path, log_fp, raw_fp)
             if log_fp.tell() < 1:
                 log.warning("minidump_stackwalk log was empty")
                 log_fp.write(b"WARNING: minidump_stackwalk log was empty")

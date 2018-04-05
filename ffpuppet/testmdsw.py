@@ -15,7 +15,7 @@ def main():
 
     if dmp_file is not None:
         with open(dmp_file, "r") as in_fp:
-            print(in_fp.read())
+            sys.stdout.write(in_fp.read())
     else:
         print("COULD NOT OPEN %r" % dmp_file)
         sys.exit(1)
