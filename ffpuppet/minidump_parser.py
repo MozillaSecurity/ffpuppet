@@ -84,7 +84,7 @@ class MinidumpParser(object):
             crash_thread = None
             line_count = 0  # lines added to the log so far
             for line in out_fp:  # pylint: disable=not-an-iterable
-                if "|" not in line or line.startswith(b"Module|"):
+                if b"|" not in line or line.startswith(b"Module|"):
                     continue # ignore line
 
                 # check if this is a stack entry (starts with '#|')
