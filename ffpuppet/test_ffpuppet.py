@@ -19,6 +19,7 @@ except ImportError:
 from psutil import Process
 
 from ffpuppet import BrowserTimeoutError, BrowserTerminatedError, FFPuppet, LaunchError
+from .helpers import onerror
 from .minidump_parser import MinidumpParser
 
 logging.basicConfig(level=logging.DEBUG if bool(os.getenv("DEBUG")) else logging.INFO)
@@ -34,13 +35,6 @@ MinidumpParser.MDSW_BIN = TESTMDSW_BIN
 MinidumpParser.MDSW_MAX_STACK = 8
 
 class TestCase(unittest.TestCase):
-
-    @classmethod
-    def setUpClass(cls):
-        if sys.platform.startswith('win') and not os.path.isfile(TESTFF_BIN):
-            raise EnvironmentError("testff.exe is missing see testff.py for build instructions") # pragma: no cover
-        if sys.platform.startswith('win') and not os.path.isfile(TESTMDSW_BIN):
-            raise EnvironmentError("testmdsw.exe is missing see testmdsw.py for build instructions") # pragma: no cover
 
     if sys.version_info.major == 2:
 
@@ -92,6 +86,10 @@ class HTTPTestServer(object):
 class PuppetTests(TestCase): # pylint: disable=too-many-public-methods
     @classmethod
     def setUpClass(cls):
+        if sys.platform.startswith('win') and not os.path.isfile(TESTFF_BIN):
+            raise EnvironmentError("testff.exe is missing see testff.py for build instructions") # pragma: no cover
+        if sys.platform.startswith('win') and not os.path.isfile(TESTMDSW_BIN):
+            raise EnvironmentError("testmdsw.exe is missing see testmdsw.py for build instructions") # pragma: no cover
         cls.tsrv = HTTPTestServer()
 
     @classmethod
@@ -107,7 +105,7 @@ class PuppetTests(TestCase): # pylint: disable=too-many-public-methods
         if os.path.isfile(self.tmpfn):
             os.unlink(self.tmpfn)
         if os.path.isdir(self.logs):
-            shutil.rmtree(self.logs)
+            shutil.rmtree(self.logs, onerror=onerror)
 
     @unittest.skipIf(sys.platform.startswith('win'), "Unsupported on Windows")
     def test_00(self):
@@ -670,7 +668,7 @@ class PuppetTests(TestCase): # pylint: disable=too-many-public-methods
 
         # use template profile that contains a readonly file
         prf_dir = tempfile.mkdtemp()
-        self.addCleanup(shutil.rmtree, prf_dir)
+        self.addCleanup(shutil.rmtree, prf_dir, onerror=onerror)
         ro_file = os.path.join(prf_dir, "read-only.txt")
         with open(ro_file, "w"):
             pass
