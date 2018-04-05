@@ -7,6 +7,7 @@ import logging
 import os
 import platform
 import shutil
+import stat
 import tempfile
 import time
 
@@ -15,7 +16,7 @@ from xml.etree import ElementTree
 log = logging.getLogger("ffpuppet")  # pylint: disable=invalid-name
 
 __author__ = "Tyson Smith"
-__all__ = ("check_prefs", "create_profile", "poll_file", "prepare_environment")
+__all__ = ("check_prefs", "create_profile", "onerror", "poll_file", "prepare_environment")
 
 
 class SanitizerConfig(object):
@@ -216,6 +217,30 @@ def create_profile(extension=None, prefs_js=None, template=None):
         shutil.rmtree(profile, True) # cleanup on failure
         raise
     return profile
+
+
+def onerror(func, path, _exc_info):
+    """
+    Error handler for `shutil.rmtree`.
+
+    If the error is due to an access error (read only file)
+    it attempts to add write permission and then retries.
+
+    If the error is for another reason it re-raises the error.
+
+    Copyright Michael Foord 2004
+    Released subject to the BSD License
+    ref: http://www.voidspace.org.uk/python/recipebook.shtml#utils
+
+    Usage : `shutil.rmtree(path, onerror=onerror)`
+    """
+    if not os.access(path, os.W_OK):
+        # Is the error an access error?
+        os.chmod(path, stat.S_IWUSR)
+        func(path)
+    else:
+        # this should only ever be called from an exception context
+        raise  # pylint: disable=misplaced-bare-raise
 
 
 def prepare_environment(target_dir, sanitizer_log, env_mod=None):

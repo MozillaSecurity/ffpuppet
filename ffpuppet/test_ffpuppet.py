@@ -4,6 +4,7 @@ import os
 import re
 import shutil
 import socket
+import stat
 import subprocess
 import sys
 import tempfile
@@ -18,6 +19,7 @@ except ImportError:
 from psutil import Process
 
 from ffpuppet import BrowserTimeoutError, BrowserTerminatedError, FFPuppet, LaunchError
+from .helpers import onerror
 from .minidump_parser import MinidumpParser
 
 logging.basicConfig(level=logging.DEBUG if bool(os.getenv("DEBUG")) else logging.INFO)
@@ -33,13 +35,6 @@ MinidumpParser.MDSW_BIN = TESTMDSW_BIN
 MinidumpParser.MDSW_MAX_STACK = 8
 
 class TestCase(unittest.TestCase):
-
-    @classmethod
-    def setUpClass(cls):
-        if sys.platform.startswith('win') and not os.path.isfile(TESTFF_BIN):
-            raise EnvironmentError("testff.exe is missing see testff.py for build instructions") # pragma: no cover
-        if sys.platform.startswith('win') and not os.path.isfile(TESTMDSW_BIN):
-            raise EnvironmentError("testmdsw.exe is missing see testmdsw.py for build instructions") # pragma: no cover
 
     if sys.version_info.major == 2:
 
@@ -91,6 +86,10 @@ class HTTPTestServer(object):
 class PuppetTests(TestCase): # pylint: disable=too-many-public-methods
     @classmethod
     def setUpClass(cls):
+        if sys.platform.startswith('win') and not os.path.isfile(TESTFF_BIN):
+            raise EnvironmentError("testff.exe is missing see testff.py for build instructions") # pragma: no cover
+        if sys.platform.startswith('win') and not os.path.isfile(TESTMDSW_BIN):
+            raise EnvironmentError("testmdsw.exe is missing see testmdsw.py for build instructions") # pragma: no cover
         cls.tsrv = HTTPTestServer()
 
     @classmethod
@@ -106,7 +105,7 @@ class PuppetTests(TestCase): # pylint: disable=too-many-public-methods
         if os.path.isfile(self.tmpfn):
             os.unlink(self.tmpfn)
         if os.path.isdir(self.logs):
-            shutil.rmtree(self.logs)
+            shutil.rmtree(self.logs, onerror=onerror)
 
     @unittest.skipIf(sys.platform.startswith('win'), "Unsupported on Windows")
     def test_00(self):
@@ -651,3 +650,50 @@ class PuppetTests(TestCase): # pylint: disable=too-many-public-methods
             # verify RR ran and executed the script
             self.assertRegex(log_data, br"rr record")
             self.assertRegex(log_data, br"\[ffpuppet\] Exit code: 0")
+
+    def test_30(self):
+        "test rmtree error handler"
+        # normal profile creation
+        # - just create a puppet, write a readonly file in its profile, then call close()
+        ffp = FFPuppet()
+        self.addCleanup(ffp.clean_up)
+        ffp.launch(TESTFF_BIN)
+        ro_file = os.path.join(ffp.profile, "read-only-test.txt")
+        with open(ro_file, "w"):
+            pass
+        os.chmod(ro_file, stat.S_IREAD)
+        ffp.close()
+        self.assertFalse(os.path.isfile(ro_file))
+        ffp.clean_up()
+
+        # use template profile that contains a readonly file
+        prf_dir = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, prf_dir, onerror=onerror)
+        ro_file = os.path.join(prf_dir, "read-only.txt")
+        with open(ro_file, "w"):
+            pass
+        os.chmod(ro_file, stat.S_IREAD)
+        ffp = FFPuppet(use_profile=prf_dir)
+        self.addCleanup(ffp.clean_up)
+        ffp.launch(TESTFF_BIN)
+        working_prf = ffp.profile
+        self.assertTrue(os.path.isdir(working_prf))
+        ffp.close()
+        self.assertFalse(os.path.isdir(working_prf))
+
+    def test_31(self):
+        "test using a readonly prefs.js and extension"
+        prefs = os.path.join(self.logs, "prefs.js")
+        with open(prefs, "w"):
+            pass
+        os.chmod(prefs, stat.S_IREAD)
+        ext = os.path.join(self.logs, "ext.xpi")
+        with open(ext, "w"):
+            pass
+        os.chmod(ext, stat.S_IREAD)
+        ffp = FFPuppet()
+        self.addCleanup(ffp.clean_up)
+        ffp.launch(TESTFF_BIN, extension=ext, prefs_js=prefs)
+        working_prf = ffp.profile
+        ffp.close()
+        self.assertFalse(os.path.isdir(working_prf))

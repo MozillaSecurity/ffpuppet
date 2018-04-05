@@ -24,7 +24,7 @@ try:
 except ImportError:
     pass
 
-from .helpers import create_profile, prepare_environment, poll_file
+from .helpers import create_profile, onerror, prepare_environment, poll_file
 from .minidump_parser import process_minidumps
 from .puppet_logger import PuppetLogger
 from .workers import log_scanner, log_size_limiter, memory_limiter
@@ -406,7 +406,7 @@ class FFPuppet(object):
 
         # remove temporary profile directory if necessary
         if self.profile is not None and os.path.isdir(self.profile):
-            shutil.rmtree(self.profile)
+            shutil.rmtree(self.profile, onerror=onerror)
             self.profile = None
 
         log.debug("process exit reason %r", r_key)

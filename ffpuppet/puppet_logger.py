@@ -8,6 +8,8 @@ import shutil
 import tempfile
 import time
 
+from .helpers import onerror
+
 log = logging.getLogger("puppet_logger") # pylint: disable=invalid-name
 
 __author__ = "Tyson Smith"
@@ -71,7 +73,7 @@ class PuppetLogger(object):
         self._logs = dict()
 
         if self.working_path is not None and os.path.isdir(self.working_path):
-            shutil.rmtree(self.working_path)
+            shutil.rmtree(self.working_path, onerror=onerror)
         self.working_path = None
 
 
