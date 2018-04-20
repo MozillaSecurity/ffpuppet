@@ -630,9 +630,12 @@ class PuppetTests(TestCase): # pylint: disable=too-many-public-methods
             with self.assertRaisesRegex(EnvironmentError, "RR is only supported on Linux"):
                 FFPuppet(use_rr=True)
         else:
-            # TODO: this can hang if ptrace is blocked by seccomp
-            proc = subprocess.Popen(["rr", "check"], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-            stdout, stderr = proc.communicate()
+            try:
+                # TODO: this can hang if ptrace is blocked by seccomp
+                proc = subprocess.Popen(["rr", "check"], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            except OSError:
+                self.skipTest("RR not installed")
+            _, stderr = proc.communicate()
             proc.wait()
             if b"Unable to open performance counter" in stderr:
                 self.skipTest("This machine doesn't support performance counters needed by RR")
