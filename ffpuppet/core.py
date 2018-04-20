@@ -609,6 +609,7 @@ class FFPuppet(object):
         log.debug("launch command: %r", " ".join(cmd))
         self._proc = subprocess.Popen(
             cmd,
+            bufsize=0,  # unbuffered (for log scanners)
             creationflags=subprocess.CREATE_NEW_PROCESS_GROUP if self._platform == "windows" else 0,
             env=prepare_environment(self._last_bin_path, sanitizer_logs, env_mod=env_mod),
             shell=False,
