@@ -89,7 +89,7 @@ class MinidumpParser(object):
 
                 # check if this is a stack entry (starts with '#|')
                 try:
-                    t_id = int(line.split(b"|")[0])
+                    t_id = int(line.split(b"|", 1)[0])
                     # assume that the first entry in the stack is the crash_thread
                     # NOTE: an alternative would be to parse the 'Crash|' line
                     if crash_thread is None:
