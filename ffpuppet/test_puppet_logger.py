@@ -189,7 +189,7 @@ class PuppetLoggerTests(TestCase):
         # verify meta data was copied
         meta_file = os.path.join(self.tmpdir, PuppetLogger.META_FILE)
         self.assertTrue(os.path.isfile(meta_file))
-        with open(meta_file, "rb") as json_fp:
+        with open(meta_file, "r") as json_fp:
             meta_map = json.load(json_fp)
         self.assertEqual(len(meta_map.keys()), 5)
         self.assertEqual(meta_ctime, meta_map["log_test_meta.txt"]["st_ctime"])
