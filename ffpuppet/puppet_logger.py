@@ -218,5 +218,5 @@ class PuppetLogger(object):
             shutil.copy2(log_fp.name, os.path.join(log_path, out_name))
 
         if meta_map is not None:
-            with open(os.path.join(log_path, self.META_FILE), "wb") as json_fp:
+            with open(os.path.join(log_path, self.META_FILE), "w") as json_fp:
                 json.dump(meta_map, json_fp)
