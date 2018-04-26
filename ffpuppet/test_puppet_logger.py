@@ -1,8 +1,10 @@
+import json
 import logging
 import os
 import shutil
 import sys
 import tempfile
+import time
 import unittest
 
 from .puppet_logger import PuppetLogger
@@ -168,10 +170,31 @@ class PuppetLoggerTests(TestCase):
         for _ in range(512):
             plog.get_fp("test_3").write(data)
         plog.get_fp("test_3").flush()
-        plog.save_logs(self.tmpdir)
-        self.assertEqual(len(plog.available_logs()), 4)
-        dir_list = os.listdir(self.tmpdir)
-        self.assertEqual(len(dir_list), 4)
+        meta_test = os.path.join(self.tmpdir, "test_meta.txt")
+        meta_fp = open(meta_test, "w+b")
+        try:
+            meta_fp.write(b"blah")
+            plog.add_log("test_meta", logfp=meta_fp)
+        finally:
+            meta_fp.close()
+        # delay to check if creation time was copied when save_logs is called
+        time.sleep(0.1)
+        plog.save_logs(self.tmpdir, meta=True)
+        # grab meta data and remove test file
+        meta_ctime = os.stat(meta_test).st_ctime
+        os.remove(meta_test)
+        # check saved file count
+        self.assertEqual(len(plog.available_logs()), 5)
+        self.assertEqual(len(os.listdir(self.tmpdir)), 6)
+        # verify meta data was copied
+        meta_file = os.path.join(self.tmpdir, PuppetLogger.META_FILE)
+        self.assertTrue(os.path.isfile(meta_file))
+        with open(meta_file, "rb") as json_fp:
+            meta_map = json.load(json_fp)
+        self.assertEqual(len(meta_map.keys()), 5)
+        self.assertEqual(meta_ctime, meta_map["log_test_meta.txt"]["st_ctime"])
+
+
 
     def test_05(self):
         "test log that does not have a file on disk"

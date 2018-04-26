@@ -2,6 +2,7 @@
 # License, v. 2.0. If a copy of the MPL was not distributed with this
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
+import json
 import logging
 import os
 import shutil
@@ -10,7 +11,7 @@ import time
 
 from .helpers import onerror
 
-log = logging.getLogger("puppet_logger") # pylint: disable=invalid-name
+log = logging.getLogger("puppet_logger")  # pylint: disable=invalid-name
 
 __author__ = "Tyson Smith"
 __credits__ = ["Tyson Smith"]
@@ -19,8 +20,9 @@ __all__ = ("PuppetLogger")
 
 
 class PuppetLogger(object):
-    LOG_ASAN_PREFIX = "ffp_asan_%d.log" % os.getpid() # prefix for ASan logs
-    LOG_BUF_SIZE = 0x10000 # buffer size used to copy logs
+    LOG_ASAN_PREFIX = "ffp_asan_%d.log" % os.getpid()  # prefix for ASan logs
+    LOG_BUF_SIZE = 0x10000  # buffer size used to copy logs
+    META_FILE = "log_metadata.json"
 
     def __init__(self):
         self._logs = dict()
@@ -185,7 +187,7 @@ class PuppetLogger(object):
         self.working_path = tempfile.mkdtemp(prefix="ffplogs_")
 
 
-    def save_logs(self, log_path):
+    def save_logs(self, log_path, meta=False):
         """
         The browser log will be saved to log_file.
         This should only be called after close().
@@ -193,13 +195,28 @@ class PuppetLogger(object):
         @type log_path: String
         @param log_path: Directory to dump log file in. Existing files will be overwritten.
 
+        @type meta: bool
+        @param meta: Output JSON file containing log file meta data
+
         @rtype: None
         @return: None
         """
 
+        meta_map = dict() if meta else None
+
         # copy log to location specified by log_file
         if not os.path.isdir(log_path):
             os.makedirs(log_path)
+        log_path = os.path.abspath(log_path)
 
         for log_id, log_fp in self._logs.items():
-            shutil.copy(log_fp.name, os.path.join(os.path.abspath(log_path), "log_%s.txt" % log_id))
+            out_name = "log_%s.txt" % log_id
+            if meta_map is not None:
+                file_stat = os.stat(log_fp.name)
+                meta_map[out_name] = {field: getattr(file_stat, field)
+                                      for field in dir(os.stat_result) if field.startswith("st_")}
+            shutil.copy2(log_fp.name, os.path.join(log_path, out_name))
+
+        if meta_map is not None:
+            with open(os.path.join(log_path, self.META_FILE), "wb") as json_fp:
+                json.dump(meta_map, json_fp)
