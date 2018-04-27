@@ -237,7 +237,7 @@ class FFPuppet(object):
         return self._returncode
 
 
-    def save_logs(self, log_path):
+    def save_logs(self, log_path, meta=False):
         """
         The browser logs will be saved to log_path.
         This should only be called after close().
@@ -245,15 +245,18 @@ class FFPuppet(object):
         @type log_path: String
         @param log_path: File to create to contain log data. Existing files will be overwritten.
 
+        @type meta: bool
+        @param meta: Output JSON file containing log file meta data
+
         @rtype: None
         @return: None
         """
 
-        log.debug("save_logs() called, log_path is %r", log_path)
+        log.debug("save_logs() called, log_path=%r, meta=%r", log_path, meta)
         if not self._logs.closed:
             raise RuntimeError("Logs are still in use. Call close() first!")
 
-        self._logs.save_logs(log_path)
+        self._logs.save_logs(log_path, meta=meta)
 
 
     def clean_up(self):

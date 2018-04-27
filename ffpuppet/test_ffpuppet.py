@@ -178,19 +178,20 @@ class PuppetTests(TestCase): # pylint: disable=too-many-public-methods
         ffp.close()
         ffp.save_logs(os.path.join(self.logs, "no_logs"))
         ffp.launch(TESTFF_BIN, location=self.tsrv.get_addr())
-        ffp.wait(0.25) # wait for log prints
+        ffp.wait(0.25)  # wait for log prints
         ffp.close()
-        self.assertTrue(ffp._logs.closed) # pylint: disable=protected-access
+        self.assertTrue(ffp._logs.closed)  # pylint: disable=protected-access
         log_ids = ffp.available_logs()
         self.assertEqual(len(log_ids), 2)
         self.assertIn("stderr", log_ids)
         self.assertIn("stdout", log_ids)
-        log_dir = os.path.join(self.logs, "some_dir") # nonexistent directory
-        ffp.save_logs(log_dir)
+        log_dir = os.path.join(self.logs, "some_dir")  # nonexistent directory
+        ffp.save_logs(log_dir, meta=True)
         self.assertTrue(os.path.isdir(log_dir))
         log_list = os.listdir(log_dir)
         self.assertIn("log_stderr.txt", log_list)
         self.assertIn("log_stdout.txt", log_list)
+        self.assertIn(ffp._logs.META_FILE, log_list)  # pylint: disable=protected-access
         with open(os.path.join(log_dir, "log_stdout.txt"), "r") as log_fp:
             self.assertIn("url: http://", log_fp.read().strip())
         for fname in log_list:
@@ -199,9 +200,11 @@ class PuppetTests(TestCase): # pylint: disable=too-many-public-methods
             if fname.startswith("log_stderr"):
                 self.assertEqual(len(log_data), 3)
                 self.assertTrue(log_data[0].startswith('[ffpuppet] Launch command:'))
-                self.assertTrue(log_data[-1].startswith('[ffpuppet] Exit code:')) # exit code differs between platforms
+                self.assertTrue(log_data[-1].startswith('[ffpuppet] Exit code:'))
             elif fname.startswith("log_stdout"):
                 self.assertEqual(log_data[0], "hello world")
+            elif fname.startswith(ffp._logs.META_FILE):  # pylint: disable=protected-access
+                continue  # ignore
             else:
                 raise AssertionError("Unknown log file %r" % fname)
 

@@ -194,8 +194,6 @@ class PuppetLoggerTests(TestCase):
         self.assertEqual(len(meta_map.keys()), 5)
         self.assertEqual(meta_ctime, meta_map["log_test_meta.txt"]["st_ctime"])
 
-
-
     def test_05(self):
         "test log that does not have a file on disk"
         plog = PuppetLogger()
