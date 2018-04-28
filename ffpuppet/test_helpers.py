@@ -307,3 +307,5 @@ class HelperTests(TestCase): # pylint: disable=too-many-public-methods
         self.assertEqual(env["MOZ_GDB_SLEEP"], "2")
         self.assertNotIn("RUST_BACKTRACE", env)
         self.assertNotIn("TEST_FAKE", env)
+
+# TODO: add test for wait_on_files()

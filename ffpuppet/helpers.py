@@ -2,6 +2,7 @@
 # License, v. 2.0. If a copy of the MPL was not distributed with this
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
+import itertools
 import json
 import logging
 import os
@@ -12,6 +13,7 @@ import tempfile
 import time
 
 from xml.etree import ElementTree
+import psutil
 
 log = logging.getLogger("ffpuppet")  # pylint: disable=invalid-name
 
@@ -333,3 +335,52 @@ def poll_file(filename, poll_rate=0.1, idle_wait=1.5, timeout=60):
             return None
         time.sleep(poll_rate)
     return os.stat(filename).st_size
+
+
+def wait_on_files(pid, wait_files, recursive=True, timeout=60):
+    """
+    Wait for wait_files if open by a process (pid) and it's children (if recursive) to close.
+
+    @type pid: int
+    @param pid: pid of process
+
+    @type wait_files: list
+    @param wait_files: a list of files that should no longer be open by the process
+
+    @type recursive: bool
+    @return: Scan all children and grandchildren for open files
+
+    @type timeout: float
+    @param timeout: Amount of time in seconds to poll.
+
+    @rtype: bool
+    @return: True if all files were closed within timeout else False
+    """
+
+    assert timeout > -1
+
+    children = list()
+    wait_end = time.time() + timeout
+    try:
+        proc = psutil.Process(pid)
+        while proc.is_running() and wait_files:
+            try:
+                # only include children and grandchildren if recursive is specified
+                children = proc.children(recursive=True) if recursive else list()
+            except (psutil.AccessDenied, psutil.NoSuchProcess):
+                children = list()
+            open_files = list()
+            for target in [proc] + children:
+                try:
+                    open_files.extend([x.path for x in target.open_files()])
+                except (psutil.AccessDenied, psutil.NoSuchProcess):
+                    pass
+            # check if open files are in the wait list
+            if not any(x for x in set(open_files) if x in wait_files):
+                break
+            elif wait_end <= time.time():
+                return False
+    except (psutil.AccessDenied, psutil.NoSuchProcess):
+        pass
+
+    return True

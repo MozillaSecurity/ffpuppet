@@ -24,7 +24,7 @@ try:
 except ImportError:
     pass
 
-from .helpers import create_profile, onerror, prepare_environment, poll_file
+from .helpers import create_profile, onerror, prepare_environment, wait_on_files
 from .minidump_parser import process_minidumps
 from .puppet_logger import PuppetLogger
 from .workers import log_scanner, log_size_limiter, memory_limiter
@@ -58,8 +58,6 @@ class FFPuppet(object):
     BS_PORT_MAX = 0xFFFF # bootstrap range
     BS_PORT_MIN = 0x2000 # bootstrap range
     LAUNCH_TIMEOUT_MIN = 10 # minimum amount of time to wait for the browser to launch
-    LOG_POLL_RATE = 0.1  # used with poll_file to wait for logs
-    LOG_POLL_WAIT = 2.0  # used with poll_file to wait for logs
     RC_CLOSED = "CLOSED"  # target was closed by call to FFPuppet close()
     RC_EXITED = "EXITED"  # target exited/crashed/aborted/assertion failure etc...
     RC_WORKER = "WORKER"  # target was closed by worker thread
@@ -339,26 +337,10 @@ class FFPuppet(object):
         r_key = self.RC_CLOSED  # reason the process was terminated
         if self._proc is not None:
             log.debug("firefox pid: %r", self._proc.pid)
-
-            # this is hacky but I don't know how else to tell if
-            # the logs have been fully dumped to disk
-            # hopefully this can be replaced with a pref
             if not self.is_healthy():
                 log.debug("is_healthy() check failed")
-                try:
-                    target = psutil.Process(self._proc.pid)
-                    log.debug("waiting for log dumping processes to complete...")
-                    # this needs to be time limited because there could be other
-                    # busy content processes so check for 10 seconds maximum
-                    wait_end = time.time() + 10
-                    while wait_end > time.time():
-                        if target.cpu_percent(interval=0.2) < 5.0:
-                            break
-                except psutil.NoSuchProcess:
-                    pass
-
-                for fname in self._find_dumps():
-                    poll_file(fname, poll_rate=self.LOG_POLL_RATE, idle_wait=self.LOG_POLL_WAIT)
+                # wait until all open files are closed (except stdout & stderr)
+                wait_on_files(self._proc.pid, self._find_dumps(), recursive=True)
 
             # terminate the browser process if needed
             if self.is_running():
