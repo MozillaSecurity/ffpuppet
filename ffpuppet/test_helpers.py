@@ -12,7 +12,8 @@ import threading
 import time
 import unittest
 
-from .helpers import create_profile, check_prefs, poll_file, configure_sanitizers, prepare_environment
+from .helpers import create_profile, check_prefs, poll_file, configure_sanitizers, \
+                     prepare_environment, wait_on_files
 
 logging.basicConfig(level=logging.DEBUG if bool(os.getenv("DEBUG")) else logging.INFO)
 log = logging.getLogger("helpers_test")
@@ -28,7 +29,7 @@ class TestCase(unittest.TestCase):
             return self.assertRaisesRegexp(*args, **kwds)
 
 
-class HelperTests(TestCase): # pylint: disable=too-many-public-methods
+class HelperTests(TestCase):  # pylint: disable=too-many-public-methods
 
     def setUp(self):
         fd, self.tmpfn = tempfile.mkstemp(prefix="helper_test_")
@@ -308,4 +309,13 @@ class HelperTests(TestCase): # pylint: disable=too-many-public-methods
         self.assertNotIn("RUST_BACKTRACE", env)
         self.assertNotIn("TEST_FAKE", env)
 
-# TODO: add test for wait_on_files()
+    def test_08(self):
+        "test wait_on_files()"
+        with tempfile.NamedTemporaryFile() as wait_fp:
+            self.assertFalse(wait_on_files(os.getpid(), [wait_fp.name, self.tmpfn], timeout=0.1))
+        # existing but closed file
+        self.assertTrue(wait_on_files(os.getpid(), [self.tmpfn], timeout=0.1))
+        # file that does not exist
+        self.assertTrue(wait_on_files(os.getpid(), ["no_file"], timeout=0.1))
+        # empty file list
+        self.assertTrue(wait_on_files(os.getpid(), [], timeout=0.1))

@@ -2,7 +2,6 @@
 # License, v. 2.0. If a copy of the MPL was not distributed with this
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
-import itertools
 import json
 import logging
 import os
@@ -18,7 +17,8 @@ import psutil
 log = logging.getLogger("ffpuppet")  # pylint: disable=invalid-name
 
 __author__ = "Tyson Smith"
-__all__ = ("check_prefs", "create_profile", "onerror", "poll_file", "prepare_environment")
+__all__ = ("check_prefs", "create_profile", "onerror", "poll_file",
+           "prepare_environment", "wait_on_files")
 
 
 class SanitizerConfig(object):
