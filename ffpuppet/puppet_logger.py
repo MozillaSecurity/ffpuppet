@@ -27,7 +27,7 @@ class PuppetLogger(object):
     def __init__(self):
         self._logs = dict()
         self.closed = False
-        self.working_path = tempfile.mkdtemp(prefix="ffplogs_")
+        self.working_path = os.path.realpath(tempfile.mkdtemp(prefix="ffplogs_"))
 
 
     def add_log(self, log_id, logfp=None):

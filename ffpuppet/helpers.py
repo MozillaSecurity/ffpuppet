@@ -372,7 +372,7 @@ def wait_on_files(pid, wait_files, recursive=True, timeout=60):
             open_files = list()
             for target in [proc] + children:
                 try:
-                    open_files.extend([x.path for x in target.open_files()])
+                    open_files.extend([os.path.realpath(x.path) for x in target.open_files()])
                 except (psutil.AccessDenied, psutil.NoSuchProcess):
                     pass
             # check if open files are in the wait list
