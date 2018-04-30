@@ -359,8 +359,9 @@ def wait_on_files(pid, wait_files, recursive=True, timeout=60):
 
     assert timeout > -1
 
-    children = list()
     wait_end = time.time() + timeout
+    # call realpath() and lower() on each file for cross platform compatibility
+    wait_files = [os.path.realpath(x).lower() for x in wait_files]
     try:
         proc = psutil.Process(pid)
         while proc.is_running() and wait_files:
@@ -372,11 +373,11 @@ def wait_on_files(pid, wait_files, recursive=True, timeout=60):
             open_files = list()
             for target in [proc] + children:
                 try:
-                    open_files.extend([os.path.realpath(x.path) for x in target.open_files()])
+                    open_files.extend([x.path for x in target.open_files()])
                 except (psutil.AccessDenied, psutil.NoSuchProcess):
                     pass
-            # check if open files are in the wait list
-            if not any(x for x in set(open_files) if x in wait_files):
+            # check if open files are in the wait file list
+            if not any(x for x in set(open_files) if os.path.realpath(x).lower() in wait_files):
                 break
             elif wait_end <= time.time():
                 return False
