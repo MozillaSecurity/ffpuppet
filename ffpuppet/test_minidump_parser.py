@@ -31,8 +31,6 @@ TESTMDSW_BIN = os.path.join(CWD, "testmdsw", "testmdsw.exe") if sys.platform.sta
 
 MinidumpParser.MDSW_BIN = TESTMDSW_BIN
 MinidumpParser.MDSW_MAX_STACK = 8
-MinidumpParser.POLL_RATE = 0.01
-MinidumpParser.POLL_WAIT = 0.1
 
 
 class DummyLogger(object):

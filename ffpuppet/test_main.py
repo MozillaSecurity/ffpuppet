@@ -19,7 +19,6 @@ CWD = os.path.realpath(os.path.dirname(__file__))
 TESTFF_BIN = os.path.join(CWD, "testff", "testff.exe") if sys.platform.startswith('win') else os.path.join(CWD, "testff.py")
 TESTMDSW_BIN = os.path.join(CWD, "testmdsw", "testmdsw.exe") if sys.platform.startswith('win') else os.path.join(CWD, "testmdsw.py")
 
-FFPuppet.LOG_POLL_RATE = 0.01 # reduce this for testing
 FFPuppet.MDSW_BIN = TESTMDSW_BIN
 FFPuppet.MDSW_MAX_STACK = 8
 

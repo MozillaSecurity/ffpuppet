@@ -8,8 +8,6 @@ import shutil
 import subprocess
 import tempfile
 
-from .helpers import poll_file
-
 log = logging.getLogger("ffpuppet")  # pylint: disable=invalid-name
 
 __author__ = "Tyson Smith"
@@ -18,8 +16,6 @@ __all__ = ("process_minidumps")
 class MinidumpParser(object):
     MDSW_BIN = "minidump_stackwalk"
     MDSW_MAX_STACK = 150
-    POLL_RATE = 0.1
-    POLL_WAIT = 1.0
 
     def __init__(self, scan_path):
         if not os.path.isdir(scan_path):
@@ -115,7 +111,6 @@ class MinidumpParser(object):
         for count, fname in enumerate(self.dump_files, start=1):
             log_fp = cb_create_log("minidump_%02d" % count)
             file_path = os.path.join(self.dump_path, fname)
-            poll_file(file_path, poll_rate=self.POLL_RATE, idle_wait=self.POLL_WAIT)
             self._read_registers(file_path, log_fp)
             # create log for raw mdsw stack output if needed
             raw_fp = cb_create_log("raw_mdsw_%02d" % count) if self._include_raw else None

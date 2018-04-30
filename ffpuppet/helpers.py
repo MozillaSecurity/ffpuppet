@@ -17,8 +17,7 @@ import psutil
 log = logging.getLogger("ffpuppet")  # pylint: disable=invalid-name
 
 __author__ = "Tyson Smith"
-__all__ = ("check_prefs", "create_profile", "onerror", "poll_file",
-           "prepare_environment", "wait_on_files")
+__all__ = ("check_prefs", "create_profile", "onerror", "prepare_environment", "wait_on_files")
 
 
 class SanitizerConfig(object):
@@ -298,43 +297,6 @@ def prepare_environment(target_dir, sanitizer_log, env_mod=None):
                 del env[env_name]
 
     return env
-
-
-def poll_file(filename, poll_rate=0.1, idle_wait=1.5, timeout=60):
-    """
-    Wait for file modification to complete. This is done by monitoring the
-    last modified time of the specified file.
-    NOTE: This depends on file system data being updated and this might not be uniform
-    across platforms, even different file systems on the same platform may act differently.
-
-    @type filename: String
-    @param filename: Name of the file to poll.
-
-    @type poll_rate: float
-    @param poll_rate: Frequency to check the file modification time.
-
-    @type idle_wait: float
-    @param idle_wait: Amount of time that must elapse without file modification to exit.
-
-    @type timeout: float
-    @param timeout: Amount of time in seconds to poll, None will poll forever.
-
-    @rtype: int
-    @return: file size in bytes or None on failure/timeout.
-    """
-
-    assert timeout is None or timeout > idle_wait, "timeout must be greater than idle_wait time"
-    assert poll_rate <= idle_wait, "poll_rate must be less then or equal to idle_wait"
-    if not os.path.isfile(filename):
-        log.debug("Cannot poll %r. File does not exist", filename)
-        return None
-    start_time = time.time()
-    while time.time() - os.stat(filename).st_mtime < idle_wait:
-        if timeout is not None and start_time + timeout < time.time():
-            log.warning("%r was still being modified after %0.2f seconds", filename, timeout)
-            return None
-        time.sleep(poll_rate)
-    return os.stat(filename).st_size
 
 
 def wait_on_files(pid, wait_files, recursive=True, timeout=60):

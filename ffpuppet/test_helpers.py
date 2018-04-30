@@ -12,7 +12,7 @@ import threading
 import time
 import unittest
 
-from .helpers import create_profile, check_prefs, poll_file, configure_sanitizers, \
+from .helpers import create_profile, check_prefs, configure_sanitizers, \
                      prepare_environment, wait_on_files
 
 logging.basicConfig(level=logging.DEBUG if bool(os.getenv("DEBUG")) else logging.INFO)
@@ -32,8 +32,8 @@ class TestCase(unittest.TestCase):
 class HelperTests(TestCase):  # pylint: disable=too-many-public-methods
 
     def setUp(self):
-        fd, self.tmpfn = tempfile.mkstemp(prefix="helper_test_")
-        os.close(fd)
+        _fd, self.tmpfn = tempfile.mkstemp(prefix="helper_test_")
+        os.close(_fd)
         self.tmpdir = tempfile.mkdtemp(prefix="helper_test_")
 
     def tearDown(self):
@@ -97,59 +97,6 @@ class HelperTests(TestCase):  # pylint: disable=too-many-public-methods
         self.assertFalse(check_prefs(self.tmpfn, prefs_fp.name))
 
     def test_03(self):
-        "test poll_file()"
-        def populate_file(filename, size, end_token, delay, abort):
-            open(filename, "wb").close()
-            while True:
-                with open(filename, "ab") as out_fp:
-                    out_fp.write(b"a")
-                    out_fp.flush()
-                if os.stat(filename).st_size >= size:
-                    break
-                if abort.is_set():
-                    return
-                time.sleep(delay)
-            with open(filename, "ab") as out_fp:
-                out_fp.write(end_token)
-        abort_evt = threading.Event()
-        e_token = b"EOF"
-        # test with invalid file
-        self.assertIsNone(poll_file("invalid_file"))
-        # wait for a file to finish being written
-        t_size = 10
-        w_thread = threading.Thread(
-            target=populate_file,
-            args=(self.tmpfn, t_size, e_token, 0.1, abort_evt))
-        w_thread.start()
-        try:
-            poll_file(self.tmpfn)
-        finally:
-            abort_evt.set()
-            w_thread.join()
-            abort_evt.clear()
-        with open(self.tmpfn, "rb") as in_fp:
-            data = in_fp.read()
-        self.assertEqual(len(data), t_size + len(e_token))
-        self.assertTrue(data.endswith(e_token))
-        # timeout while waiting for a file to finish being written
-        t_size = 100
-        w_thread = threading.Thread(
-            target=populate_file,
-            args=(self.tmpfn, t_size, e_token, 0.05, abort_evt))
-        w_thread.start()
-        try:
-            result = poll_file(self.tmpfn, idle_wait=1.99, timeout=2)
-        finally:
-            abort_evt.set()
-            w_thread.join()
-            abort_evt.clear()
-        with open(self.tmpfn, "rb") as in_fp:
-            data = in_fp.read()
-        self.assertIsNone(result)
-        self.assertLess(len(data), t_size + len(e_token))
-        self.assertFalse(data.endswith(e_token))
-
-    def test_04(self):
         "test create_profile() extension support"
 
         # create a profile with a non-existent ext
@@ -231,7 +178,7 @@ class HelperTests(TestCase):  # pylint: disable=too-many-public-methods
         self.assertEqual(set(os.listdir(os.path.join(prof, "extensions", "good-ext-id"))),
                          {"install.rdf", "example.js"})
 
-    def test_05(self):
+    def test_04(self):
         "test configure_sanitizers()"
         is_windows = platform.system().lower().startswith("windows")
         def parse(opt_str):
@@ -283,7 +230,7 @@ class HelperTests(TestCase):  # pylint: disable=too-many-public-methods
         self.assertIn("ASAN_SYMBOLIZER_PATH", env)
         self.assertEqual(env["ASAN_SYMBOLIZER_PATH"], "blah")
 
-    def test_06(self):
+    def test_05(self):
         "test prepare_environment()"
         env = prepare_environment("", "blah")
         self.assertIn("ASAN_OPTIONS", env)
@@ -291,7 +238,7 @@ class HelperTests(TestCase):  # pylint: disable=too-many-public-methods
         self.assertIn("UBSAN_OPTIONS", env)
         self.assertIn("RUST_BACKTRACE", env)
 
-    def test_07(self):
+    def test_06(self):
         "test prepare_environment() using some predefined environment variables"
         pre = {
             "RUST_BACKTRACE":None,  # remove
@@ -309,10 +256,10 @@ class HelperTests(TestCase):  # pylint: disable=too-many-public-methods
         self.assertNotIn("RUST_BACKTRACE", env)
         self.assertNotIn("TEST_FAKE", env)
 
-    def test_08(self):
+    def test_07(self):
         "test wait_on_files()"
         with tempfile.NamedTemporaryFile() as wait_fp:
-            self.assertFalse(wait_on_files(os.getpid(), [os.path.realpath(wait_fp.name), self.tmpfn], timeout=0.1))
+            self.assertFalse(wait_on_files(os.getpid(), [wait_fp.name, self.tmpfn], timeout=0.1))
         # existing but closed file
         self.assertTrue(wait_on_files(os.getpid(), [self.tmpfn], timeout=0.1))
         # file that does not exist
