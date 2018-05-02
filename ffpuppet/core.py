@@ -376,7 +376,7 @@ class FFPuppet(object):
 
         if self._proc is not None:
             self._logs.get_fp("stderr").write(
-                b"[ffpuppet] Reason code: %s\n" % r_code.encode("utf-8"))
+                ("[ffpuppet] Reason code: %s\n" % r_code).encode("utf-8"))
             self._proc = None
 
         # close browser logger
