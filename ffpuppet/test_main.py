@@ -31,13 +31,6 @@ class TestCase(unittest.TestCase):
         if sys.platform.startswith('win') and not os.path.isfile(TESTMDSW_BIN):
             raise EnvironmentError("testmdsw.exe is missing see testmdsw.py for build instructions") # pragma: no cover
 
-    if sys.version_info.major == 2:
-
-        def assertRegex(self, *args, **kwds):
-            return self.assertRegexpMatches(*args, **kwds)
-
-        def assertRaisesRegex(self, *args, **kwds):
-            return self.assertRaisesRegexp(*args, **kwds)
 
 class MainTests(TestCase):
 
@@ -50,7 +43,7 @@ class MainTests(TestCase):
 
     def test_01(self):
         "test calling main with '-h'"
-        with self.assertRaisesRegex(SystemExit, "0"):
+        with self.assertRaises(SystemExit):
             main(["-h"])
 
     def test_02(self):

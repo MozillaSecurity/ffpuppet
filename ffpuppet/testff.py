@@ -77,7 +77,10 @@ def main():
     elif cmd == 'start_crash':
         sys.stdout.write('simulating start up crash\n')
         sys.stdout.flush()
-        sys.exit(1)
+        os.mkdir(os.path.join(profile, "minidumps"))
+        with open(os.path.join(profile, "minidumps", "fake_mini.dmp"), "w") as _:
+            pass
+        sys.exit(-11)
     elif cmd == 'invalid_js':
         with open(os.path.join(profile, 'Invalidprefs.js'), "w") as prefs_js:
             prefs_js.write("bad!")
