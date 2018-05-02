@@ -163,14 +163,6 @@ class FFPuppet(object):
         return self._logs.clone_log(log_id, offset=offset, target_file=target_file)
 
 
-    @property
-    def closed(self):
-        """
-        WARNING: This will likely go away in the near future
-        """
-        return self.reason is not None
-
-
     def is_healthy(self):
         """
         Check if the browser has crash reports but the process still running.
