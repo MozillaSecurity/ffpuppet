@@ -118,19 +118,17 @@ class PuppetTests(TestCase): # pylint: disable=too-many-public-methods
         ffp = FFPuppet()
         self.addCleanup(ffp.clean_up)
         self.assertEqual(ffp.launches, 0)
-        self.assertEqual(ffp.returncode, 0)
+        self.assertEqual(ffp.reason, ffp.RC_CLOSED)
         ffp.launch(TESTFF_BIN, location=self.tsrv.get_addr())
-        self.assertEqual(len(ffp._workers), 0) # pylint: disable=protected-access
+        self.assertEqual(len(ffp._workers), 0)  # pylint: disable=protected-access
         self.assertEqual(ffp.launches, 1)
         self.assertIsNone(ffp.wait(0))
         self.assertTrue(ffp.is_running())
         self.assertTrue(ffp.is_healthy())
         self.assertIsNone(ffp.reason)
-        self.assertIsNone(ffp.returncode)
         ffp.close()
         self.assertEqual(ffp.reason, ffp.RC_CLOSED)
-        self.assertIsNotNone(ffp.returncode)
-        self.assertIsNone(ffp._proc) # pylint: disable=protected-access
+        self.assertIsNone(ffp._proc)  # pylint: disable=protected-access
         self.assertFalse(ffp.is_running())
         self.assertFalse(ffp.is_healthy())
         self.assertIsNone(ffp.wait(10))
@@ -146,8 +144,7 @@ class PuppetTests(TestCase): # pylint: disable=too-many-public-methods
         ffp.close()
         self.assertFalse(ffp.is_running())  # process should be gone
         self.assertEqual(ffp.launches, 0)
-        self.assertEqual(ffp.reason, ffp.RC_EXITED)
-        self.assertEqual(ffp.returncode, 1)
+        self.assertEqual(ffp.reason, ffp.RC_ALERT)
 
     def test_03(self):
         "test hang on start"
@@ -198,7 +195,7 @@ class PuppetTests(TestCase): # pylint: disable=too-many-public-methods
             if fname.startswith("log_stderr"):
                 self.assertEqual(len(log_data), 3)
                 self.assertTrue(log_data[0].startswith('[ffpuppet] Launch command:'))
-                self.assertTrue(log_data[-1].startswith('[ffpuppet] Exit code:'))
+                self.assertTrue(log_data[-1].startswith('[ffpuppet] Reason code:'))
             elif fname.startswith("log_stdout"):
                 self.assertEqual(log_data[0], "hello world")
             elif fname.startswith(ffp._logs.META_FILE):  # pylint: disable=protected-access
@@ -243,7 +240,7 @@ class PuppetTests(TestCase): # pylint: disable=too-many-public-methods
         self.assertIsNotNone(ffp.wait(0))  # with a timeout of zero
         self.assertIsNotNone(ffp.wait())  # without a timeout
         ffp.close()
-        self.assertIsNotNone(ffp.returncode)
+        self.assertEqual(ffp.reason, ffp.RC_EXITED)
         with self.assertRaisesRegex(AssertionError, ""):
             ffp._terminate()  # pylint: disable=protected-access
         self.assertIsNone(ffp.wait(None))
@@ -254,7 +251,7 @@ class PuppetTests(TestCase): # pylint: disable=too-many-public-methods
         self.addCleanup(ffp.clean_up)
         self.assertIsNone(ffp.clone_log("stdout", target_file=self.tmpfn))
         ffp.launch(TESTFF_BIN, location=self.tsrv.get_addr())
-        ffp.wait(0.25) # wait for log prints
+        ffp.wait(0.25)  # wait for log prints
         # make sure logs are available
         self.assertEqual(ffp.clone_log("stdout", target_file=self.tmpfn), self.tmpfn)
         with open(self.tmpfn, "rb") as tmpfp:
@@ -288,7 +285,6 @@ class PuppetTests(TestCase): # pylint: disable=too-many-public-methods
         ffp.launch(TESTFF_BIN, location=self.tsrv.get_addr(), prefs_js=self.tmpfn, memory_limit=0x100000) # 1MB
         self.assertIsNotNone(ffp.wait(30))
         ffp.close()
-        self.assertIsNotNone(ffp.returncode)
         self.assertEqual(ffp.reason, ffp.RC_WORKER)
         self.assertEqual(len(ffp.available_logs()), 3)
         ffp.save_logs(self.logs)
@@ -324,7 +320,6 @@ class PuppetTests(TestCase): # pylint: disable=too-many-public-methods
         self.assertIsNotNone(ffp.wait(10))
         ffp.close()
         self.assertEqual(ffp.reason, ffp.RC_WORKER)
-        self.assertIsNotNone(ffp.returncode)
         self.assertEqual(len(ffp.available_logs()), 3)
         ffp.save_logs(self.logs)
         worker_log = os.path.join(self.logs, "log_ffp_worker_log_scanner.txt")
@@ -437,8 +432,8 @@ class PuppetTests(TestCase): # pylint: disable=too-many-public-methods
             with open(os.path.join(self.logs, "log_stderr.txt"), "rb") as log_fp:
                 log_data = log_fp.read()
             # verify Valgrind ran and executed the script
-            self.assertRegex(log_data, br"valgrind -q")
-            self.assertRegex(log_data, br"\[ffpuppet\] Exit code: 0")
+            self.assertIn(b"valgrind -q", log_data)
+            self.assertIn(b"[ffpuppet] Reason code: EXITED", log_data)
 
     def test_20(self):
         "test detecting invalid prefs file"
@@ -484,10 +479,8 @@ class PuppetTests(TestCase): # pylint: disable=too-many-public-methods
         limit = 0x100000 # 1MB
         ffp.launch(TESTFF_BIN, prefs_js=self.tmpfn, log_limit=limit)
         self.assertIsNotNone(ffp.wait(10))
-        self.assertIsNotNone(ffp.returncode)
         ffp.close()
         self.assertEqual(ffp.reason, ffp.RC_WORKER)
-        self.assertIsNotNone(ffp.returncode)
         ffp.save_logs(self.logs)
         total_size = 0
         for fname in os.listdir(self.logs):
@@ -604,28 +597,6 @@ class PuppetTests(TestCase): # pylint: disable=too-many-public-methods
         self.assertIsNone(ffp.wait(0))
 
     def test_28(self):
-        "test returncode"
-        with open(self.tmpfn, "w") as prefs_fp:
-            prefs_fp.write("//fftest_exit_code_3\n")
-        tsrv = HTTPTestServer()
-        self.addCleanup(tsrv.shutdown)
-        ffp = FFPuppet()
-        self.assertEqual(ffp.returncode, 0)
-        self.addCleanup(ffp.clean_up)
-        ffp.launch(TESTFF_BIN, prefs_js=self.tmpfn, location=self.tsrv.get_addr())
-        ffp.wait(10)
-        self.assertFalse(ffp.is_running())
-        # verify private member is set when using returncode property
-        self.assertIsNone(ffp._returncode)  # pylint: disable=protected-access
-        self.assertEqual(ffp.returncode, 3)
-        self.assertEqual(ffp._returncode, 3)  # pylint: disable=protected-access
-        # verify private member is set when calling close()
-        ffp._returncode = None  # pylint: disable=protected-access
-        ffp.close()
-        self.assertEqual(ffp.reason, ffp.RC_EXITED)
-        self.assertEqual(ffp.returncode, 3)
-
-    def test_29(self):
         "test launching with RR"
         if not sys.platform.startswith("linux"):
             with self.assertRaisesRegex(EnvironmentError, "RR is only supported on Linux"):
@@ -643,19 +614,21 @@ class PuppetTests(TestCase): # pylint: disable=too-many-public-methods
             ffp = FFPuppet(use_rr=True)
             self.addCleanup(ffp.clean_up)
             rr_dir = tempfile.mkdtemp(prefix="test_ffp_rr")
+            self.addCleanup(shutil.rmtree, rr_dir, onerror=onerror)
             bin_path = str(subprocess.check_output(["which", "echo"]).strip().decode("ascii"))
             # launch will fail b/c 'echo' will exit right away but that's fine
             with self.assertRaisesRegex(LaunchError, "Failure during browser startup"):
-                self.assertEqual(ffp.launch(bin_path, env_mod={"_RR_TRACE_DIR": rr_dir}), 0)
+                ffp.launch(bin_path, env_mod={"_RR_TRACE_DIR": rr_dir})
             ffp.close()
+            self.assertEqual(ffp.reason, ffp.RC_EXITED)
             ffp.save_logs(self.logs)
             with open(os.path.join(self.logs, "log_stderr.txt"), "rb") as log_fp:
                 log_data = log_fp.read()
             # verify RR ran and executed the script
-            self.assertRegex(log_data, br"rr record")
-            self.assertRegex(log_data, br"\[ffpuppet\] Exit code: 0")
+            self.assertIn(b"rr record", log_data)
+            self.assertIn(b"[ffpuppet] Reason code:", log_data)
 
-    def test_30(self):
+    def test_29(self):
         "test rmtree error handler"
         # normal profile creation
         # - just create a puppet, write a readonly file in its profile, then call close()
@@ -685,7 +658,7 @@ class PuppetTests(TestCase): # pylint: disable=too-many-public-methods
         ffp.close()
         self.assertFalse(os.path.isdir(working_prf))
 
-    def test_31(self):
+    def test_30(self):
         "test using a readonly prefs.js and extension"
         prefs = os.path.join(self.logs, "prefs.js")
         with open(prefs, "w"):

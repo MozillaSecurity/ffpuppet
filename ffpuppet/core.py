@@ -58,8 +58,9 @@ class FFPuppet(object):
     BS_PORT_MAX = 0xFFFF # bootstrap range
     BS_PORT_MIN = 0x2000 # bootstrap range
     LAUNCH_TIMEOUT_MIN = 10 # minimum amount of time to wait for the browser to launch
+    RC_ALERT = "ALERT"  # target crashed/aborted/triggered an assertion failure etc...
     RC_CLOSED = "CLOSED"  # target was closed by call to FFPuppet close()
-    RC_EXITED = "EXITED"  # target exited/crashed/aborted/assertion failure etc...
+    RC_EXITED = "EXITED"  # target exited
     RC_WORKER = "WORKER"  # target was closed by worker thread
 
     def __init__(self, use_profile=None, use_valgrind=False, use_xvfb=False, use_gdb=False, use_rr=False):
@@ -70,7 +71,6 @@ class FFPuppet(object):
         self._platform = platform.system().lower()
         self._proc = None
         self._profile_template = use_profile # profile that is used as a template
-        self._returncode = 0 # return code of target process
         self._use_valgrind = use_valgrind
         self._use_gdb = use_gdb
         self._use_rr = use_rr
@@ -163,14 +163,6 @@ class FFPuppet(object):
         return self._logs.clone_log(log_id, offset=offset, target_file=target_file)
 
 
-    @property
-    def closed(self):
-        """
-        WARNING: This will likely go away in the near future
-        """
-        return self.reason is not None
-
-
     def is_healthy(self):
         """
         Check if the browser has crash reports but the process still running.
@@ -216,23 +208,6 @@ class FFPuppet(object):
         @return: length of the current browser log in bytes.
         """
         return self._logs.log_length(log_id)
-
-
-    @property
-    def returncode(self):
-        """
-        Process exit status of the target process. Can be used with 'reason' to help gain insight
-        into process termination and better understand results.
-
-        @rtype: int or None
-        @return: process returncode if the process has run and exited otherwise None
-        """
-
-        if self._returncode is None:
-            assert self._proc is not None, "_proc and _returncode are both None"
-            # cache returncode value if available
-            self._returncode = self._proc.poll()
-        return self._returncode
 
 
     def save_logs(self, log_path, meta=False):
@@ -334,33 +309,43 @@ class FFPuppet(object):
             self._logs.close()  # make sure browser logs are also closed
             return
 
-        r_key = self.RC_CLOSED  # reason the process was terminated
         if self._proc is not None:
             log.debug("firefox pid: %r", self._proc.pid)
+            crash_dumps = self._find_dumps()
+            # set reason code
+            if crash_dumps:
+                r_code = self.RC_ALERT
+            elif self.is_running():
+                r_code = self.RC_CLOSED
+            else:
+                r_code = self.RC_EXITED
+
             if not self.is_healthy():
                 log.debug("is_healthy() check failed")
                 # wait until all open files are closed (except stdout & stderr)
-                wait_on_files(self._proc.pid, self._find_dumps(), recursive=True)
+                if not wait_on_files(self._proc.pid, crash_dumps, recursive=True):
+                    log.warning("wait_on_files() Timed out")
 
             # terminate the browser process if needed
             if self.is_running():
-                r_key = self.RC_CLOSED
                 log.debug("process needs to be terminated")
                 if self._use_valgrind:
                     self._terminate(0.1)
                 else:
                     self._terminate()
-            else:
-                r_key = self.RC_EXITED
-            self._returncode = self.wait()
+
+            # just in case check the return code
+            if self.wait() in (-6, -11):
+                r_code = self.RC_ALERT
         else:
+            r_code = self.RC_CLOSED
             log.debug("firefox process was 'None'")
 
         log.debug("cleaning up %d worker(s)...", len(self._workers))
         for worker in self._workers:
             worker.join()
             if worker.aborted.is_set():
-                r_key = self.RC_WORKER
+                r_code = self.RC_WORKER
             if not force_close and worker.log_available():
                 worker.dump_log(dst_fp=self._logs.add_log("ffp_worker_%s" % worker.name))
             worker.clean_up()
@@ -383,7 +368,7 @@ class FFPuppet(object):
 
         if self._proc is not None:
             self._logs.get_fp("stderr").write(
-                ("[ffpuppet] Exit code: %r\n" % self._returncode).encode("utf-8"))
+                ("[ffpuppet] Reason code: %s\n" % r_code).encode("utf-8"))
             self._proc = None
 
         # close browser logger
@@ -394,8 +379,8 @@ class FFPuppet(object):
             shutil.rmtree(self.profile, onerror=onerror)
             self.profile = None
 
-        log.debug("process exit reason %r", r_key)
-        self.reason = r_key
+        log.debug("exit reason code %r", r_code)
+        self.reason = r_code
 
 
     @property
@@ -555,7 +540,6 @@ class FFPuppet(object):
         memory_limit = max(memory_limit, 0)
 
         self.reason = None
-        self._returncode = None
         launch_timeout = max(launch_timeout, self.LAUNCH_TIMEOUT_MIN) # force minimum launch timeout
         log.debug("launch timeout: %d", launch_timeout)
 
