@@ -230,6 +230,11 @@ class HelperTests(TestCase):  # pylint: disable=too-many-public-methods
         self.assertIn("ASAN_SYMBOLIZER_PATH", env)
         self.assertEqual(env["ASAN_SYMBOLIZER_PATH"], "blah")
 
+        # test missing suppression file
+        env = {"ASAN_OPTIONS":"suppressions=no_a_file"}
+        with self.assertRaisesRegex(IOError, r"Suppressions file '.+?' does not exist"):
+            configure_sanitizers(env, self.tmpdir, "blah")
+
     def test_05(self):
         "test prepare_environment()"
         env = prepare_environment("", "blah")

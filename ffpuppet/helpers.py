@@ -37,6 +37,11 @@ class SanitizerConfig(object):
         for option in env[key].split(":"):
             try:
                 opt_name, opt_value = option.split("=")
+                # add a sanity check for suppression files
+                if opt_name == "suppressions":
+                    opt_value = os.path.abspath(os.path.expanduser(opt_value))
+                    if not os.path.isfile(opt_value):
+                        raise IOError("Suppressions file %r does not exist" % opt_value)
                 self._options[opt_name] = opt_value
             except ValueError:
                 log.warning("Malformed option in %r", key)
@@ -107,6 +112,7 @@ def configure_sanitizers(env, target_dir, log_path):
     lsan_config = SanitizerConfig()
     lsan_config.load_options(env, "LSAN_OPTIONS")
     lsan_config.add("max_leaks", "1")
+    lsan_config.add("print_suppressions", "false")
     env["LSAN_OPTIONS"] = lsan_config.options
 
     # setup Undefined Behavior Sanitizer options if not set manually
