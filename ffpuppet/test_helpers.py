@@ -230,6 +230,12 @@ class HelperTests(TestCase):  # pylint: disable=too-many-public-methods
         self.assertIn("ASAN_SYMBOLIZER_PATH", env)
         self.assertEqual(env["ASAN_SYMBOLIZER_PATH"], "blah")
 
+        # test suppression file
+        env = {"ASAN_OPTIONS":"suppressions=%s" % self.tmpfn}
+        configure_sanitizers(env, self.tmpdir, "blah")
+        asan_opts = parse(env["ASAN_OPTIONS"])
+        self.assertIn("suppressions", asan_opts)
+
         # test missing suppression file
         env = {"ASAN_OPTIONS":"suppressions=no_a_file"}
         with self.assertRaisesRegex(IOError, r"Suppressions file '.+?' does not exist"):
@@ -270,4 +276,4 @@ class HelperTests(TestCase):  # pylint: disable=too-many-public-methods
         # file that does not exist
         self.assertTrue(wait_on_files(os.getpid(), ["no_file"], timeout=0.1))
         # empty file list
-        self.assertTrue(wait_on_files(os.getpid(), [], timeout=0.1))
+        self.assertTrue(wait_on_files(os.getpid(), []))

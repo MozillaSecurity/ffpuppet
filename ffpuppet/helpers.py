@@ -305,7 +305,7 @@ def prepare_environment(target_dir, sanitizer_log, env_mod=None):
     return env
 
 
-def wait_on_files(pid, wait_files, recursive=True, timeout=60):
+def wait_on_files(pid, wait_files, poll_rate=0.1, recursive=True, timeout=60):
     """
     Wait for wait_files if open by a process (pid) and it's children (if recursive) to close.
 
@@ -315,21 +315,25 @@ def wait_on_files(pid, wait_files, recursive=True, timeout=60):
     @type wait_files: list
     @param wait_files: a list of files that should no longer be open by the process
 
+    @type poll_rate: float
+    @param poll_rate: Amount of time in seconds to wait between checks
+
     @type recursive: bool
     @return: Scan all children and grandchildren for open files
 
     @type timeout: float
-    @param timeout: Amount of time in seconds to poll.
+    @param timeout: Amount of time in seconds to poll
 
     @rtype: bool
     @return: True if all files were closed within timeout else False
     """
 
-    assert timeout > -1
-
+    assert poll_rate >= 0, "Invalid poll_rate %d, must be greater than or equal to 0" % poll_rate
+    assert timeout >= 0, "Invalid timeout %d, must be greater than or equal to 0" % timeout
+    assert poll_rate <= timeout, "poll_rate must be less then or equal to timeout"
     wait_end = time.time() + timeout
-    # call realpath() and lower() on each file for cross platform compatibility
-    wait_files = [os.path.realpath(x).lower() for x in wait_files]
+    # call realpath() and normcase() on each file for cross platform compatibility
+    wait_files = [os.path.normcase(os.path.realpath(x)) for x in wait_files if os.path.exists(x)]
     try:
         proc = psutil.Process(pid)
         while proc.is_running() and wait_files:
@@ -344,12 +348,13 @@ def wait_on_files(pid, wait_files, recursive=True, timeout=60):
                     open_files.extend([x.path for x in target.open_files()])
                 except (psutil.AccessDenied, psutil.NoSuchProcess):
                     pass
+            open_files = [os.path.normcase(os.path.realpath(x)) for x in set(open_files)]
             # check if open files are in the wait file list
-            if not any(x for x in set(open_files) if os.path.realpath(x).lower() in wait_files):
+            if not any(x for x in open_files if x in wait_files):
                 break
             elif wait_end <= time.time():
                 return False
+            time.sleep(poll_rate)
     except (psutil.AccessDenied, psutil.NoSuchProcess):
         pass
-
     return True
