@@ -472,9 +472,7 @@ class FFPuppet(object):
                 "--args"] + cmd # enable gdb
 
         if self._use_rr:
-            cmd = ["rr", "record",
-                   "--disable-cpuid-features", "0x80050440,0x40140400",
-                   "--disable-cpuid-features-ext", "0xfd639040,0xffffffff,0xf3ffffff"] + cmd
+            cmd = ["rr", "record"] + cmd
 
         return cmd
 
