@@ -6,6 +6,7 @@ import json
 import logging
 import os
 import platform
+import re
 import shutil
 import stat
 import tempfile
@@ -21,6 +22,8 @@ __all__ = ("check_prefs", "create_profile", "onerror", "prepare_environment", "w
 
 
 class SanitizerConfig(object):
+    re_delim = re.compile(r":(?![\\|/])")
+
     def __init__(self):
         self._options = dict()
 
@@ -34,7 +37,7 @@ class SanitizerConfig(object):
             return None
         assert isinstance(env[key], str)
         assert " " not in env[key], "%s should not contain spaces, join options with ':'" % key
-        for option in env[key].split(":"):
+        for option in self.re_delim.split(env[key]):
             try:
                 opt_name, opt_value = option.split("=")
                 # add a sanity check for suppression files

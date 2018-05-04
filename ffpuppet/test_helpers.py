@@ -8,12 +8,10 @@ import platform
 import shutil
 import sys
 import tempfile
-import threading
-import time
 import unittest
 
 from .helpers import create_profile, check_prefs, configure_sanitizers, \
-                     prepare_environment, wait_on_files
+                     prepare_environment, SanitizerConfig, wait_on_files
 
 logging.basicConfig(level=logging.DEBUG if bool(os.getenv("DEBUG")) else logging.INFO)
 log = logging.getLogger("helpers_test")
@@ -183,7 +181,7 @@ class HelperTests(TestCase):  # pylint: disable=too-many-public-methods
         is_windows = platform.system().lower().startswith("windows")
         def parse(opt_str):
             opts = dict()
-            for entry in opt_str.split(":"):
+            for entry in SanitizerConfig.re_delim.split(opt_str):
                 k, v = entry.split("=")
                 opts[k] = v
             return opts
@@ -240,6 +238,16 @@ class HelperTests(TestCase):  # pylint: disable=too-many-public-methods
         env = {"ASAN_OPTIONS":"suppressions=no_a_file"}
         with self.assertRaisesRegex(IOError, r"Suppressions file '.+?' does not exist"):
             configure_sanitizers(env, self.tmpdir, "blah")
+
+        # multiple options
+        env = {"ASAN_OPTIONS":"opt1=1:opt2=:opt3=test:opt4=x:\\foo:opt5=z:/bar:opt6=''"}
+        asan_opts = parse(env["ASAN_OPTIONS"])
+        self.assertEqual(asan_opts["opt1"], "1")
+        self.assertEqual(asan_opts["opt2"], "")
+        self.assertEqual(asan_opts["opt3"], "test")
+        self.assertEqual(asan_opts["opt4"], "x:\\foo")
+        self.assertEqual(asan_opts["opt5"], "z:/bar")
+        self.assertEqual(asan_opts["opt6"], "''")
 
     def test_05(self):
         "test prepare_environment()"
