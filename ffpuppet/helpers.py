@@ -121,6 +121,7 @@ def configure_sanitizers(env, target_dir, log_path):
     # setup Undefined Behavior Sanitizer options if not set manually
     ubsan_config = SanitizerConfig()
     ubsan_config.load_options(env, "UBSAN_OPTIONS")
+    ubsan_config.add("log_path", "'%s'" % log_path, overwrite=True)
     ubsan_config.add("print_stacktrace", "1")
     env["UBSAN_OPTIONS"] = ubsan_config.options
 
