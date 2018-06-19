@@ -323,7 +323,8 @@ class FFPuppet(object):
             if not self.is_healthy():
                 log.debug("is_healthy() check failed")
                 # wait until all open files are closed (except stdout & stderr)
-                if not wait_on_files(self._proc.pid, crash_dumps, recursive=True):
+                dump_timeout = 300 if self._use_rr else 90
+                if not wait_on_files(self._proc.pid, crash_dumps, recursive=True, timeout=dump_timeout):
                     log.warning("wait_on_files() Timed out")
 
             # terminate the browser process if needed

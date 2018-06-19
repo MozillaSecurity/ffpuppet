@@ -357,6 +357,7 @@ def wait_on_files(pid, wait_files, poll_rate=0.1, recursive=True, timeout=60):
             if not any(x for x in open_files if x in wait_files):
                 break
             elif wait_end <= time.time():
+                log.debug("Timeout waiting for: %s", ", ".join(x for x in open_files if x in wait_files))
                 return False
             time.sleep(poll_rate)
     except (psutil.AccessDenied, psutil.NoSuchProcess):
