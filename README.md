@@ -44,7 +44,7 @@ This provides access to operations that are helpful when fuzzing such as calling
 At the moment there are two versions:
 
 The [legacy](https://github.com/MozillaSecurity/fuzzpriv/tree/legacy) version (the fuzzPriv you know and love)
-can only be used with Nighty, mozilla-central builds and old versions of Firefox. The xpi is available [here](https://www.squarefree.com/extensions/domFuzzLite3.xpi).
+can only be used with Nighty, mozilla-central builds and old versions of Firefox.
 
 The [WebExtension](https://github.com/MozillaSecurity/fuzzpriv/tree/master) version can be used with any build
 that supports WebExtensions but certain features are only available when combined with [fuzzing builds](https://tools.taskcluster.net/index/gecko.v2.mozilla-central.latest.firefox/linux64-fuzzing-asan-opt).
