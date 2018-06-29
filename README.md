@@ -34,7 +34,7 @@ instrumentation (ASan). If desired, `minidump_stackwalk` should be installed in 
 it from [tooltool](https://wiki.mozilla.org/ReleaseEngineering/Applications/Tooltool). Choose the appropriate platform
 from [tooltool-manifests](https://hg.mozilla.org/mozilla-central/file/tip/testing/config/tooltool-manifests) in the
 mozilla-central tree, then open or download `releng.manifest`. Either use `tooltool.py fetch -m releng.manifest` or
-copy the digest from the file and download it from `https://api.pub.build.mozilla.org/tooltool/sha512/<digest>`.
+copy the digest from the file and download it from `https://tooltool.mozilla-releng.net/sha512/<digest>`.
 In either case, the file should be renamed to `minidump_stackwalk` and marked executable (or `minidump_stackwalk.exe`
 on Windows).
 
