@@ -234,6 +234,16 @@ class HelperTests(TestCase):  # pylint: disable=too-many-public-methods
         asan_opts = parse(env["ASAN_OPTIONS"])
         self.assertIn("suppressions", asan_opts)
 
+        # test overwrite log_path
+        env = {"ASAN_OPTIONS":"log_path='overwrite'", "UBSAN_OPTIONS":"log_path='overwrite'"}
+        configure_sanitizers(env, self.tmpdir, "blah")
+        self.assertIn("ASAN_OPTIONS", env)
+        asan_opts = parse(env["ASAN_OPTIONS"])
+        self.assertEqual(asan_opts["log_path"], "'blah'")
+        self.assertIn("UBSAN_OPTIONS", env)
+        ubsan_opts = parse(env["UBSAN_OPTIONS"])
+        self.assertEqual(ubsan_opts["log_path"], "'blah'")
+
         # test missing suppression file
         env = {"ASAN_OPTIONS":"suppressions=no_a_file"}
         with self.assertRaisesRegex(IOError, r"Suppressions file '.+?' does not exist"):
