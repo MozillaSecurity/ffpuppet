@@ -374,7 +374,7 @@ class PuppetTests(TestCase): # pylint: disable=too-many-public-methods
             ffp.close()
             ffp.save_logs(self.logs)
         with open(os.path.join(self.logs, "log_stdout.txt"), "r") as log_fp:
-            location = log_fp.read().strip()
+            location = log_fp.read().splitlines()[-2].strip()
         self.assertIn("url: file:///", location)
         location = os.path.normcase(location.split("file:///")[-1])
         self.assertFalse(location.startswith("/"))
