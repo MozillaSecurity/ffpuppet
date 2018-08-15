@@ -8,7 +8,7 @@ import re
 import sys
 import time
 
-from multiprocessing import Pool
+from multiprocessing import Process
 try:
     from urllib.request import urlopen
 except ImportError:
@@ -32,7 +32,10 @@ def main():
             sys.exit(0)
         else:
             raise RuntimeError('unknown argument: %s' % arg)
-    assert url is not None
+    if url is None:
+        sys.stdout.write('missing url\n')
+        sys.stdout.flush()
+        sys.exit(1)
     # read prefs to see how to run
     cmd = None
     exit_code = 0
@@ -68,7 +71,7 @@ def main():
     #sys.stdout.write('cmd: %s\n' % cmd)
     #sys.stdout.flush()
 
-    proc_pool = None
+    proc_pool = list()
     if cmd == 'hang':
         sys.stdout.write('hanging\n')
         sys.stdout.flush()
@@ -85,9 +88,9 @@ def main():
         with open(os.path.join(profile, 'Invalidprefs.js'), "w") as prefs_js:
             prefs_js.write("bad!")
     elif cmd in ('memory', 'multi_proc'):
-        proc_pool = Pool(processes=POOL_SIZE)
         for _ in range(POOL_SIZE):
-            proc_pool.apply_async(time.sleep, (EXIT_DELAY,))
+            proc_pool.append(Process(target=time.sleep, args=(EXIT_DELAY,)))
+            proc_pool[-1].start()
         time.sleep(.25) # wait for procs to launch
 
     target_url = None # should be set to the value passed to launch()'s 'location' arg
@@ -148,9 +151,10 @@ def main():
         time.sleep(EXIT_DELAY) # wait before closing (should be terminated before elapse)
     finally:
         # cleanup for multiprocess
-        if proc_pool is not None:
-            proc_pool.terminate()
-            proc_pool.join()
+        for proc in proc_pool:
+            if proc.is_alive():
+                proc.terminate()
+            proc.join()
     sys.exit(0)
 
 if __name__ == '__main__':
