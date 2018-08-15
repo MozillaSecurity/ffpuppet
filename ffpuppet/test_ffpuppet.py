@@ -461,8 +461,8 @@ class PuppetTests(TestCase): # pylint: disable=too-many-public-methods
     def test_22(self):
         "test parallel launches"
         ffps = list()
-        # use test pool size of 20
-        for _ in range(20):
+        # use test pool size of 10
+        for _ in range(10):
             ffps.append(FFPuppet())
             self.addCleanup(ffps[-1].clean_up)
             ffps[-1].launch(TESTFF_BIN, location=self.tsrv.get_addr())
