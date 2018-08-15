@@ -263,34 +263,46 @@ class FFPuppet(object):
     def _terminate(self, kill_delay=30):
         assert self._proc is not None
         assert isinstance(kill_delay, (float, int)) and kill_delay >= 0
-        log.debug("_terminate(kill_delay=%0.2f) called", kill_delay)
-        try:
-            target = psutil.Process(self._proc.pid)
-        except psutil.NoSuchProcess:
-            return None  # there is nothing we can do here
-        try:
-            procs = target.children()
-        except psutil.NoSuchProcess:
+
+        kill_mode = False
+        while True:
+            if kill_mode:
+                log.debug("kill_delay %d elapsed... calling kill()", kill_delay)
+            else:
+                log.debug("_terminate(kill_delay=%0.2f) called", kill_delay)
+
+            # collect processes
             procs = list()
-        # iterate over child procs and then target proc
-        for proc in procs + [target]:
             try:
-                proc.terminate()
+                procs.append(psutil.Process(self._proc.pid))
             except psutil.NoSuchProcess:
                 pass
-        # call kill() if processes did not terminate after waiting for kill_delay
-        # always wait but skip kill() pass on Windows since terminate() == kill()
-        if self.wait(kill_delay) is None and self._platform != "windows":
-            log.debug("kill_delay %d elapsed... calling kill()", kill_delay)
+            recursive = kill_mode or self._platform == "windows"
             try:
-                procs = target.children(recursive=True)
-            except psutil.NoSuchProcess:
-                procs = list()
-            for proc in procs + [target]:
+                procs += procs[0].children(recursive=recursive)
+            except (IndexError, psutil.NoSuchProcess):
+                # if parent proc does not exist look up children the long way...
+                for proc in psutil.process_iter(attrs=["ppid"]):
+                    if int(proc.info["ppid"]) == self._proc.pid:
+                        procs.append(proc)
+
+            # iterate over and terminate/kill processes
+            for proc in procs:
                 try:
-                    proc.kill()
+                    if kill_mode:
+                        proc.kill()
+                    else:
+                        proc.terminate()
                 except psutil.NoSuchProcess:
                     pass
+
+            # call kill() if processes did not terminate after waiting for kill_delay
+            # always wait but skip kill() pass on Windows since terminate() == kill()
+            if (self.wait(timeout=kill_delay) is not None
+                    or kill_mode
+                    or self._platform == "windows"):
+                break
+            kill_mode = True
 
 
     def close(self, force_close=False):
@@ -357,8 +369,9 @@ class FFPuppet(object):
             for fname in os.listdir(self._logs.working_path):
                 if not fname.startswith(self._logs.LOG_ASAN_PREFIX):
                     continue
-                tmp_file = os.path.join(self._logs.working_path, fname)
-                self._logs.add_log(fname, open(tmp_file, "rb"))
+                self._logs.add_log(
+                    fname,
+                    open(os.path.join(self._logs.working_path, fname), "rb"))
 
             # check for minidumps in the profile and dump them if possible
             if self.profile is not None:
@@ -698,11 +711,14 @@ class FFPuppet(object):
             init_soc.close()
 
 
-    def wait(self, timeout=None):
+    def wait(self, recursive=True, timeout=None):
         """
         Wait for process and children to terminate. This call will block until the process exits
         unless a timeout is specified. If a timeout of zero or greater is specified the call will
         only block until the timeout expires.
+
+        @type recursive: bool
+        @param recursive: wait for child processes to exit
 
         @type timeout: float, int or None
         @param timeout: maximum amount of time to wait for process to terminate
@@ -716,6 +732,13 @@ class FFPuppet(object):
         start_time = time.time()
         while self._proc is not None:
             retval = self._proc.poll()
+
+            if recursive and retval is not None:
+                for proc in psutil.process_iter(attrs=["ppid"]):
+                    if int(proc.info["ppid"]) == self._proc.pid:
+                        retval = None
+                        break
+
             if retval is not None:
                 return retval
             if timeout is not None and (time.time() - start_time >= timeout):
