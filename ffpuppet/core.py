@@ -278,11 +278,14 @@ class FFPuppet(object):
                 pass
             try:
                 procs += procs[0].children(recursive=mode == 1)
+                has_children = len(procs) > 1
             except (IndexError, psutil.NoSuchProcess):
+                procs = list()
                 # if parent proc does not exist look up children the long way...
                 for proc in psutil.process_iter(attrs=["ppid"]):
                     if int(proc.info["ppid"]) == self._proc.pid:
                         procs.append(proc)
+                has_children = len(procs) > 0
 
             # iterate over and terminate/kill processes
             for proc in procs:
@@ -294,7 +297,7 @@ class FFPuppet(object):
                 except psutil.NoSuchProcess:
                     pass
 
-            if self.wait(timeout=kill_delay) is not None:
+            if self.wait(recursive=has_children, timeout=kill_delay) is not None:
                 break
             log.debug("wait(timeout=%0.2f) timed out, mode %d", kill_delay, mode)
             mode += 1
@@ -583,6 +586,8 @@ class FFPuppet(object):
         sanitizer_logs = os.path.join(self._logs.working_path, self._logs.LOG_ASAN_PREFIX)
         # launch the browser
         log.debug("launch command: %r", " ".join(cmd))
+        # measure the duration between launch and bootstrap completion
+        launch_init = time.time()
         self._proc = subprocess.Popen(
             cmd,
             bufsize=0,  # unbuffered (for log scanners)
@@ -592,10 +597,8 @@ class FFPuppet(object):
             stderr=stderr,
             stdout=self._logs.get_fp("stdout"))
         log.debug("launched firefox with pid: %d", self._proc.pid)
-
         self._bootstrap_finish(init_soc, timeout=launch_timeout, url=location)
-
-        log.debug("bootstrap complete")
+        log.debug("bootstrap complete (%0.2fs)", time.time() - launch_init)
 
         if prefs_js is not None and os.path.isfile(os.path.join(self.profile, "Invalidprefs.js")):
             raise LaunchError("%r is invalid" % prefs_js)
