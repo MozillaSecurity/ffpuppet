@@ -263,23 +263,21 @@ class FFPuppet(object):
     def _terminate(self, kill_delay=30):
         assert self._proc is not None
         assert isinstance(kill_delay, (float, int)) and kill_delay >= 0
+        log.debug("_terminate(kill_delay=%0.2f) called", kill_delay)
 
-        kill_mode = False
-        while True:
-            if kill_mode:
-                log.debug("kill_delay %d elapsed... calling kill()", kill_delay)
-            else:
-                log.debug("_terminate(kill_delay=%0.2f) called", kill_delay)
-
+        # perform 2 passes with increasingly aggressive mode
+        # mode values: 0 = terminate, 1 = kill
+        # on all platforms other than windows start in terminate mode
+        mode = 1 if self._platform == "windows" else 0
+        while mode < 2:
             # collect processes
             procs = list()
             try:
                 procs.append(psutil.Process(self._proc.pid))
             except psutil.NoSuchProcess:
                 pass
-            recursive = kill_mode or self._platform == "windows"
             try:
-                procs += procs[0].children(recursive=recursive)
+                procs += procs[0].children(recursive=mode == 1)
             except (IndexError, psutil.NoSuchProcess):
                 # if parent proc does not exist look up children the long way...
                 for proc in psutil.process_iter(attrs=["ppid"]):
@@ -289,20 +287,17 @@ class FFPuppet(object):
             # iterate over and terminate/kill processes
             for proc in procs:
                 try:
-                    if kill_mode:
+                    if mode == 1:
                         proc.kill()
                     else:
                         proc.terminate()
                 except psutil.NoSuchProcess:
                     pass
 
-            # call kill() if processes did not terminate after waiting for kill_delay
-            # always wait but skip kill() pass on Windows since terminate() == kill()
-            if (self.wait(timeout=kill_delay) is not None
-                    or kill_mode
-                    or self._platform == "windows"):
+            if self.wait(timeout=kill_delay) is not None:
                 break
-            kill_mode = True
+            log.debug("wait(timeout=%0.2f) timed out, mode %d", kill_delay, mode)
+            mode += 1
 
 
     def close(self, force_close=False):
@@ -369,9 +364,7 @@ class FFPuppet(object):
             for fname in os.listdir(self._logs.working_path):
                 if not fname.startswith(self._logs.LOG_ASAN_PREFIX):
                     continue
-                self._logs.add_log(
-                    fname,
-                    open(os.path.join(self._logs.working_path, fname), "rb"))
+                self._logs.add_log(fname, open(os.path.join(self._logs.working_path, fname), "rb"))
 
             # check for minidumps in the profile and dump them if possible
             if self.profile is not None:
