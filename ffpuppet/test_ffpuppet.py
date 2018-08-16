@@ -233,12 +233,12 @@ class PuppetTests(TestCase): # pylint: disable=too-many-public-methods
         ffp.launch(TESTFF_BIN, location=self.tsrv.get_addr())
         # call when ffp._proc is running
         self.assertTrue(ffp.is_running())
-        self.assertIsNone(ffp.wait(timeout=0))
+        self.assertIsNone(ffp.wait(recursive=False, timeout=0))
         ffp._terminate()  # pylint: disable=protected-access
         # call when ffp._proc is not running
         self.assertFalse(ffp.is_running())
         self.assertIsNotNone(ffp.wait(timeout=0))  # with a timeout of zero
-        self.assertIsNotNone(ffp.wait())  # without a timeout
+        self.assertIsNotNone(ffp.wait(recursive=False))  # without a timeout
         ffp.close()
         self.assertEqual(ffp.reason, ffp.RC_EXITED)
         with self.assertRaisesRegex(AssertionError, ""):
@@ -304,6 +304,7 @@ class PuppetTests(TestCase): # pylint: disable=too-many-public-methods
         ffp.launch(TESTFF_BIN, location=self.tsrv.get_addr())
         with self.assertRaisesRegex(LaunchError, "Process is already running"):
             ffp.launch(TESTFF_BIN)
+        self.assertEqual(ffp.launches, 11)
         ffp.close()
 
     def test_11(self):
@@ -459,30 +460,17 @@ class PuppetTests(TestCase): # pylint: disable=too-many-public-methods
         self.assertIsNone(ffp.log_length("stderr"))
 
     def test_22(self):
-        "test parallel launches"
+        "test running multiple instances in parallel"
         ffps = list()
         # use test pool size of 10
         for _ in range(10):
             ffps.append(FFPuppet())
             self.addCleanup(ffps[-1].clean_up)
-        # use threads to parallelize launches calls
-        threads = list()
+            # NOTE: launching truly in parallel can DoS the test webserver
+            ffps[-1].launch(TESTFF_BIN, location=self.tsrv.get_addr())
         for ffp in ffps:
-            threads.append(threading.Thread(
-                target=ffp.launch, args=(TESTFF_BIN,), kwargs={"location": self.tsrv.get_addr()}))
-            threads[-1].start()
-        # wait for all calls to complete
-        for thr in threads:
-            thr.join()
-        # perform checks and use threads to parallelize close calls
-        threads = list()
-        for ffp in ffps:
-            self.assertTrue(ffp.is_running())
-            threads.append(threading.Thread(target=ffp.close))
-            threads[-1].start()
-        # wait for all calls to complete
-        for thr in threads:
-            thr.join()
+            self.assertEqual(ffp.launches, 1)
+            ffp.close()
 
     def test_23(self):
         "test hitting log size limit"
