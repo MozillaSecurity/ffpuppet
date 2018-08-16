@@ -285,7 +285,7 @@ class FFPuppet(object):
                 for proc in psutil.process_iter(attrs=["ppid"]):
                     if int(proc.info["ppid"]) == self._proc.pid:
                         procs.append(proc)
-                has_children = len(procs) > 0
+                has_children = bool(procs)
 
             # iterate over and terminate/kill processes
             for proc in procs:
@@ -725,20 +725,24 @@ class FFPuppet(object):
                  not exist
         """
         assert timeout is None or (isinstance(timeout, (float, int)) and timeout >= 0)
+        blocking_procs = list()
         start_time = time.time()
         while self._proc is not None:
             retval = self._proc.poll()
-
             if recursive and retval is not None:
-                for proc in psutil.process_iter(attrs=["ppid"]):
-                    if int(proc.info["ppid"]) == self._proc.pid:
-                        retval = None
-                        break
-
-            if retval is not None:
+                if not blocking_procs:
+                    # look up blocking child processes
+                    # we want to avoid calling process_iter() so store the blocking procesess
+                    for proc in psutil.process_iter(attrs=["ppid"]):
+                        if int(proc.info["ppid"]) == self._proc.pid:
+                            blocking_procs.append(proc)
+                elif blocking_procs:
+                    # check status of blocking child processes
+                    blocking_procs = [proc for proc in blocking_procs if proc.is_running()]
+            if retval is not None and not blocking_procs:
                 return retval
             if timeout is not None and (time.time() - start_time >= timeout):
-                log.debug("wait() timed out (%0.2fs)", timeout)
+                log.debug("wait() timed out (%0.2fs), %d child proc(s)", timeout, len(blocking_procs))
                 break
             time.sleep(0.1)
         return None
