@@ -465,10 +465,24 @@ class PuppetTests(TestCase): # pylint: disable=too-many-public-methods
         for _ in range(10):
             ffps.append(FFPuppet())
             self.addCleanup(ffps[-1].clean_up)
-            ffps[-1].launch(TESTFF_BIN, location=self.tsrv.get_addr())
+        # use threads to parallelize launches calls
+        threads = list()
         for ffp in ffps:
-            ffp.close()
-            self.assertEqual(ffp.reason, ffp.RC_CLOSED)
+            threads.append(threading.Thread(
+                target=ffp.launch, args=(TESTFF_BIN,), kwargs={"location": self.tsrv.get_addr()}))
+            threads[-1].start()
+        # wait for all calls to complete
+        for thr in threads:
+            thr.join()
+        # perform checks and use threads to parallelize close calls
+        threads = list()
+        for ffp in ffps:
+            self.assertTrue(ffp.is_running())
+            threads.append(threading.Thread(target=ffp.close))
+            threads[-1].start()
+        # wait for all calls to complete
+        for thr in threads:
+            thr.join()
 
     def test_23(self):
         "test hitting log size limit"
