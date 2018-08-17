@@ -26,8 +26,8 @@ logging.basicConfig(level=logging.DEBUG if bool(os.getenv("DEBUG")) else logging
 log = logging.getLogger("ffp_test")
 
 CWD = os.path.realpath(os.path.dirname(__file__))
-TESTFF_BIN = os.path.join(CWD, "testff", "testff.exe") if sys.platform.startswith('win') else os.path.join(CWD, "testff.py")
-TESTMDSW_BIN = os.path.join(CWD, "testmdsw", "testmdsw.exe") if sys.platform.startswith('win') else os.path.join(CWD, "testmdsw.py")
+TESTFF_BIN = os.path.join(CWD, "testff", "testff.exe") if sys.platform.startswith("win") else os.path.join(CWD, "testff.py")
+TESTMDSW_BIN = os.path.join(CWD, "testmdsw", "testmdsw.exe") if sys.platform.startswith("win") else os.path.join(CWD, "testmdsw.py")
 
 MinidumpParser.MDSW_BIN = TESTMDSW_BIN
 MinidumpParser.MDSW_MAX_STACK = 8
@@ -592,13 +592,30 @@ class PuppetTests(TestCase): # pylint: disable=too-many-public-methods
         self.assertIsNone(ffp.wait(timeout=0))
         c_procs = Process(ffp.get_pid()).children()
         self.assertGreater(len(c_procs), 0)
-        # terminate one of the processes
+        # terminate one of the child processes
         c_procs[-1].terminate()
+        self.assertTrue(ffp.is_running())
         ffp.close()
         self.assertFalse(ffp.is_running())
         self.assertIsNone(ffp.wait(timeout=0))
 
     def test_28(self):
+        "test multiprocess (target terminated)"
+        with open(self.tmpfn, "w") as prefs_fp:
+            prefs_fp.write("//fftest_multi_proc\n")
+        ffp = FFPuppet()
+        self.addCleanup(ffp.clean_up)
+        ffp.launch(TESTFF_BIN, prefs_js=self.tmpfn, location=self.tsrv.get_addr())
+        self.assertTrue(ffp.is_running())
+        target = Process(ffp.get_pid())
+        # terminate main process
+        target.terminate()
+        target.wait()
+        ffp.close()
+        self.assertFalse(ffp.is_running())
+        self.assertIsNone(ffp.wait(timeout=0))
+
+    def test_29(self):
         "test launching with RR"
         if not sys.platform.startswith("linux"):
             with self.assertRaisesRegex(EnvironmentError, "RR is only supported on Linux"):
@@ -630,7 +647,7 @@ class PuppetTests(TestCase): # pylint: disable=too-many-public-methods
             self.assertIn(b"rr record", log_data)
             self.assertIn(b"[ffpuppet] Reason code:", log_data)
 
-    def test_29(self):
+    def test_30(self):
         "test rmtree error handler"
         # normal profile creation
         # - just create a puppet, write a readonly file in its profile, then call close()
@@ -660,7 +677,7 @@ class PuppetTests(TestCase): # pylint: disable=too-many-public-methods
         ffp.close()
         self.assertFalse(os.path.isdir(working_prf))
 
-    def test_30(self):
+    def test_31(self):
         "test using a readonly prefs.js and extension"
         prefs = os.path.join(self.logs, "prefs.js")
         with open(prefs, "w"):
