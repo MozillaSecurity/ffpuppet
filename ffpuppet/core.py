@@ -347,9 +347,9 @@ class FFPuppet(object):
                     self._terminate()
 
             # check the process exit code
-            exit_code = self.wait(timeout=600)
+            exit_code = self._proc.poll()
             if exit_code is None:
-                raise RuntimeError("Hang waiting for browser to terminate")
+                raise RuntimeError("Failed to terminate browser")
             elif exit_code in (-6, -11):
                 r_code = self.RC_ALERT
         else:
