@@ -16,37 +16,61 @@ log = logging.getLogger("ffpuppet")  # pylint: disable=invalid-name
 
 __author__ = "Tyson Smith"
 
-def dump_to_console(log_dir, dump_limit=0x20000):
-    # order logs, make sure log_stderr is on the end
-    log_list = os.listdir(log_dir)
-    log_list.sort() # sort alphabetically
+def dump_to_console(log_dir, log_quota=0x8000):
+    """
+    Read and merge log files and format for output on the console
+
+    @type log_dir: String
+    @param log_dir: directory to scan for logs
+
+    @type log_quota: int
+    @param log_quota: maximum number of bytes to read per log
+
+    @rtype: String
+    @return: Merged log data to be displayed on the console
+    """
+
+    logs = os.listdir(log_dir)
+    if not logs:
+        return ""
+    logs.sort()  # sort alphabetically
+    # display stdout and stderr last to prevent scrolling
+    # this assumes stderr contains the relevant information
     order = ("log_stdout", "log_stderr")
     for l_order in order:
         found = None
-        for fname in log_list:
+        for fname in logs:
             if fname.startswith(l_order):
                 found = fname
                 break
         # move to the end of the print list
-        if found and log_list[-1] != found:
-            log_list.remove(found)
-            log_list.append(found)
+        if found and logs[-1] != found:
+            logs.remove(found)
+            logs.append(found)
 
-    with tempfile.SpooledTemporaryFile(max_size=0x40000, mode="w+") as out_fp:
-        for fname in log_list:
+    tailed = False
+    # merge logs
+    with tempfile.SpooledTemporaryFile(max_size=0x40000, mode="wb+") as out_fp:
+        for fname in logs:
             full_path = os.path.join(log_dir, fname)
-            fsize = os.stat(full_path).st_size / 1024.0
-            out_fp.write("\n[Dumping log %r (%0.2fKB)]\n" % (fname, fsize))
+            fsize = os.stat(full_path).st_size
+            out_fp.write(b"\n===\n")
+            out_fp.write(b"=== Dumping %r (%0.2fKB)" % (fname, fsize / 1024.0))
             with open(full_path, "rb") as log_fp:
-                out_fp.write(log_fp.read(dump_limit).decode("ascii", errors="ignore"))
-            if out_fp.tell() > dump_limit:
-                out_fp.write("\nOutput exceeds %dKB! Log tailed. " % (dump_limit / 1024))
-                out_fp.write("Use '--log' to capture full log.")
-                break
-        # python 3.2 and up only supports seeking from the start unless in binary mode
-        dump_pos = max((out_fp.tell() - dump_limit), 0)
-        out_fp.seek(dump_pos)
-        return out_fp.read()
+                # tail if needed
+                log_fp.seek(max((fsize - log_quota), 0))
+                if log_fp.tell() > 0:
+                    tailed = True
+                    out_fp.write(b" - tailed (%0.2fKB)" % (log_quota / 1024.0))
+                out_fp.write(b"\n===\n")
+                shutil.copyfileobj(log_fp, out_fp)
+        if tailed:
+            out_fp.write(b"\n===\n")
+            out_fp.write(b"=== To capture complete logs use '--log'")
+            out_fp.write(b"\n===\n")
+        out_fp.seek(0)
+        return out_fp.read().decode("ascii", errors="ignore")
+
 
 def parse_args(argv=None):
     parser = argparse.ArgumentParser(description="Firefox launcher/wrapper")
@@ -59,7 +83,8 @@ def parse_args(argv=None):
              "For example '-a ###!!! ASSERTION:' would be used to detect soft assertions.")
     parser.add_argument(
         "-d", "--dump", action="store_true",
-        help="Display browser logs on process exit")
+        help="Display browser logs on process exit. This is only meant to provide a " \
+             "summary of the logs. To collect full logs use '--log'.")
     parser.add_argument(
         "-e", "--extension", action="append",
         help="Use the fuzzPriv extension. Specify the path to the xpi or the directory " \
@@ -109,7 +134,7 @@ def parse_args(argv=None):
     return parser.parse_args(argv)
 
 
-def main(argv=None): # pylint: disable=missing-docstring
+def main(argv=None):  # pylint: disable=missing-docstring
     args = parse_args(argv)
 
     # set output verbosity
