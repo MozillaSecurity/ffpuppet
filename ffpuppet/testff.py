@@ -3,12 +3,12 @@
 # To create an exe file for testing on Windows (tested with Python 3.4):
 # python -m py2exe.build_exe -O -b 0 -d testff testff.py
 
-import os.path
+import os
 import re
 import sys
 import time
 
-from multiprocessing import Pool
+from multiprocessing import Process
 try:
     from urllib.request import urlopen
 except ImportError:
@@ -28,11 +28,16 @@ def main():
         elif arg == '-profile':
             profile = sys.argv.pop(1)
         elif arg == '--multiprocessing-fork':  # for multiproc testing on windows
+            sys.stdout.write('child process, pid: %d\n' % os.getpid())
+            sys.stdout.flush()
             time.sleep(EXIT_DELAY)
-            sys.exit(0)
+            return 0
         else:
             raise RuntimeError('unknown argument: %s' % arg)
-    assert url is not None
+    if url is None:
+        sys.stdout.write('missing url\n')
+        sys.stdout.flush()
+        return 1
     # read prefs to see how to run
     cmd = None
     exit_code = 0
@@ -68,26 +73,27 @@ def main():
     #sys.stdout.write('cmd: %s\n' % cmd)
     #sys.stdout.flush()
 
-    proc_pool = None
+    proc_pool = list()
     if cmd == 'hang':
         sys.stdout.write('hanging\n')
         sys.stdout.flush()
-        while True:
+        for _ in range(10):  # 10 minutes (basically forever)
             time.sleep(60)
+        return 1
     elif cmd == 'start_crash':
         sys.stdout.write('simulating start up crash\n')
         sys.stdout.flush()
         os.mkdir(os.path.join(profile, "minidumps"))
         with open(os.path.join(profile, "minidumps", "fake_mini.dmp"), "w") as _:
             pass
-        sys.exit(-11)
+        return -11
     elif cmd == 'invalid_js':
         with open(os.path.join(profile, 'Invalidprefs.js'), "w") as prefs_js:
             prefs_js.write("bad!")
     elif cmd in ('memory', 'multi_proc'):
-        proc_pool = Pool(processes=POOL_SIZE)
         for _ in range(POOL_SIZE):
-            proc_pool.apply_async(time.sleep, (EXIT_DELAY,))
+            proc_pool.append(Process(target=time.sleep, args=(EXIT_DELAY,)))
+            proc_pool[-1].start()
         time.sleep(.25) # wait for procs to launch
 
     target_url = None # should be set to the value passed to launch()'s 'location' arg
@@ -142,16 +148,23 @@ def main():
             sys.stdout.flush()
     elif cmd == 'exit_code':
         sys.stdout.write('exit code test\n')
-        sys.exit(exit_code)
+        return exit_code
 
     try:
+        sys.stdout.write('running... (sleep %d)\n' % EXIT_DELAY)
+        sys.stdout.flush()
         time.sleep(EXIT_DELAY) # wait before closing (should be terminated before elapse)
     finally:
         # cleanup for multiprocess
-        if proc_pool is not None:
-            proc_pool.terminate()
-            proc_pool.join()
-    sys.exit(0)
+        for proc in proc_pool:
+            if proc.is_alive():
+                proc.terminate()
+        for proc in proc_pool:
+            proc.join()
+
+    sys.stdout.write('exitting normally\n')
+    sys.stdout.flush()
+    return 0
 
 if __name__ == '__main__':
-    main()
+    sys.exit(main())

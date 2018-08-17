@@ -26,8 +26,8 @@ logging.basicConfig(level=logging.DEBUG if bool(os.getenv("DEBUG")) else logging
 log = logging.getLogger("ffp_test")
 
 CWD = os.path.realpath(os.path.dirname(__file__))
-TESTFF_BIN = os.path.join(CWD, "testff", "testff.exe") if sys.platform.startswith('win') else os.path.join(CWD, "testff.py")
-TESTMDSW_BIN = os.path.join(CWD, "testmdsw", "testmdsw.exe") if sys.platform.startswith('win') else os.path.join(CWD, "testmdsw.py")
+TESTFF_BIN = os.path.join(CWD, "testff", "testff.exe") if sys.platform.startswith("win") else os.path.join(CWD, "testff.py")
+TESTMDSW_BIN = os.path.join(CWD, "testmdsw", "testmdsw.exe") if sys.platform.startswith("win") else os.path.join(CWD, "testmdsw.py")
 
 MinidumpParser.MDSW_BIN = TESTMDSW_BIN
 MinidumpParser.MDSW_MAX_STACK = 8
@@ -122,7 +122,7 @@ class PuppetTests(TestCase): # pylint: disable=too-many-public-methods
         ffp.launch(TESTFF_BIN, location=self.tsrv.get_addr())
         self.assertEqual(len(ffp._workers), 0)  # pylint: disable=protected-access
         self.assertEqual(ffp.launches, 1)
-        self.assertIsNone(ffp.wait(0))
+        self.assertIsNone(ffp.wait(timeout=0))
         self.assertTrue(ffp.is_running())
         self.assertTrue(ffp.is_healthy())
         self.assertIsNone(ffp.reason)
@@ -131,7 +131,7 @@ class PuppetTests(TestCase): # pylint: disable=too-many-public-methods
         self.assertIsNone(ffp._proc)  # pylint: disable=protected-access
         self.assertFalse(ffp.is_running())
         self.assertFalse(ffp.is_healthy())
-        self.assertIsNone(ffp.wait(10))
+        self.assertIsNone(ffp.wait(timeout=10))
 
     def test_02(self):
         "test crash on start"
@@ -173,7 +173,7 @@ class PuppetTests(TestCase): # pylint: disable=too-many-public-methods
         ffp.close()
         ffp.save_logs(os.path.join(self.logs, "no_logs"))
         ffp.launch(TESTFF_BIN, location=self.tsrv.get_addr())
-        ffp.wait(0.25)  # wait for log prints
+        ffp.wait(timeout=0.25)  # wait for log prints
         ffp.close()
         self.assertTrue(ffp._logs.closed)  # pylint: disable=protected-access
         log_ids = ffp.available_logs()
@@ -233,17 +233,17 @@ class PuppetTests(TestCase): # pylint: disable=too-many-public-methods
         ffp.launch(TESTFF_BIN, location=self.tsrv.get_addr())
         # call when ffp._proc is running
         self.assertTrue(ffp.is_running())
-        self.assertIsNone(ffp.wait(0))
+        self.assertIsNone(ffp.wait(timeout=0))
         ffp._terminate()  # pylint: disable=protected-access
         # call when ffp._proc is not running
         self.assertFalse(ffp.is_running())
-        self.assertIsNotNone(ffp.wait(0))  # with a timeout of zero
+        self.assertIsNotNone(ffp.wait(recursive=True, timeout=0))  # with a timeout of zero
         self.assertIsNotNone(ffp.wait())  # without a timeout
         ffp.close()
         self.assertEqual(ffp.reason, ffp.RC_EXITED)
         with self.assertRaisesRegex(AssertionError, ""):
             ffp._terminate()  # pylint: disable=protected-access
-        self.assertIsNone(ffp.wait(None))
+        self.assertIsNone(ffp.wait(timeout=None))
 
     def test_08(self):
         "test clone_log()"
@@ -251,7 +251,7 @@ class PuppetTests(TestCase): # pylint: disable=too-many-public-methods
         self.addCleanup(ffp.clean_up)
         self.assertIsNone(ffp.clone_log("stdout", target_file=self.tmpfn))
         ffp.launch(TESTFF_BIN, location=self.tsrv.get_addr())
-        ffp.wait(0.25)  # wait for log prints
+        ffp.wait(timeout=0.25)  # wait for log prints
         # make sure logs are available
         self.assertEqual(ffp.clone_log("stdout", target_file=self.tmpfn), self.tmpfn)
         with open(self.tmpfn, "rb") as tmpfp:
@@ -283,7 +283,7 @@ class PuppetTests(TestCase): # pylint: disable=too-many-public-methods
         with open(self.tmpfn, 'w') as prefs:
             prefs.write('//fftest_memory\n')
         ffp.launch(TESTFF_BIN, location=self.tsrv.get_addr(), prefs_js=self.tmpfn, memory_limit=0x100000) # 1MB
-        self.assertIsNotNone(ffp.wait(30))
+        self.assertIsNotNone(ffp.wait(timeout=30))
         ffp.close()
         self.assertEqual(ffp.reason, ffp.RC_WORKER)
         self.assertEqual(len(ffp.available_logs()), 3)
@@ -304,6 +304,7 @@ class PuppetTests(TestCase): # pylint: disable=too-many-public-methods
         ffp.launch(TESTFF_BIN, location=self.tsrv.get_addr())
         with self.assertRaisesRegex(LaunchError, "Process is already running"):
             ffp.launch(TESTFF_BIN)
+        self.assertEqual(ffp.launches, 11)
         ffp.close()
 
     def test_11(self):
@@ -317,7 +318,7 @@ class PuppetTests(TestCase): # pylint: disable=too-many-public-methods
             ffp.add_abort_token(None)
         ffp.add_abort_token("###!!! ASSERTION:")
         ffp.launch(TESTFF_BIN, location=self.tsrv.get_addr(), prefs_js=self.tmpfn)
-        self.assertIsNotNone(ffp.wait(10))
+        self.assertIsNotNone(ffp.wait(timeout=60))
         ffp.close()
         self.assertEqual(ffp.reason, ffp.RC_WORKER)
         self.assertEqual(len(ffp.available_logs()), 3)
@@ -370,11 +371,11 @@ class PuppetTests(TestCase): # pylint: disable=too-many-public-methods
             # needs realpath() for OSX & normcase() for Windows
             fname = os.path.realpath(os.path.normcase(test_fp.name))
             ffp.launch(TESTFF_BIN, location=fname)
-            ffp.wait(0.25) # wait for log prints
+            ffp.wait(timeout=0.25) # wait for log prints
             ffp.close()
             ffp.save_logs(self.logs)
         with open(os.path.join(self.logs, "log_stdout.txt"), "r") as log_fp:
-            location = log_fp.read().strip()
+            location = log_fp.read().splitlines()[-2].strip()
         self.assertIn("url: file:///", location)
         location = os.path.normcase(location.split("file:///")[-1])
         self.assertFalse(location.startswith("/"))
@@ -459,16 +460,17 @@ class PuppetTests(TestCase): # pylint: disable=too-many-public-methods
         self.assertIsNone(ffp.log_length("stderr"))
 
     def test_22(self):
-        "test parallel launches"
+        "test running multiple instances in parallel"
         ffps = list()
-        # use test pool size of 20
-        for _ in range(20):
+        # use test pool size of 10
+        for _ in range(10):
             ffps.append(FFPuppet())
             self.addCleanup(ffps[-1].clean_up)
+            # NOTE: launching truly in parallel can DoS the test webserver
             ffps[-1].launch(TESTFF_BIN, location=self.tsrv.get_addr())
         for ffp in ffps:
+            self.assertEqual(ffp.launches, 1)
             ffp.close()
-            self.assertEqual(ffp.reason, ffp.RC_CLOSED)
 
     def test_23(self):
         "test hitting log size limit"
@@ -478,7 +480,7 @@ class PuppetTests(TestCase): # pylint: disable=too-many-public-methods
             prefs.write('//fftest_big_log\n')
         limit = 0x100000 # 1MB
         ffp.launch(TESTFF_BIN, prefs_js=self.tmpfn, log_limit=limit)
-        self.assertIsNotNone(ffp.wait(10))
+        self.assertIsNotNone(ffp.wait(timeout=10))
         ffp.close()
         self.assertEqual(ffp.reason, ffp.RC_WORKER)
         ffp.save_logs(self.logs)
@@ -587,16 +589,33 @@ class PuppetTests(TestCase): # pylint: disable=too-many-public-methods
         self.addCleanup(ffp.clean_up)
         ffp.launch(TESTFF_BIN, prefs_js=self.tmpfn, location=self.tsrv.get_addr())
         self.assertTrue(ffp.is_running())
-        self.assertIsNone(ffp.wait(0))
+        self.assertIsNone(ffp.wait(recursive=True, timeout=0))
         c_procs = Process(ffp.get_pid()).children()
         self.assertGreater(len(c_procs), 0)
-        # terminate one of the processes
+        # terminate one of the child processes
         c_procs[-1].terminate()
+        self.assertTrue(ffp.is_running())
         ffp.close()
         self.assertFalse(ffp.is_running())
-        self.assertIsNone(ffp.wait(0))
+        self.assertIsNone(ffp.wait(timeout=0))
 
     def test_28(self):
+        "test multiprocess (target terminated)"
+        with open(self.tmpfn, "w") as prefs_fp:
+            prefs_fp.write("//fftest_multi_proc\n")
+        ffp = FFPuppet()
+        self.addCleanup(ffp.clean_up)
+        ffp.launch(TESTFF_BIN, prefs_js=self.tmpfn, location=self.tsrv.get_addr())
+        self.assertTrue(ffp.is_running())
+        target = Process(ffp.get_pid())
+        # terminate main process
+        target.terminate()
+        target.wait()
+        ffp.close()
+        self.assertFalse(ffp.is_running())
+        self.assertIsNone(ffp.wait(timeout=0))
+
+    def test_29(self):
         "test launching with RR"
         if not sys.platform.startswith("linux"):
             with self.assertRaisesRegex(EnvironmentError, "RR is only supported on Linux"):
@@ -628,7 +647,7 @@ class PuppetTests(TestCase): # pylint: disable=too-many-public-methods
             self.assertIn(b"rr record", log_data)
             self.assertIn(b"[ffpuppet] Reason code:", log_data)
 
-    def test_29(self):
+    def test_30(self):
         "test rmtree error handler"
         # normal profile creation
         # - just create a puppet, write a readonly file in its profile, then call close()
@@ -658,7 +677,7 @@ class PuppetTests(TestCase): # pylint: disable=too-many-public-methods
         ffp.close()
         self.assertFalse(os.path.isdir(working_prf))
 
-    def test_30(self):
+    def test_31(self):
         "test using a readonly prefs.js and extension"
         prefs = os.path.join(self.logs, "prefs.js")
         with open(prefs, "w"):
