@@ -729,25 +729,28 @@ class FFPuppet(object):
                  not exist
         """
         assert timeout is None or (isinstance(timeout, (float, int)) and timeout >= 0)
-        blocking_procs = list()
+        child_procs = list()
         start_time = time.time()
         while self._proc is not None:
             retval = self._proc.poll()
-            if recursive and retval is not None:
-                if not blocking_procs:
+            if recursive:
+                recursive = False  # only do one check for child processes
+                try:
                     # look up blocking child processes
-                    # we want to avoid calling process_iter() so store the blocking processes
+                    child_procs += psutil.Process(self._proc.pid).children(recursive=True)
+                except (psutil.AccessDenied, psutil.NoSuchProcess):
+                    # browser process does not exist, do it the hard way
                     for proc in psutil.process_iter(attrs=["ppid"]):
                         # NOTE: on some OSs the ppid changes with the parent process goes away
                         if int(proc.info["ppid"]) == self._proc.pid:
-                            blocking_procs.append(proc)
-                elif blocking_procs:
-                    # check status of blocking child processes
-                    blocking_procs = [proc for proc in blocking_procs if proc.is_running()]
-            if retval is not None and not blocking_procs:
+                            child_procs.append(proc)
+            if child_procs:
+                # check status of blocking child processes
+                child_procs = [proc for proc in child_procs if proc.is_running()]
+            if retval is not None and not child_procs:
                 return retval
             if timeout is not None and (time.time() - start_time >= timeout):
-                log.debug("wait() timed out (%0.2fs), %d child proc(s)", timeout, len(blocking_procs))
+                log.debug("wait() timed out (%0.2fs), %d child proc(s)", timeout, len(child_procs))
                 break
             time.sleep(0.1)
         return None
