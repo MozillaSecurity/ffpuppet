@@ -295,7 +295,7 @@ class FFPuppet(object):
                         proc.kill()
                     else:
                         proc.terminate()
-                except psutil.NoSuchProcess:
+                except (psutil.AccessDenied, psutil.NoSuchProcess):
                     pass
 
             if self.wait(recursive=has_children, timeout=kill_delay) is not None:
