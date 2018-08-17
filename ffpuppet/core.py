@@ -737,7 +737,7 @@ class FFPuppet(object):
                 recursive = False  # only do one check for child processes
                 try:
                     # look up blocking child processes
-                    child_procs += psutil.Process(self._proc.pid).children(recursive=True)
+                    child_procs += psutil.Process(self._proc.pid).children()
                 except (psutil.AccessDenied, psutil.NoSuchProcess):
                     # browser process does not exist, do it the hard way
                     for proc in psutil.process_iter(attrs=["ppid"]):
