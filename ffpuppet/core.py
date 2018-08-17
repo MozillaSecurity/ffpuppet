@@ -282,6 +282,7 @@ class FFPuppet(object):
             except (IndexError, psutil.NoSuchProcess):
                 procs = list()
                 # if parent proc does not exist look up children the long way...
+                # NOTE: on some OSs the ppid changes with the parent process goes away
                 for proc in psutil.process_iter(attrs=["ppid"]):
                     if int(proc.info["ppid"]) == self._proc.pid:
                         procs.append(proc)
@@ -320,7 +321,7 @@ class FFPuppet(object):
             return
 
         if self._proc is not None:
-            log.debug("firefox pid: %r", self._proc.pid)
+            log.debug("browser pid: %r", self._proc.pid)
             crash_dumps = self._find_dumps()
             # set reason code
             if crash_dumps:
@@ -338,19 +339,22 @@ class FFPuppet(object):
                     log.warning("wait_on_files() Timed out")
 
             # terminate the browser process if needed
-            if self.is_running():
-                log.debug("process needs to be terminated")
+            if self.wait(timeout=0) is None:
+                log.debug("browser needs to be terminated")
                 if self._use_valgrind:
                     self._terminate(0.1)
                 else:
                     self._terminate()
 
-            # just in case check the return code
-            if self.wait() in (-6, -11):
+            # check the process exit code
+            exit_code = self.wait(timeout=600)
+            if exit_code is None:
+                raise RuntimeError("Hang waiting for browser to terminate")
+            elif exit_code in (-6, -11):
                 r_code = self.RC_ALERT
         else:
             r_code = self.RC_CLOSED
-            log.debug("firefox process was 'None'")
+            log.debug("browser process was 'None'")
 
         log.debug("cleaning up %d worker(s)...", len(self._workers))
         for worker in self._workers:
@@ -732,8 +736,9 @@ class FFPuppet(object):
             if recursive and retval is not None:
                 if not blocking_procs:
                     # look up blocking child processes
-                    # we want to avoid calling process_iter() so store the blocking procesess
+                    # we want to avoid calling process_iter() so store the blocking processes
                     for proc in psutil.process_iter(attrs=["ppid"]):
+                        # NOTE: on some OSs the ppid changes with the parent process goes away
                         if int(proc.info["ppid"]) == self._proc.pid:
                             blocking_procs.append(proc)
                 elif blocking_procs:
