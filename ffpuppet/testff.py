@@ -153,8 +153,7 @@ def main():
     try:
         sys.stdout.write('running... (sleep %d)\n' % EXIT_DELAY)
         sys.stdout.flush()
-        for _ in range(EXIT_DELAY*10):
-            time.sleep(0.1) # wait before closing (should be terminated before elapse)
+        time.sleep(EXIT_DELAY) # wait before closing (should be terminated before elapse)
     finally:
         # cleanup for multiprocess
         for proc in proc_pool:

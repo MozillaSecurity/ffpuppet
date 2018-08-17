@@ -233,12 +233,12 @@ class PuppetTests(TestCase): # pylint: disable=too-many-public-methods
         ffp.launch(TESTFF_BIN, location=self.tsrv.get_addr())
         # call when ffp._proc is running
         self.assertTrue(ffp.is_running())
-        self.assertIsNone(ffp.wait(recursive=False, timeout=0))
+        self.assertIsNone(ffp.wait(timeout=0))
         ffp._terminate()  # pylint: disable=protected-access
         # call when ffp._proc is not running
         self.assertFalse(ffp.is_running())
-        self.assertIsNotNone(ffp.wait(timeout=0))  # with a timeout of zero
-        self.assertIsNotNone(ffp.wait(recursive=False))  # without a timeout
+        self.assertIsNotNone(ffp.wait(recursive=True, timeout=0))  # with a timeout of zero
+        self.assertIsNotNone(ffp.wait())  # without a timeout
         ffp.close()
         self.assertEqual(ffp.reason, ffp.RC_EXITED)
         with self.assertRaisesRegex(AssertionError, ""):
@@ -318,7 +318,7 @@ class PuppetTests(TestCase): # pylint: disable=too-many-public-methods
             ffp.add_abort_token(None)
         ffp.add_abort_token("###!!! ASSERTION:")
         ffp.launch(TESTFF_BIN, location=self.tsrv.get_addr(), prefs_js=self.tmpfn)
-        self.assertIsNotNone(ffp.wait(timeout=10))
+        self.assertIsNotNone(ffp.wait(timeout=60))
         ffp.close()
         self.assertEqual(ffp.reason, ffp.RC_WORKER)
         self.assertEqual(len(ffp.available_logs()), 3)
@@ -589,7 +589,7 @@ class PuppetTests(TestCase): # pylint: disable=too-many-public-methods
         self.addCleanup(ffp.clean_up)
         ffp.launch(TESTFF_BIN, prefs_js=self.tmpfn, location=self.tsrv.get_addr())
         self.assertTrue(ffp.is_running())
-        self.assertIsNone(ffp.wait(timeout=0))
+        self.assertIsNone(ffp.wait(recursive=True, timeout=0))
         c_procs = Process(ffp.get_pid()).children()
         self.assertGreater(len(c_procs), 0)
         # terminate one of the child processes

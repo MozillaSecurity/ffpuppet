@@ -339,7 +339,7 @@ class FFPuppet(object):
                     log.warning("wait_on_files() Timed out")
 
             # terminate the browser process if needed
-            if self.wait(timeout=0) is None:
+            if self.wait(recursive=True, timeout=0) is None:
                 log.debug("browser needs to be terminated")
                 if self._use_valgrind:
                     self._terminate(0.1)
@@ -711,7 +711,7 @@ class FFPuppet(object):
             init_soc.close()
 
 
-    def wait(self, recursive=True, timeout=None):
+    def wait(self, recursive=False, timeout=None):
         """
         Wait for process and children to terminate. This call will block until the process exits
         unless a timeout is specified. If a timeout of zero or greater is specified the call will
