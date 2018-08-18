@@ -36,8 +36,7 @@ def dump_to_console(log_dir, log_quota=0x8000):
     logs.sort()  # sort alphabetically
     # display stdout and stderr last to prevent scrolling
     # this assumes stderr contains the relevant information
-    order = ("log_stdout", "log_stderr")
-    for l_order in order:
+    for l_order in ("log_stdout", "log_stderr"):
         found = None
         for fname in logs:
             if fname.startswith(l_order):
@@ -50,29 +49,27 @@ def dump_to_console(log_dir, log_quota=0x8000):
 
     tailed = False
     # merge logs
-    with tempfile.SpooledTemporaryFile(max_size=0x40000, mode="wb+") as out_fp:
+    with tempfile.SpooledTemporaryFile(max_size=0x40000, mode="w+") as out_fp:
         for fname in logs:
             full_path = os.path.join(log_dir, fname)
             fsize = os.stat(full_path).st_size
-            header = list()
-            header.append("\n===\n")
-            header.append("=== Dumping %r (%0.2fKB)" % (fname, fsize / 1024.0))
+            out_fp.write("\n===\n")
+            out_fp.write("=== Dumping %r (%0.2fKB)" % (fname, fsize / 1024.0))
             with open(full_path, "rb") as log_fp:
-                # tail if needed
+                # tail log if needed
                 log_fp.seek(max((fsize - log_quota), 0))
                 if log_fp.tell() > 0:
                     tailed = True
-                    header.append(" - tailed (%0.2fKB)" % (log_quota / 1024.0))
-                header.append("\n===\n")
-                # workaround for python 3.4
-                out_fp.write("".join(header).encode("ascii", errors="ignore"))
-                shutil.copyfileobj(log_fp, out_fp)
+                    out_fp.write(" - tailed (%0.2fKB)" % (log_quota / 1024.0))
+                out_fp.write("\n===\n")
+                # using decode() is a workaround for python 3.4
+                out_fp.write(log_fp.read().decode("ascii", errors="ignore"))
         if tailed:
-            out_fp.write(b"\n===\n")
-            out_fp.write(b"=== To capture complete logs use '--log'")
-            out_fp.write(b"\n===\n")
+            out_fp.write("\n===\n")
+            out_fp.write("=== To capture complete logs use '--log'")
+            out_fp.write("\n===\n")
         out_fp.seek(0)
-        return out_fp.read().decode("ascii", errors="ignore")
+        return out_fp.read()
 
 
 def parse_args(argv=None):
