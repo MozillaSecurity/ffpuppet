@@ -127,7 +127,7 @@ class FFPuppet(object):
         @return: None
         """
         assert isinstance(token, str)
-        self._abort_tokens.add(re.compile(re.escape(token)))
+        self._abort_tokens.add(re.compile(token))
 
 
     def available_logs(self):
