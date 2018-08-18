@@ -54,15 +54,18 @@ def dump_to_console(log_dir, log_quota=0x8000):
         for fname in logs:
             full_path = os.path.join(log_dir, fname)
             fsize = os.stat(full_path).st_size
-            out_fp.write(b"\n===\n")
-            out_fp.write(b"=== Dumping %r (%0.2fKB)" % (fname, fsize / 1024.0))
+            header = list()
+            header.append("\n===\n")
+            header.append("=== Dumping %r (%0.2fKB)" % (fname, fsize / 1024.0))
             with open(full_path, "rb") as log_fp:
                 # tail if needed
                 log_fp.seek(max((fsize - log_quota), 0))
                 if log_fp.tell() > 0:
                     tailed = True
-                    out_fp.write(b" - tailed (%0.2fKB)" % (log_quota / 1024.0))
-                out_fp.write(b"\n===\n")
+                    header.append(" - tailed (%0.2fKB)" % (log_quota / 1024.0))
+                header.append("\n===\n")
+                # workaround for python 3.2
+                log_fp.write("".join(header).encode("ascii", errors="ignore"))
                 shutil.copyfileobj(log_fp, out_fp)
         if tailed:
             out_fp.write(b"\n===\n")
