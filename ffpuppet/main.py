@@ -64,7 +64,7 @@ def dump_to_console(log_dir, log_quota=0x8000):
                     tailed = True
                     header.append(" - tailed (%0.2fKB)" % (log_quota / 1024.0))
                 header.append("\n===\n")
-                # workaround for python 3.2
+                # workaround for python 3.4
                 out_fp.write("".join(header).encode("ascii", errors="ignore"))
                 shutil.copyfileobj(log_fp, out_fp)
         if tailed:
