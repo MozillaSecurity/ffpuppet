@@ -237,7 +237,7 @@ class PuppetTests(TestCase): # pylint: disable=too-many-public-methods
         ffp._terminate()  # pylint: disable=protected-access
         # call when ffp._proc is not running
         self.assertFalse(ffp.is_running())
-        self.assertIsNotNone(ffp.wait(recursive=True, timeout=0))  # with a timeout of zero
+        self.assertIsNotNone(ffp.wait(timeout=0))  # with a timeout of zero
         self.assertIsNotNone(ffp.wait())  # without a timeout
         ffp.close()
         self.assertEqual(ffp.reason, ffp.RC_EXITED)
@@ -313,10 +313,11 @@ class PuppetTests(TestCase): # pylint: disable=too-many-public-methods
             prefs.write('//fftest_soft_assert\n')
         ffp = FFPuppet()
         self.addCleanup(ffp.clean_up)
-        ffp.add_abort_token(re.compile(r"TEST\dREGEX\.+"))
-        with self.assertRaisesRegex(TypeError, "Expecting 'str' or 're._pattern_type' got: 'NoneType'"):
+        ffp.add_abort_token(r"TEST\dREGEX\.+")
+        ffp.add_abort_token("simple_string")
+        with self.assertRaises(AssertionError):
             ffp.add_abort_token(None)
-        ffp.add_abort_token("###!!! ASSERTION:")
+        ffp.add_abort_token(r"ASSERTION:\s\w+")
         ffp.launch(TESTFF_BIN, location=self.tsrv.get_addr(), prefs_js=self.tmpfn)
         self.assertIsNotNone(ffp.wait(timeout=60))
         ffp.close()
@@ -326,7 +327,7 @@ class PuppetTests(TestCase): # pylint: disable=too-many-public-methods
         worker_log = os.path.join(self.logs, "log_ffp_worker_log_scanner.txt")
         self.assertTrue(os.path.isfile(worker_log))
         with open(worker_log, "rb") as log_fp:
-            self.assertIn(b"TOKEN_LOCATED", log_fp.read())
+            self.assertIn(b"TOKEN_LOCATED: ASSERTION: test", log_fp.read())
 
     def test_12(self):
         "test using an existing profile directory"
