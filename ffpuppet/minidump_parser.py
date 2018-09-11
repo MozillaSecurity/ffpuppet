@@ -117,7 +117,7 @@ class MinidumpParser(object):
             self._read_stacktrace(file_path, log_fp, raw_fp)
             if log_fp.tell() < 1:
                 log.warning("minidump_stackwalk log was empty (minidump_%02d)", count)
-                log_fp.write(b"WARNING: minidump_stackwalk log was empty (minidump_%02d)\n" % count)
+                log_fp.write(b"WARNING: minidump_stackwalk log was empty\n")
                 bytes_formatted = "{:,}".format(os.stat(file_path).st_size)
                 log.warning("%r was %s bytes", fname, bytes_formatted)
                 log_fp.write(("%r was %s bytes\n" % (fname, bytes_formatted)).encode("ascii"))
