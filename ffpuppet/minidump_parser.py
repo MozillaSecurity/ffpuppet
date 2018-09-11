@@ -44,7 +44,7 @@ class MinidumpParser(object):
                 err_fp.close()
 
         if ret_val != 0:
-            log.warning("minidump_stackwalk %s returned %r", " ".join(extra_flags), ret_val)
+            log.warning("%r returned %r", " ".join(cmd), ret_val)
 
         out_fp.seek(0)
 
@@ -116,8 +116,11 @@ class MinidumpParser(object):
             raw_fp = cb_create_log("raw_mdsw_%02d" % count) if self._include_raw else None
             self._read_stacktrace(file_path, log_fp, raw_fp)
             if log_fp.tell() < 1:
-                log.warning("minidump_stackwalk log was empty")
-                log_fp.write(b"WARNING: minidump_stackwalk log was empty")
+                log.warning("minidump_stackwalk log was empty (minidump_%02d)", count)
+                log_fp.write(b"WARNING: minidump_stackwalk log was empty (minidump_%02d)\n" % count)
+                bytes_formatted = "{:,}".format(os.stat(file_path).st_size)
+                log.warning("%r was %s bytes", fname, bytes_formatted)
+                log_fp.write(("%r was %s bytes\n" % (fname, bytes_formatted)).encode("ascii"))
 
 
     @staticmethod
