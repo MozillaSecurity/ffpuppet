@@ -14,20 +14,22 @@ __author__ = "Tyson Smith"
 __all__ = ("process_minidumps")
 
 class MinidumpParser(object):
+    FAILURE_DIR = None
     MDSW_BIN = "minidump_stackwalk"
     MDSW_MAX_STACK = 150
 
-    def __init__(self, scan_path):
+    def __init__(self, scan_path, record_failures=True):
         if not os.path.isdir(scan_path):
             raise IOError("scan_path does not exist: %r" % scan_path)
-
         self.dump_path = scan_path
         self.dump_files = {fname for fname in os.listdir(self.dump_path) if fname.endswith(".dmp")}
         self.symbols_path = None
         self._include_raw = os.environ.get("FFP_DEBUG_MDSW") is not None
+        self._record_failures = record_failures  # mdsw failure reporting
+        self._failures = set()  # mdsw failures that have been recorded
 
 
-    def _call_mdsw(self, dump_file, out_fp, extra_flags=None, include_stderr=False):
+    def _call_mdsw(self, dump_file, out_fp, extra_flags=None):
         cmd = [MinidumpParser.MDSW_BIN]
         if extra_flags is None:
             extra_flags = list()
@@ -35,16 +37,24 @@ class MinidumpParser(object):
         cmd.append(dump_file)
         cmd.append(self.symbols_path)
 
-        try:
-            err_fp = out_fp if include_stderr else open(os.devnull, "w")
+        with tempfile.TemporaryFile() as err_fp:
             ret_val = subprocess.call(cmd, stdout=out_fp, stderr=err_fp)
-        finally:
-            if not include_stderr:
-                # close devnull
-                err_fp.close()
-
-        if ret_val != 0:
-            log.warning("%r returned %r", " ".join(cmd), ret_val)
+            # if mdsw fails save the dmp file and the logs
+            if ret_val != 0:
+                log.warning("%r returned %r", " ".join(cmd), ret_val)
+                if self._record_failures and os.path.basename(dump_file) not in self._failures:
+                    report_dir = tempfile.mkdtemp(prefix="mdsw_err_", dir=self.FAILURE_DIR)
+                    shutil.copy(dump_file, report_dir)
+                    with open(os.path.join(report_dir, "mdsw_cmd.txt"), "wb") as log_fp:
+                        log_fp.write((" ".join(cmd)).encode("ascii"))
+                    err_fp.seek(0)
+                    with open(os.path.join(report_dir, "mdsw_stderr.txt"), "wb") as log_fp:
+                        shutil.copyfileobj(err_fp, log_fp, 0x10000)
+                    out_fp.seek(0)
+                    with open(os.path.join(report_dir, "mdsw_stdout.txt"), "wb") as log_fp:
+                        shutil.copyfileobj(out_fp, log_fp, 0x10000)
+                    self._failures.add(os.path.basename(dump_file))
+                    log.warning("mdsw failure can be found @ %r", report_dir)
 
         out_fp.seek(0)
 
@@ -72,8 +82,7 @@ class MinidumpParser(object):
     def _read_stacktrace(self, dump_file, log_fp, raw_fp=None):
         log.debug("calling minidump_stackwalk -m on %s", dump_file)
         with tempfile.TemporaryFile() as out_fp:
-            include_stderr = raw_fp is not None
-            self._call_mdsw(dump_file, out_fp, extra_flags=["-m"], include_stderr=include_stderr)
+            self._call_mdsw(dump_file, out_fp, extra_flags=["-m"])
             if raw_fp is not None:
                 shutil.copyfileobj(out_fp, raw_fp, 0x10000)  # read in 64K chunks
                 out_fp.seek(0)
@@ -118,9 +127,6 @@ class MinidumpParser(object):
             if log_fp.tell() < 1:
                 log.warning("minidump_stackwalk log was empty (minidump_%02d)", count)
                 log_fp.write(b"WARNING: minidump_stackwalk log was empty\n")
-                bytes_formatted = "{:,}".format(os.stat(file_path).st_size)
-                log.warning("%r was %s bytes", fname, bytes_formatted)
-                log_fp.write(("%r was %s bytes\n" % (fname, bytes_formatted)).encode("ascii"))
 
 
     @staticmethod

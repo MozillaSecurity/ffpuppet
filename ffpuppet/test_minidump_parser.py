@@ -74,6 +74,7 @@ class MinidumpParserTests(TestCase):  # pylint: disable=too-many-public-methods
         fd, self.tmpfn = tempfile.mkstemp(prefix="helper_test_")
         os.close(fd)
         self.tmpdir = tempfile.mkdtemp(prefix="helper_test_")
+        MinidumpParser.FAILURE_DIR = self.tmpdir
 
     def tearDown(self):
         if os.path.isfile(self.tmpfn):
@@ -261,3 +262,17 @@ class MinidumpParserTests(TestCase):  # pylint: disable=too-many-public-methods
         self.assertEqual(len(md_lines), 6)  # only the interesting stack info should be in here
         self.assertTrue(md_lines[-4].startswith(b"0|0|"))
         self.assertTrue(md_lines[-1].startswith(b"0|3|"))
+
+    def test_12(self):
+        "test mdsw failure processing dmp files"
+        with open(os.path.join(self.tmpdir, "test.dmp"), "w") as out_fp:
+            out_fp.write("return=1")
+        process_minidumps(self.tmpdir, self.tmpdir, self.lgr.create)
+        err_path = None
+        for fname in os.listdir(self.tmpdir):
+            if fname.startswith("mdsw_err_"):
+                err_path = os.path.join(self.tmpdir, fname)
+                break
+        self.assertIsNotNone(err_path)
+        self.assertTrue(os.path.isdir(err_path))
+        self.assertEqual(len(os.listdir(err_path)), 4)
