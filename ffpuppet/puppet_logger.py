@@ -7,7 +7,6 @@ import logging
 import os
 import shutil
 import tempfile
-import time
 
 from .helpers import onerror
 
@@ -26,8 +25,9 @@ class PuppetLogger(object):
 
     def __init__(self):
         self._logs = dict()
-        self.closed = False
-        self.working_path = os.path.realpath(tempfile.mkdtemp(prefix="ffplogs_"))
+        self.closed = True
+        self.working_path = None
+        self.reset()
 
 
     def add_log(self, log_id, logfp=None):
@@ -68,7 +68,10 @@ class PuppetLogger(object):
         @rtype: None
         @return: None
         """
-        self.close()
+
+        if not self.closed:
+            self.close()
+
         for lfp in self._logs.values():
             if lfp.name is not None and os.path.isfile(lfp.name):
                 os.remove(lfp.name)
@@ -133,7 +136,7 @@ class PuppetLogger(object):
             raise IOError("log file %r does not exist" % cur_log.name)
         try:
             cur_log.flush()
-        except ValueError: # ignore exception if file is closed
+        except ValueError:  # ignore exception if file is closed
             pass
         return cur_log
 
@@ -167,11 +170,11 @@ class PuppetLogger(object):
         """
 
         tmp_fd, log_file = tempfile.mkstemp(
-            suffix="_log.txt",
-            prefix=time.strftime("ffp_%Y-%m-%d_%H-%M-%S_"))
+            suffix=".txt",
+            prefix="ffp_log_")
         os.close(tmp_fd)
 
-        # open with 'open' so the file object 'name' attribute is correct
+        # use open() so the file object 'name' attribute is correct
         return open(log_file, mode)
 
 
@@ -184,7 +187,7 @@ class PuppetLogger(object):
         """
         self.clean_up()
         self.closed = False
-        self.working_path = tempfile.mkdtemp(prefix="ffplogs_")
+        self.working_path = os.path.realpath(tempfile.mkdtemp(prefix="ffplogs_"))
 
 
     def save_logs(self, log_path, meta=False):
@@ -219,4 +222,4 @@ class PuppetLogger(object):
 
         if meta_map is not None:
             with open(os.path.join(log_path, self.META_FILE), "w") as json_fp:
-                json.dump(meta_map, json_fp)
+                json.dump(meta_map, json_fp, indent=2, sort_keys=True)
