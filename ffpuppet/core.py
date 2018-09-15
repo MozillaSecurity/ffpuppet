@@ -276,7 +276,6 @@ class FFPuppet(object):
                 procs += procs[0].children(recursive=mode == 1)
                 has_children = len(procs) > 1
             except (IndexError, psutil.NoSuchProcess):
-                procs = list()
                 # if parent proc does not exist look up children the long way...
                 # NOTE: on some OSs the ppid changes with the parent process goes away
                 for proc in psutil.process_iter(attrs=["ppid"]):
@@ -544,11 +543,10 @@ class FFPuppet(object):
             elif re.match(r"http(s)?://", location, re.IGNORECASE) is None:
                 raise IOError("Cannot find %r" % location)
 
+        self.reason = None
         log_limit = max(log_limit, 0)
         memory_limit = max(memory_limit, 0)
-
-        self.reason = None
-        launch_timeout = max(launch_timeout, self.LAUNCH_TIMEOUT_MIN) # force minimum launch timeout
+        launch_timeout = max(launch_timeout, self.LAUNCH_TIMEOUT_MIN)
         log.debug("launch timeout: %d", launch_timeout)
 
         # create and modify a profile
@@ -576,7 +574,7 @@ class FFPuppet(object):
             env_mod["G_DEBUG"] = "gc-friendly"
 
         # open logs
-        self._logs.reset() # clean up existing log files
+        self._logs.reset()  # clean up existing log files
         self._logs.add_log("stdout")
         stderr = self._logs.add_log("stderr")
         stderr.write(b"[ffpuppet] Launch command: ")
