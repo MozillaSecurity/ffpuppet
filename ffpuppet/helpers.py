@@ -353,7 +353,7 @@ def wait_on_files(pid, wait_files, poll_rate=0.1, recursive=True, timeout=60):
     assert poll_rate <= timeout, "poll_rate must be less then or equal to timeout"
     wait_end = time.time() + timeout
     # call realpath() and normcase() on each file for cross platform compatibility
-    wait_files = [os.path.normcase(os.path.realpath(x)) for x in wait_files if os.path.exists(x)]
+    wait_files = {os.path.normcase(os.path.realpath(x)) for x in wait_files if os.path.exists(x)}
     try:
         proc = psutil.Process(pid)
         while proc.is_running() and wait_files:
@@ -362,15 +362,15 @@ def wait_on_files(pid, wait_files, poll_rate=0.1, recursive=True, timeout=60):
                 children = proc.children(recursive=True) if recursive else list()
             except (psutil.AccessDenied, psutil.NoSuchProcess):
                 children = list()
-            open_files = list()
+            open_files = set()
             for target in [proc] + children:
                 try:
-                    open_files.extend([x.path for x in target.open_files()])
+                    open_files.update(
+                        {os.path.normcase(os.path.realpath(x.path)) for x in target.open_files()})
                 except (psutil.AccessDenied, psutil.NoSuchProcess):
                     pass
-            open_files = [os.path.normcase(os.path.realpath(x)) for x in set(open_files)]
-            # check if open files are in the wait file list
-            if not any(x for x in open_files if x in wait_files):
+            # check if any open files are in the wait file list
+            if not wait_files.intersection(open_files):
                 break
             elif wait_end <= time.time():
                 log.debug("Timeout waiting for: %s", ", ".join(x for x in open_files if x in wait_files))
