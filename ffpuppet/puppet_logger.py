@@ -46,7 +46,7 @@ class PuppetLogger(object):
         assert log_id not in self._logs
         assert not self.closed
         if logfp is None:
-            logfp = PuppetLogger.open_unique()
+            logfp = PuppetLogger.open_unique(base_dir=self.working_path)
         self._logs[log_id] = logfp
         return logfp
 
@@ -72,11 +72,7 @@ class PuppetLogger(object):
         if not self.closed:
             self.close()
 
-        for lfp in self._logs.values():
-            if lfp.name is not None and os.path.isfile(lfp.name):
-                os.remove(lfp.name)
         self._logs = dict()
-
         if self.working_path is not None and os.path.isdir(self.working_path):
             shutil.rmtree(self.working_path, onerror=onerror)
         self.working_path = None
@@ -158,9 +154,13 @@ class PuppetLogger(object):
 
 
     @staticmethod
-    def open_unique(mode="wb"):
+    def open_unique(base_dir=None, mode="wb"):
         """
         Create and open a unique file.
+
+        @type base_dir: String
+        @param base_dir: This is where the file will be created. If None is passed
+                         mkstemp() will use the system default.
 
         @type mode: String
         @param mode: File mode. See documentation for open().
@@ -171,7 +171,8 @@ class PuppetLogger(object):
 
         tmp_fd, log_file = tempfile.mkstemp(
             suffix=".txt",
-            prefix="ffp_log_")
+            prefix="ffp_log_",
+            dir=base_dir)
         os.close(tmp_fd)
 
         # use open() so the file object 'name' attribute is correct

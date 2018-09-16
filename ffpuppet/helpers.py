@@ -365,6 +365,8 @@ def wait_on_files(pid, wait_files, poll_rate=0.1, recursive=True, timeout=60):
             open_files = set()
             for target in [proc] + children:
                 try:
+                    # WARNING: Process.open_files() has issues on Windows!
+                    # https://psutil.readthedocs.io/en/latest/#psutil.Process.open_files
                     open_files.update(
                         {os.path.normcase(os.path.realpath(x.path)) for x in target.open_files()})
                 except (psutil.AccessDenied, psutil.NoSuchProcess):
