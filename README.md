@@ -127,3 +127,7 @@ optional arguments:
     python -m ffpuppet <firefox_binary> -p <custom_prefs.js> -d -u <testcase>
 
 This will open the provided test case file in Firefox using the provided prefs.js file and any log data (stderr, stdout, ASan logs... etc) will be dumped to the console when the browser process terminates.
+
+##### Prefs.js files
+
+prefs.js files that can be used for fuzzing or other automated testing can be found in the [fuzzdata](https://github.com/MozillaSecurity/fuzzdata/tree/master/settings/firefox) repository.
