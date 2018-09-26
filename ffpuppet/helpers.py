@@ -2,18 +2,24 @@
 # License, v. 2.0. If a copy of the MPL was not distributed with this
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
+import errno
 import json
 import logging
 import os
 import platform
+import random
 import re
 import shutil
+import socket
 import stat
 import tempfile
 import time
 
-from xml.etree import ElementTree
 import psutil
+from xml.etree import ElementTree
+
+from .exceptions import BrowserTerminatedError, BrowserTimeoutError, LaunchError
+
 
 log = logging.getLogger("ffpuppet")  # pylint: disable=invalid-name
 
@@ -57,6 +63,97 @@ class SanitizerConfig(object):
         return ":".join(["=".join([k, v]) for k, v in self._options.items()])
 
 
+class Bootstrapper(object):
+    PORT_MAX = 0xFFFF  # bootstrap range
+    PORT_MIN = 0x2000  # bootstrap range
+    PORT_RETRIES = 100  # number of attempts to find an available port
+
+    def __init__(self, poll_wait=0.25):
+        self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        if platform.system().lower().startswith("windows"):
+            self.socket.setsockopt(
+                socket.SOL_SOCKET,
+                socket.SO_EXCLUSIVEADDRUSE,  # pylint: disable=no-member
+                1)
+        self.socket.settimeout(poll_wait)
+        for _ in range(self.PORT_RETRIES):
+            try:
+                self.socket.bind(("127.0.0.1", random.randint(self.PORT_MIN, self.PORT_MAX)))
+                self.socket.listen(5)
+                break
+            except socket.error as soc_e:
+                if soc_e.errno in (errno.EADDRINUSE, 10013):
+                    # Address already in use
+                    continue
+                raise soc_e
+        else:
+            self.socket.close()
+            raise LaunchError("Could not find available port")
+
+
+    def close(self):
+        if self.socket is not None:
+            self.socket.close()
+            self.socket = None
+
+
+    @property
+    def location(self):
+        assert self.socket is not None
+        return "http://127.0.0.1:%d" % self.socket.getsockname()[1]
+
+
+    def wait(self, cb_continue, timeout=60, url=None):
+        assert self.socket is not None
+        conn = None
+        start_time = time.time()
+        time_limit = start_time + timeout
+        try:
+            # wait for browser connection
+            while conn is None:
+                try:
+                    conn, _ = self.socket.accept()
+                    conn.settimeout(timeout)
+                except socket.timeout:
+                    if time.time() >= time_limit:
+                        raise BrowserTimeoutError("Launching browser timed out (%ds)" % timeout)
+                    elif not cb_continue():
+                        raise BrowserTerminatedError("Failure during browser startup")
+                    conn = None  # browser is alive but we have not received a connection
+
+            log.debug("waiting to receive browser connection data")
+            while len(conn.recv(4096)) == 4096:
+                pass
+            log.debug("sending response with redirect url: %r", url)
+            body = "<head>" \
+                   "<meta http-equiv=\"refresh\" content=\"0; url=%s\"/>" \
+                   "</head>" % ("about:blank" if url is None else url)
+            response = "HTTP/1.1 200 OK\r\n" \
+                       "Content-Length: %d\r\n" \
+                       "Content-Type: text/html\r\n" \
+                       "Connection: close\r\n\r\n%s" % (len(body), body)
+            conn.sendall(response.encode("ascii"))
+            log.debug("bootstrap complete (%0.2fs)", (time.time() - start_time))
+
+        except socket.error as soc_e:
+            raise LaunchError("Failed to launch browser: %s" % soc_e)
+
+        except socket.timeout:
+            raise BrowserTimeoutError("Connection timed out (%ds)" % timeout)
+
+        finally:
+            if conn is not None:
+                conn.close()
+
+
+def append_prefs(profile_path, prefs):
+    assert isinstance(prefs, dict)
+    with open(os.path.join(profile_path, "prefs.js"), "a") as prefs_fp:
+        prefs_fp.write("\n")  # make sure there is a newline before appending to prefs.js
+        for name, value in prefs.items():
+            prefs_fp.write("user_pref('%s', %s);\n" % (name, value))
+
+
 def check_prefs(prof_prefs, input_prefs):
     """
     Check that the current prefs.js file in use by the browser contains all the requested prefs.
@@ -89,7 +186,7 @@ def check_prefs(prof_prefs, input_prefs):
         "prefs not set %r",
         ", ".join([m_pref.lstrip("user_pref(") for m_pref in missing_prefs]))
 
-    return not bool(missing_prefs)
+    return not missing_prefs
 
 
 def configure_sanitizers(env, target_dir, log_path):

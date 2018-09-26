@@ -6,12 +6,14 @@ import logging
 import os
 import platform
 import shutil
+import socket
 import sys
 import tempfile
 import unittest
 
-from .helpers import create_profile, check_prefs, configure_sanitizers, \
-                     prepare_environment, SanitizerConfig, wait_on_files
+from .exceptions import BrowserTerminatedError, BrowserTimeoutError, LaunchError
+from .helpers import append_prefs, Bootstrapper, create_profile, check_prefs, \
+                     configure_sanitizers, prepare_environment, SanitizerConfig, wait_on_files
 
 logging.basicConfig(level=logging.DEBUG if bool(os.getenv("DEBUG")) else logging.INFO)
 log = logging.getLogger("helpers_test")
@@ -295,3 +297,45 @@ class HelperTests(TestCase):  # pylint: disable=too-many-public-methods
         self.assertTrue(wait_on_files(os.getpid(), ["no_file"], timeout=0.1))
         # empty file list
         self.assertTrue(wait_on_files(os.getpid(), []))
+
+    def test_08(self):
+        "test bootstrapper"
+        bts = Bootstrapper()
+        self.addCleanup(bts.close)
+        self.assertTrue(bts.location.startswith("http://127.0.0.1:"))
+        self.assertGreater(int(bts.location.split(":")[-1]), 1024)
+
+        #def wait(self, cb_continue, timeout=60, url=None)
+        with self.assertRaises(BrowserTimeoutError):
+            bts.wait(lambda: True, timeout=0.1)
+
+        with self.assertRaises(BrowserTerminatedError):
+            bts.wait(lambda: False)
+
+        init_soc = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self.addCleanup(init_soc.close)
+        # exhaust port range
+        if sys.platform.startswith("win"):
+            init_soc.setsockopt(socket.SOL_SOCKET, socket.SO_EXCLUSIVEADDRUSE, 1)  # pylint: disable=no-member
+        init_soc.bind(("127.0.0.1", 0))  # bind to a random free port
+        try:
+            Bootstrapper.PORT_MAX = init_soc.getsockname()[1]
+            Bootstrapper.PORT_MIN = Bootstrapper.PORT_MAX
+            with self.assertRaisesRegex(LaunchError, "Could not find available port"):
+                Bootstrapper()
+        finally:
+            Bootstrapper.PORT_MAX = 0xFFFF
+            Bootstrapper.PORT_MIN = 0x4000
+
+    def test_09(self):
+        "test append_prefs()"
+        pref_fname = os.path.join(self.tmpdir, "prefs.js")
+        with open(pref_fname, "w") as out_fp:
+            out_fp.write("user_pref('pre.existing', 1);\n")
+        append_prefs(self.tmpdir, {"test.enabled": "True", "foo": "'a1b2c3'"})
+        self.assertTrue(os.path.isfile(pref_fname))
+        with open(pref_fname, "r") as in_fp:
+            data = in_fp.read()
+        self.assertIn("user_pref('pre.existing', 1);\n", data)
+        self.assertIn("user_pref('test.enabled', True);\n", data)
+        self.assertIn("user_pref('foo', 'a1b2c3');\n", data)
