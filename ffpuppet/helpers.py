@@ -69,17 +69,17 @@ class Bootstrapper(object):
     PORT_RETRIES = 100  # number of attempts to find an available port
 
     def __init__(self, poll_wait=0.25):
-        self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self._socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         if platform.system().lower().startswith("windows"):
-            self.socket.setsockopt(
+            self._socket.setsockopt(
                 socket.SOL_SOCKET,
                 socket.SO_EXCLUSIVEADDRUSE,  # pylint: disable=no-member
                 1)
-        self.socket.settimeout(poll_wait)
+        self._socket.settimeout(poll_wait)
         for _ in range(self.PORT_RETRIES):
             try:
-                self.socket.bind(("127.0.0.1", random.randint(self.PORT_MIN, self.PORT_MAX)))
-                self.socket.listen(5)
+                self._socket.bind(("127.0.0.1", random.randint(self.PORT_MIN, self.PORT_MAX)))
+                self._socket.listen(5)
                 break
             except socket.error as soc_e:
                 if soc_e.errno in (errno.EADDRINUSE, 10013):
@@ -87,24 +87,30 @@ class Bootstrapper(object):
                     continue
                 raise soc_e
         else:
-            self.socket.close()
+            self._socket.close()
             raise LaunchError("Could not find available port")
 
 
     def close(self):
-        if self.socket is not None:
-            self.socket.close()
-            self.socket = None
+        if self._socket is not None:
+            self._socket.close()
+            self._socket = None
 
 
     @property
     def location(self):
-        assert self.socket is not None
-        return "http://127.0.0.1:%d" % self.socket.getsockname()[1]
+        assert self._socket is not None
+        return "http://127.0.0.1:%d" % self.port
+
+
+    @property
+    def port(self):
+        assert self._socket is not None
+        return self._socket.getsockname()[1]
 
 
     def wait(self, cb_continue, timeout=60, url=None):
-        assert self.socket is not None
+        assert self._socket is not None
         conn = None
         start_time = time.time()
         time_limit = start_time + timeout
@@ -112,7 +118,7 @@ class Bootstrapper(object):
             # wait for browser connection
             while conn is None:
                 try:
-                    conn, _ = self.socket.accept()
+                    conn, _ = self._socket.accept()
                     conn.settimeout(timeout)
                 except socket.timeout:
                     if time.time() >= time_limit:
