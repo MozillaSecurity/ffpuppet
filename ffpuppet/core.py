@@ -2,14 +2,11 @@
 # License, v. 2.0. If a copy of the MPL was not distributed with this
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
-import errno
 import logging
 import os
 import platform
-import random
 import re
 import shutil
-import socket
 import subprocess
 import time
 
@@ -24,7 +21,8 @@ try:
 except ImportError:
     pass
 
-from .helpers import create_profile, onerror, prepare_environment, wait_on_files
+from .exceptions import LaunchError
+from .helpers import Bootstrapper, append_prefs, create_profile, onerror, prepare_environment, wait_on_files
 from .minidump_parser import process_minidumps
 from .puppet_logger import PuppetLogger
 from .workers import log_scanner, log_size_limiter, memory_limiter
@@ -32,26 +30,7 @@ from .workers import log_scanner, log_size_limiter, memory_limiter
 log = logging.getLogger("ffpuppet")  # pylint: disable=invalid-name
 
 __author__ = "Tyson Smith"
-__all__ = ("FFPuppet", "BrowserTimeoutError", "BrowserTerminatedError", "LaunchError")
-
-
-class LaunchError(Exception):
-    """
-    Raised when the browser process does not appear to be in a functional state during launch
-    """
-    pass
-
-class BrowserTerminatedError(LaunchError):
-    """
-    Raised when the browser process goes away during launch
-    """
-    pass
-
-class BrowserTimeoutError(LaunchError):
-    """
-    Raised when the browser process appears to hang during launch
-    """
-    pass
+__all__ = ("FFPuppet")
 
 
 class FFPuppet(object):
@@ -557,46 +536,52 @@ class FFPuppet(object):
 
         # performing the bootstrap helps guarantee that the browser
         # will be loaded and ready to accept input when launch() returns
-        init_soc = self._bootstrap_start()
+        bootstrapper = Bootstrapper()
+        try:
+            prefs = {
+                "capability.policy.policynames": "'localfilelinks'",
+                "capability.policy.localfilelinks.sites": "'%s'" % bootstrapper.location,
+                "capability.policy.localfilelinks.checkloaduri.enabled": "'allAccess'"}
+            append_prefs(self.profile, prefs)
 
-        launch_args = ["http://127.0.0.1:%d" % init_soc.getsockname()[1]]
-        if safe_mode:
-            launch_args.insert(0, "-safe-mode")
+            launch_args = [bootstrapper.location]
+            if safe_mode:
+                launch_args.insert(0, "-safe-mode")
 
-        cmd = self.build_launch_cmd(
-            bin_path,
-            additional_args=launch_args)
+            cmd = self.build_launch_cmd(
+                bin_path,
+                additional_args=launch_args)
 
-        if self._use_valgrind:
-            if env_mod is None:
-                env_mod = dict()
-            # https://developer.gimp.org/api/2.0/glib/glib-running.html#G_DEBUG
-            env_mod["G_DEBUG"] = "gc-friendly"
+            if self._use_valgrind:
+                if env_mod is None:
+                    env_mod = dict()
+                # https://developer.gimp.org/api/2.0/glib/glib-running.html#G_DEBUG
+                env_mod["G_DEBUG"] = "gc-friendly"
 
-        # open logs
-        self._logs.reset()  # clean up existing log files
-        self._logs.add_log("stdout")
-        stderr = self._logs.add_log("stderr")
-        stderr.write(b"[ffpuppet] Launch command: ")
-        stderr.write(" ".join(cmd).encode("utf-8"))
-        stderr.write(b"\n\n")
-        stderr.flush()
-        sanitizer_logs = os.path.join(self._logs.working_path, self._logs.LOG_ASAN_PREFIX)
-        # launch the browser
-        log.debug("launch command: %r", " ".join(cmd))
-        # measure the duration between launch and bootstrap completion
-        launch_init = time.time()
-        self._proc = subprocess.Popen(
-            cmd,
-            bufsize=0,  # unbuffered (for log scanners)
-            creationflags=subprocess.CREATE_NEW_PROCESS_GROUP if self._platform == "windows" else 0,
-            env=prepare_environment(self._last_bin_path, sanitizer_logs, env_mod=env_mod),
-            shell=False,
-            stderr=stderr,
-            stdout=self._logs.get_fp("stdout"))
-        log.debug("launched firefox with pid: %d", self._proc.pid)
-        self._bootstrap_finish(init_soc, timeout=launch_timeout, url=location)
-        log.debug("bootstrap complete (%0.2fs)", time.time() - launch_init)
+            # clean up existing log files
+            self._logs.reset()
+            # open logs
+            self._logs.add_log("stdout")
+            stderr = self._logs.add_log("stderr")
+            stderr.write(b"[ffpuppet] Launch command: ")
+            stderr.write(" ".join(cmd).encode("utf-8"))
+            stderr.write(b"\n\n")
+            stderr.flush()
+            sanitizer_logs = os.path.join(self._logs.working_path, self._logs.LOG_ASAN_PREFIX)
+            # launch the browser
+            log.debug("launch command: %r", " ".join(cmd))
+            self._proc = subprocess.Popen(
+                cmd,
+                bufsize=0,  # unbuffered (for log scanners)
+                creationflags=subprocess.CREATE_NEW_PROCESS_GROUP if self._platform == "windows" else 0,
+                env=prepare_environment(self._last_bin_path, sanitizer_logs, env_mod=env_mod),
+                shell=False,
+                stderr=stderr,
+                stdout=self._logs.get_fp("stdout"))
+            log.debug("launched firefox with pid: %d", self._proc.pid)
+            bootstrapper.wait(self.is_healthy, timeout=launch_timeout, url=location)
+        finally:
+            bootstrapper.close()
 
         if prefs_js is not None and os.path.isfile(os.path.join(self.profile, "Invalidprefs.js")):
             raise LaunchError("%r is invalid" % prefs_js)
@@ -630,79 +615,6 @@ class FFPuppet(object):
         @return: True if the process is running otherwise False
         """
         return self._proc is not None and self._proc.poll() is None
-
-
-    def _bootstrap_start(self):
-        assert self.BS_PORT_MAX >= self.BS_PORT_MIN, "Invalid port range"
-
-        init_soc = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        if self._platform == "windows":
-            init_soc.setsockopt(
-                socket.SOL_SOCKET,
-                socket.SO_EXCLUSIVEADDRUSE,  # pylint: disable=no-member
-                1)
-        init_soc.settimeout(0.25)
-        for _ in range(100):  # number of attempts to find an available port
-            try:
-                init_soc.bind(("127.0.0.1", random.randint(self.BS_PORT_MIN, self.BS_PORT_MAX)))
-                init_soc.listen(5)
-                break
-            except socket.error as soc_e:
-                if soc_e.errno in (errno.EADDRINUSE, 10013):  # Address already in use
-                    continue
-                raise soc_e
-        else:
-            raise LaunchError("Could not find available port")
-        with open(os.path.join(self.profile, "prefs.js"), "a") as prefs_fp:
-            prefs_fp.write("\n") # make sure there is a newline before appending to prefs.js
-            prefs_fp.write("user_pref('capability.policy.policynames', 'localfilelinks');\n")
-            prefs_fp.write("user_pref('capability.policy.localfilelinks.sites', "
-                           "'http://127.0.0.1:%d');\n" % init_soc.getsockname()[1])
-            prefs_fp.write("user_pref('capability.policy.localfilelinks.checkloaduri.enabled', "
-                           "'allAccess');\n")
-        return init_soc
-
-
-    def _bootstrap_finish(self, init_soc, timeout=60, url=None):
-        conn = None
-        timer_start = time.time()
-        try:
-            # wait for browser test connection
-            while True:
-                try:
-                    conn, _ = init_soc.accept()
-                    conn.settimeout(timeout)
-                except socket.timeout:
-                    if (time.time() - timer_start) >= timeout:
-                        raise BrowserTimeoutError("Launching browser timed out (%ds)" % timeout)
-                    elif not self.is_healthy():
-                        raise BrowserTerminatedError("Failure during browser startup")
-                    continue  # browser is alive but we have not received a connection
-                break  # received connection
-
-            log.debug("waiting to receive browser test connection data")
-            while len(conn.recv(4096)) == 4096:
-                pass
-            log.debug("sending response with redirect url: %r", url)
-            response = "<head>" \
-                       "<meta http-equiv=\"refresh\" content=\"0; url=%s\"/>" \
-                       "</head>" % ("about:blank" if url is None else url)
-            response = "HTTP/1.1 200 OK\r\n" \
-                       "Content-Length: %d\r\n" \
-                       "Content-Type: text/html\r\n" \
-                       "Connection: close\r\n\r\n%s" % (len(response), response)
-            conn.sendall(response.encode("utf-8"))
-
-        except socket.error as soc_e:
-            raise LaunchError("Failed to launch browser: %s" % soc_e)
-
-        except socket.timeout:
-            raise BrowserTimeoutError("Test connection timed out (%ds)" % timeout)
-
-        finally:
-            if conn is not None:
-                conn.close()
-            init_soc.close()
 
 
     def wait(self, recursive=False, timeout=None):

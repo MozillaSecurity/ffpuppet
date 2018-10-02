@@ -18,7 +18,8 @@ except ImportError:
 
 from psutil import Process
 
-from ffpuppet import BrowserTimeoutError, BrowserTerminatedError, FFPuppet, LaunchError
+from .core import  FFPuppet
+from .exceptions import BrowserTimeoutError, BrowserTerminatedError, LaunchError
 from .helpers import onerror
 from .minidump_parser import MinidumpParser
 
@@ -565,24 +566,6 @@ class PuppetTests(TestCase): # pylint: disable=too-many-public-methods
         self.assertIn("log_minidump_03.txt", logs)
 
     def test_26(self):
-        "test exhausting bootstrap ports"
-        ffp = FFPuppet()
-        self.addCleanup(ffp.clean_up)
-        init_soc = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self.addCleanup(init_soc.close)
-        if sys.platform.startswith("win"):
-            init_soc.setsockopt(socket.SOL_SOCKET, socket.SO_EXCLUSIVEADDRUSE, 1)  # pylint: disable=no-member
-        init_soc.bind(("127.0.0.1", 0))  # bind to a random free port
-        try:
-            ffp.BS_PORT_MAX = init_soc.getsockname()[1]
-            ffp.BS_PORT_MIN = ffp.BS_PORT_MAX
-            with self.assertRaisesRegex(LaunchError, "Could not find available port"):
-                ffp.launch(TESTFF_BIN, launch_timeout=5)
-        finally:
-            ffp.BS_PORT_MAX = 0xFFFF
-            ffp.BS_PORT_MIN = 0x4000
-
-    def test_27(self):
         "test multiprocess target"
         with open(self.tmpfn, "w") as prefs_fp:
             prefs_fp.write("//fftest_multi_proc\n")
@@ -600,7 +583,7 @@ class PuppetTests(TestCase): # pylint: disable=too-many-public-methods
         self.assertFalse(ffp.is_running())
         self.assertIsNone(ffp.wait(timeout=0))
 
-    def test_28(self):
+    def test_27(self):
         "test multiprocess (target terminated)"
         with open(self.tmpfn, "w") as prefs_fp:
             prefs_fp.write("//fftest_multi_proc\n")
@@ -616,7 +599,7 @@ class PuppetTests(TestCase): # pylint: disable=too-many-public-methods
         self.assertFalse(ffp.is_running())
         self.assertIsNone(ffp.wait(timeout=0))
 
-    def test_29(self):
+    def test_28(self):
         "test launching with RR"
         if not sys.platform.startswith("linux"):
             with self.assertRaisesRegex(EnvironmentError, "RR is only supported on Linux"):
@@ -648,7 +631,7 @@ class PuppetTests(TestCase): # pylint: disable=too-many-public-methods
             self.assertIn(b"rr record", log_data)
             self.assertIn(b"[ffpuppet] Reason code:", log_data)
 
-    def test_30(self):
+    def test_29(self):
         "test rmtree error handler"
         # normal profile creation
         # - just create a puppet, write a readonly file in its profile, then call close()
@@ -678,7 +661,7 @@ class PuppetTests(TestCase): # pylint: disable=too-many-public-methods
         ffp.close()
         self.assertFalse(os.path.isdir(working_prf))
 
-    def test_31(self):
+    def test_30(self):
         "test using a readonly prefs.js and extension"
         prefs = os.path.join(self.logs, "prefs.js")
         with open(prefs, "w"):
