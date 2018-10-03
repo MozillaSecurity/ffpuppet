@@ -15,8 +15,8 @@ import stat
 import tempfile
 import time
 
-import psutil
 from xml.etree import ElementTree
+import psutil
 
 from .exceptions import BrowserTerminatedError, BrowserTimeoutError, LaunchError
 
@@ -396,6 +396,7 @@ def prepare_environment(target_dir, sanitizer_log, env_mod=None):
 
     # https://developer.gimp.org/api/2.0/glib/glib-running.html#G_SLICE
     env["G_SLICE"] = "always-malloc"
+    env["MOZ_AUTOMATION"] = "1"
     env["MOZ_CC_RUN_DURING_SHUTDOWN"] = "1"
     env["MOZ_CRASHREPORTER"] = "1"
     env["MOZ_CRASHREPORTER_NO_REPORT"] = "1"
