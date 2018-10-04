@@ -240,28 +240,22 @@ class FFPuppet(object):
         assert isinstance(kill_delay, (float, int)) and kill_delay >= 0
         log.debug("_terminate(kill_delay=%0.2f) called", kill_delay)
 
+        procs = list()
+        try:
+            procs.append(psutil.Process(self._proc.pid))
+        except psutil.NoSuchProcess:
+            pass
+        if procs:
+            try:
+                procs += procs[0].children()
+            except (psutil.AccessDenied, psutil.NoSuchProcess):
+                pass
+
         # perform 2 passes with increasingly aggressive mode
         # mode values: 0 = terminate, 1 = kill
         # on all platforms other than windows start in terminate mode
         mode = 1 if self._platform == "windows" else 0
         while mode < 2:
-            # collect processes
-            procs = list()
-            try:
-                procs.append(psutil.Process(self._proc.pid))
-            except psutil.NoSuchProcess:
-                pass
-            try:
-                procs += procs[0].children(recursive=mode == 1)
-                has_children = len(procs) > 1
-            except (IndexError, psutil.NoSuchProcess):
-                # if parent proc does not exist look up children the long way...
-                # NOTE: on some OSs the ppid changes with the parent process goes away
-                for proc in psutil.process_iter(attrs=["ppid"]):
-                    if int(proc.info["ppid"]) == self._proc.pid:
-                        procs.append(proc)
-                has_children = bool(procs)
-
             # iterate over and terminate/kill processes
             for proc in procs:
                 try:
@@ -271,8 +265,7 @@ class FFPuppet(object):
                         proc.terminate()
                 except (psutil.AccessDenied, psutil.NoSuchProcess):
                     pass
-
-            if self.wait(recursive=has_children, timeout=kill_delay) is not None:
+            if self.wait(timeout=kill_delay) is not None:
                 break
             log.debug("wait(timeout=%0.2f) timed out, mode %d", kill_delay, mode)
             mode += 1
@@ -313,7 +306,7 @@ class FFPuppet(object):
                     log.warning("wait_on_files() Timed out")
 
             # terminate the browser process if needed
-            if self.wait(recursive=True, timeout=0) is None:
+            if self.wait(timeout=0) is None:
                 log.debug("browser needs to be terminated")
                 if self._use_valgrind:
                     self._terminate(0.1)
@@ -617,14 +610,11 @@ class FFPuppet(object):
         return self._proc is not None and self._proc.poll() is None
 
 
-    def wait(self, recursive=False, timeout=None):
+    def wait(self, timeout=None):
         """
         Wait for process and children to terminate. This call will block until the process exits
         unless a timeout is specified. If a timeout of zero or greater is specified the call will
         only block until the timeout expires.
-
-        @type recursive: bool
-        @param recursive: wait for child processes to exit
 
         @type timeout: float, int or None
         @param timeout: maximum amount of time to wait for process to terminate
@@ -635,28 +625,13 @@ class FFPuppet(object):
                  not exist
         """
         assert timeout is None or (isinstance(timeout, (float, int)) and timeout >= 0)
-        child_procs = list()
         start_time = time.time()
         while self._proc is not None:
             retval = self._proc.poll()
-            if recursive:
-                recursive = False  # only do one check for child processes
-                try:
-                    # look up blocking child processes
-                    child_procs += psutil.Process(self._proc.pid).children()
-                except (psutil.AccessDenied, psutil.NoSuchProcess):
-                    # browser process does not exist, do it the hard way
-                    for proc in psutil.process_iter(attrs=["ppid"]):
-                        # NOTE: on some OSs the ppid changes with the parent process goes away
-                        if int(proc.info["ppid"]) == self._proc.pid:
-                            child_procs.append(proc)
-            if child_procs:
-                # check status of blocking child processes
-                child_procs = [proc for proc in child_procs if proc.is_running()]
-            if retval is not None and not child_procs:
+            if retval is not None:
                 return retval
-            if timeout is not None and (time.time() - start_time >= timeout):
-                log.debug("wait() timed out (%0.2fs), %d child proc(s)", timeout, len(child_procs))
+            elif timeout is not None and (time.time() - start_time >= timeout):
+                log.debug("wait() timed out (%0.2fs)", timeout)
                 break
             time.sleep(0.1)
         return None

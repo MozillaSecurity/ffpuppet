@@ -573,7 +573,7 @@ class PuppetTests(TestCase): # pylint: disable=too-many-public-methods
         self.addCleanup(ffp.clean_up)
         ffp.launch(TESTFF_BIN, prefs_js=self.tmpfn, location=self.tsrv.get_addr())
         self.assertTrue(ffp.is_running())
-        self.assertIsNone(ffp.wait(recursive=True, timeout=0))
+        self.assertIsNone(ffp.wait(timeout=0))
         c_procs = Process(ffp.get_pid()).children()
         self.assertGreater(len(c_procs), 0)
         # terminate one of the child processes
