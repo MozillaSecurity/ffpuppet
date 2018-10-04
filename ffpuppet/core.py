@@ -8,7 +8,6 @@ import platform
 import re
 import shutil
 import subprocess
-import time
 
 try:  # py 2-3 compatibility
     from urllib import pathname2url  # pylint: disable=no-name-in-module
