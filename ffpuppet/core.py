@@ -235,22 +235,24 @@ class FFPuppet(object):
         assert not self._workers, "self._workers is not empty"
 
 
+    @staticmethod
+    def _get_processes(pid):
+        try:
+            procs = [psutil.Process(pid)]
+        except psutil.NoSuchProcess:
+            return list()
+        try:
+            procs += procs[0].children(recursive=True)
+        except (psutil.AccessDenied, psutil.NoSuchProcess):
+            pass
+        return procs
+
+
     def _terminate(self, kill_delay=30):
         assert self._proc is not None
         assert isinstance(kill_delay, (float, int)) and kill_delay >= 0
         log.debug("_terminate(kill_delay=%0.2f) called", kill_delay)
-
-        procs = list()
-        try:
-            procs.append(psutil.Process(self._proc.pid))
-        except psutil.NoSuchProcess:
-            pass
-        if procs:
-            try:
-                procs += procs[0].children()
-            except (psutil.AccessDenied, psutil.NoSuchProcess):
-                pass
-
+        procs = self._get_processes(self._proc.pid)
         # perform 2 passes with increasingly aggressive mode
         # mode values: 0 = terminate, 1 = kill
         # on all platforms other than windows start in terminate mode
@@ -265,9 +267,10 @@ class FFPuppet(object):
                         proc.terminate()
                 except (psutil.AccessDenied, psutil.NoSuchProcess):
                     pass
-            if self.wait(timeout=kill_delay) is not None:
+            procs = psutil.wait_procs(procs, timeout=kill_delay)[1]
+            if not procs:
                 break
-            log.debug("wait(timeout=%0.2f) timed out, mode %d", kill_delay, mode)
+            log.debug("timed out (%0.2f), mode %d", kill_delay, mode)
             mode += 1
 
 
@@ -625,13 +628,13 @@ class FFPuppet(object):
                  not exist
         """
         assert timeout is None or (isinstance(timeout, (float, int)) and timeout >= 0)
-        start_time = time.time()
-        while self._proc is not None:
-            retval = self._proc.poll()
-            if retval is not None:
-                return retval
-            elif timeout is not None and (time.time() - start_time >= timeout):
-                log.debug("wait() timed out (%0.2fs)", timeout)
-                break
-            time.sleep(0.1)
+
+        # check if the parent process is running before performing lookup
+        if self._proc is None:
+            return None
+        elif self._proc.poll() is not None:
+            return self._proc.returncode
+        if not psutil.wait_procs(self._get_processes(self._proc.pid), timeout=timeout)[1]:
+            return self._proc.poll()
+        log.debug("wait() timed out (%0.2fs)", timeout)
         return None
