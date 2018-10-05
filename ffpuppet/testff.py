@@ -3,21 +3,27 @@
 # To create an exe file for testing on Windows (tested with Python 3.4):
 # python -m py2exe.build_exe -O -b 0 -d testff testff.py
 
+from multiprocessing import Event, freeze_support, Process
 import os
 import re
 import sys
 import time
-
-from multiprocessing import Process
 try:
     from urllib.request import urlopen
 except ImportError:
     from urllib2 import urlopen
 
 EXIT_DELAY = 45
-POOL_SIZE = 4 # number of child procs to create
+POOL_SIZE = 4  # number of child procs to create
 
-def main():
+
+def dummy_process(is_alive, parent_done):
+    is_alive.set()
+    print('child process, pid: %d\n' % os.getpid())
+    parent_done.wait(EXIT_DELAY)
+
+
+def main(parent_done):
     profile = url = None
     while len(sys.argv) > 1:
         arg = sys.argv.pop(1)
@@ -27,11 +33,6 @@ def main():
             url = arg
         elif arg == '-profile':
             profile = sys.argv.pop(1)
-        elif arg == '--multiprocessing-fork':  # for multiproc testing on windows
-            sys.stdout.write('child process, pid: %d\n' % os.getpid())
-            sys.stdout.flush()
-            time.sleep(EXIT_DELAY)
-            return 0
         else:
             raise RuntimeError('unknown argument: %s' % arg)
     if url is None:
@@ -91,10 +92,12 @@ def main():
         with open(os.path.join(profile, 'Invalidprefs.js'), "w") as prefs_js:
             prefs_js.write("bad!")
     elif cmd in ('memory', 'multi_proc'):
+        is_alive = Event()
         for _ in range(POOL_SIZE):
-            proc_pool.append(Process(target=time.sleep, args=(EXIT_DELAY,)))
+            proc_pool.append(Process(target=dummy_process, args=(is_alive, parent_done)))
             proc_pool[-1].start()
-        time.sleep(.25) # wait for procs to launch
+            is_alive.wait()
+            is_alive.clear()
 
     target_url = None # should be set to the value passed to launch()'s 'location' arg
     while url is not None:
@@ -155,10 +158,8 @@ def main():
         sys.stdout.flush()
         time.sleep(EXIT_DELAY) # wait before closing (should be terminated before elapse)
     finally:
+        parent_done.set()
         # cleanup for multiprocess
-        for proc in proc_pool:
-            if proc.is_alive():
-                proc.terminate()
         for proc in proc_pool:
             proc.join()
 
@@ -167,4 +168,9 @@ def main():
     return 0
 
 if __name__ == '__main__':
-    sys.exit(main())
+    freeze_support()  # needed on Windows
+    parent_done = Event()
+    try:
+        sys.exit(main(parent_done))
+    finally:
+        parent_done.set()
