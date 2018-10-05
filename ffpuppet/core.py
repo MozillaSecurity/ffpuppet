@@ -21,7 +21,9 @@ except ImportError:
     pass
 
 from .exceptions import LaunchError
-from .helpers import Bootstrapper, append_prefs, create_profile, onerror, prepare_environment, wait_on_files
+from .helpers import (
+    append_prefs, Bootstrapper, create_profile, get_processes, onerror,
+    prepare_environment, wait_on_files)
 from .minidump_parser import process_minidumps
 from .puppet_logger import PuppetLogger
 from .workers import log_scanner, log_size_limiter, memory_limiter
@@ -234,24 +236,12 @@ class FFPuppet(object):
         assert not self._workers, "self._workers is not empty"
 
 
-    @staticmethod
-    def _get_processes(pid):
-        try:
-            procs = [psutil.Process(pid)]
-        except psutil.NoSuchProcess:
-            return list()
-        try:
-            procs += procs[0].children(recursive=True)
-        except (psutil.AccessDenied, psutil.NoSuchProcess):
-            pass
-        return procs
-
 
     def _terminate(self, kill_delay=30):
         assert self._proc is not None
         assert isinstance(kill_delay, (float, int)) and kill_delay >= 0
         log.debug("_terminate(kill_delay=%0.2f) called", kill_delay)
-        procs = self._get_processes(self._proc.pid)
+        procs = get_processes(self._proc.pid)
         # perform 2 passes with increasingly aggressive mode
         # mode values: 0 = terminate, 1 = kill
         # on all platforms other than windows start in terminate mode
@@ -637,7 +627,7 @@ class FFPuppet(object):
             return None
         elif self._proc.poll() is not None:
             return self._proc.returncode
-        if not psutil.wait_procs(self._get_processes(self._proc.pid), timeout=timeout)[1]:
+        if not psutil.wait_procs(get_processes(self._proc.pid), timeout=timeout)[1]:
             return self._proc.poll()
         log.debug("wait() timed out (%0.2fs)", timeout)
         return None

@@ -349,6 +349,36 @@ def create_profile(extension=None, prefs_js=None, template=None):
     return profile
 
 
+
+def get_processes(pid, recursive=True):
+    """
+    From a given PID create a psutil.Process object and lookup all of it's
+    children.
+
+    @type pid: int
+    @param pid: PID of the process to lookup
+
+    @type recursive: bool
+    @param recursive: Include the children (and so on) of the Process
+                      that was created.
+
+    @rtype: list
+    @return: A list of psutil.Process objects. The first object will always
+             be the Process that corresponds to PID
+    """
+    try:
+        procs = [psutil.Process(pid)]
+    except psutil.NoSuchProcess:
+        return list()
+    if not recursive:
+        return procs
+    try:
+        procs += procs[0].children(recursive=True)
+    except (psutil.AccessDenied, psutil.NoSuchProcess):
+        pass
+    return procs
+
+
 def onerror(func, path, _exc_info):
     """
     Error handler for `shutil.rmtree`.
@@ -459,20 +489,15 @@ def wait_on_files(pid, wait_files, poll_rate=0.1, recursive=True, timeout=60):
     # call realpath() and normcase() on each file for cross platform compatibility
     wait_files = {os.path.normcase(os.path.realpath(x)) for x in wait_files if os.path.exists(x)}
     try:
-        proc = psutil.Process(pid)
-        while proc.is_running() and wait_files:
-            try:
-                # only include children and grandchildren if recursive is specified
-                children = proc.children(recursive=True) if recursive else list()
-            except (psutil.AccessDenied, psutil.NoSuchProcess):
-                children = list()
+        procs = get_processes(pid, recursive=recursive)
+        while procs and wait_files:
             open_files = set()
-            for target in [proc] + children:
+            for proc in procs:
                 try:
                     # WARNING: Process.open_files() has issues on Windows!
                     # https://psutil.readthedocs.io/en/latest/#psutil.Process.open_files
                     open_files.update(
-                        {os.path.normcase(os.path.realpath(x.path)) for x in target.open_files()})
+                        {os.path.normcase(os.path.realpath(x.path)) for x in proc.open_files()})
                 except (psutil.AccessDenied, psutil.NoSuchProcess):
                     pass
             # check if any open files are in the wait file list
@@ -481,7 +506,7 @@ def wait_on_files(pid, wait_files, poll_rate=0.1, recursive=True, timeout=60):
             elif wait_end <= time.time():
                 log.debug("Timeout waiting for: %s", ", ".join(x for x in open_files if x in wait_files))
                 return False
-            time.sleep(poll_rate)
+            procs = psutil.wait_procs(procs, timeout=poll_rate)[1]
     except (psutil.AccessDenied, psutil.NoSuchProcess):
         pass
     return True

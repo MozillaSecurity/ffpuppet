@@ -3,6 +3,7 @@
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
 import logging
+import multiprocessing
 import os
 import platform
 import shutil
@@ -12,8 +13,9 @@ import tempfile
 import unittest
 
 from .exceptions import BrowserTerminatedError, BrowserTimeoutError, LaunchError
-from .helpers import append_prefs, Bootstrapper, create_profile, check_prefs, \
-                     configure_sanitizers, prepare_environment, SanitizerConfig, wait_on_files
+from .helpers import (
+    append_prefs, Bootstrapper, create_profile, check_prefs, configure_sanitizers,
+    get_processes, prepare_environment, SanitizerConfig, wait_on_files)
 
 logging.basicConfig(level=logging.DEBUG if bool(os.getenv("DEBUG")) else logging.INFO)
 log = logging.getLogger("helpers_test")
@@ -27,6 +29,13 @@ class TestCase(unittest.TestCase):
 
         def assertRaisesRegex(self, *args, **kwds):
             return self.assertRaisesRegexp(*args, **kwds)
+
+
+# this needs to be here in order to work correctly on Windows
+def dummy_process(is_alive, is_done):
+    is_alive.set()
+    print("I'm process %d" % os.getpid())
+    is_done.wait(5)
 
 
 class HelperTests(TestCase):  # pylint: disable=too-many-public-methods
@@ -305,7 +314,6 @@ class HelperTests(TestCase):  # pylint: disable=too-many-public-methods
         self.assertTrue(bts.location.startswith("http://127.0.0.1:"))
         self.assertGreater(int(bts.location.split(":")[-1]), 1024)
 
-        #def wait(self, cb_continue, timeout=60, url=None)
         with self.assertRaises(BrowserTimeoutError):
             bts.wait(lambda: True, timeout=0.1)
 
@@ -339,3 +347,17 @@ class HelperTests(TestCase):  # pylint: disable=too-many-public-methods
         self.assertIn("user_pref('pre.existing', 1);\n", data)
         self.assertIn("user_pref('test.enabled', True);\n", data)
         self.assertIn("user_pref('foo', 'a1b2c3');\n", data)
+
+    def test_10(self):
+        "test get_processes()"
+        self.assertEqual(len(get_processes(os.getpid(), recursive=False)), 1)
+        self.assertFalse(get_processes(0xFFFFFF))
+        is_alive = multiprocessing.Event()
+        is_done = multiprocessing.Event()
+        self.addCleanup(is_done.set)
+        proc = multiprocessing.Process(target=dummy_process, args=(is_alive, is_done))
+        proc.start()
+        is_alive.wait(5)
+        self.assertGreater(len(get_processes(os.getpid())), 1)
+        is_done.set()
+        proc.join()
