@@ -592,6 +592,9 @@ class PuppetTests(TestCase): # pylint: disable=too-many-public-methods
         ffp.launch(TESTFF_BIN, prefs_js=self.tmpfn, location=self.tsrv.get_addr())
         self.assertTrue(ffp.is_running())
         target = Process(ffp.get_pid())
+        # when running the browser the children exit if the parent disappears
+        for proc in target.children():
+            proc.terminate()
         # terminate main process
         target.terminate()
         target.wait()

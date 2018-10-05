@@ -314,6 +314,10 @@ class FFPuppet(object):
                     self._terminate(0.1)
                 else:
                     self._terminate()
+            # WARNING: There is a race here if running in multiprocess mode and the parent
+            # process terminates. ATM we do not have a solid way of looking up and waiting
+            # for the children to exit. On the plus side they do exit when the parent
+            # disappears. This seems to only be visible on Windows.
 
             # check the process exit code
             exit_code = self._proc.poll()
