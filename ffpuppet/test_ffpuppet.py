@@ -16,7 +16,7 @@ try: # py 2-3 compatibility
 except ImportError:
     from http.server import HTTPServer, BaseHTTPRequestHandler # pylint: disable=import-error
 
-from psutil import Process
+from psutil import AccessDenied, NoSuchProcess, Process
 
 from .core import  FFPuppet
 from .exceptions import BrowserTimeoutError, BrowserTerminatedError, LaunchError
@@ -592,11 +592,15 @@ class PuppetTests(TestCase): # pylint: disable=too-many-public-methods
         ffp.launch(TESTFF_BIN, prefs_js=self.tmpfn, location=self.tsrv.get_addr())
         self.assertTrue(ffp.is_running())
         target = Process(ffp.get_pid())
-        # when running the browser the children exit if the parent disappears
-        for proc in target.children():
-            proc.terminate()
         # terminate main process
         target.terminate()
+        # when running the browser the children exit if the parent disappears
+        for proc in target.children():
+            try:
+                proc.terminate()
+                proc.wait()
+            except (AccessDenied, NoSuchProcess):
+                pass
         target.wait()
         ffp.close()
         self.assertFalse(ffp.is_running())
