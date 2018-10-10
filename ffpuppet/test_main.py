@@ -65,9 +65,9 @@ class MainTests(TestCase):
             prefs_fp.write("//fftest_big_log\n")
         main([TESTFF_BIN, "-v", "-d", "-p", prefs, "--log-limit", "1", "-a", "blah_test"])
 
+    @unittest.skipIf(sys.platform.startswith('win'), "This test is unsupported on Windows")
     def test_04(self):
         "test sending SIGINT"
-        is_windows = sys.platform.startswith('win')
         out_logs = os.path.join(self.tmpdir, "logs")
         with tempfile.TemporaryFile() as console:
             proc = subprocess.Popen(
@@ -83,11 +83,7 @@ class MainTests(TestCase):
             # verify we are in a good state otherwise display console output
             self.assertIn(b"Running Firefox", output)
             self.assertIsNone(proc.poll())
-            try:
-                proc.send_signal(signal.CTRL_C_EVENT if is_windows else signal.SIGINT)  # pylint: disable=no-member
-                self.assertIsNotNone(proc.wait())
-            except KeyboardInterrupt:
-                pass
+            proc.send_signal(signal.SIGINT)
             self.assertIsNotNone(proc.wait())
             console.seek(0)
             output = console.read()
