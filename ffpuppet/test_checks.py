@@ -47,15 +47,16 @@ class CheckTests(unittest.TestCase):
             self.assertEqual(log_fp.tell(), 0)
         # input exceeds line buffer
         try:
-            CheckLogSize.buf_limit = 10
+            CheckLogContents.buf_limit = 10
             with open(self.tmpfn, "w") as in_fp:
-                in_fp.write("A" * 20)
+                in_fp.write("A" * 9)
                 in_fp.write("test")
                 in_fp.write("A" * 20)
             checker = CheckLogContents([self.tmpfn], [re.compile("test")])
+            self.assertFalse(checker.check())
             self.assertTrue(checker.check())
         finally:
-            CheckLogSize.buf_limit = 0x20000
+            CheckLogContents.buf_limit = 0x20000
         with open(self.tmpfn, "wb") as log_fp:
             checker.dump_log(log_fp)
             self.assertGreater(log_fp.tell(), 1)
