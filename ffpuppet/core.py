@@ -140,11 +140,11 @@ class FFPuppet(object):
 
     def is_healthy(self):
         """
-        Check if the browser has crash reports but the process still running.
+        Check the browser is functioning by performing a series of checks.
 
         @rtype: bool
-        @return: True if the browser process is running and no crash reports can
-                 be found otherwise False.
+        @return: True if the browser is running and determined to be
+                 in a valid functioning state otherwise False.
         """
         if self.reason is not None or not self.is_running():
             return False

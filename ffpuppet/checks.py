@@ -41,6 +41,8 @@ class CheckLogContents(Check):
     buf_limit = 0x20000  # 128KB
     name = "log_contents"
     def __init__(self, log_files, search_tokens):
+        assert log_files, "log_files is empty"
+        assert search_tokens, "search_tokens is empty"
         super(CheckLogContents, self).__init__()
         self.logs = list()
         for log_file in log_files:
@@ -50,14 +52,18 @@ class CheckLogContents(Check):
 
     def check(self):
         for log in self.logs:
-            # check if file has new data
-            if os.stat(log["fname"]).st_size <= log["offset"]:
+            try:
+                # check if file has new data
+                if os.stat(log["fname"]).st_size <= log["offset"]:
+                    continue
+                # collect new data
+                with open(log["fname"], "r") as scan_fp:
+                    scan_fp.seek(log["offset"], os.SEEK_SET)
+                    data = scan_fp.read(self.buf_limit)
+                    log["offset"] = scan_fp.tell()
+            except (IOError, OSError):
+                # log does not exist
                 continue
-            # collect new data
-            with open(log["fname"], "r") as scan_fp:
-                scan_fp.seek(log["offset"], os.SEEK_SET)
-                data = scan_fp.read(self.buf_limit)
-                log["offset"] = scan_fp.tell()
             # prepend chunk of previously read line to data
             if log["line_buf"]:
                 if len(log["line_buf"]) > self.buf_limit:
