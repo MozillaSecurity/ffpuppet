@@ -349,7 +349,6 @@ def create_profile(extension=None, prefs_js=None, template=None):
     return profile
 
 
-
 def get_processes(pid, recursive=True):
     """
     From a given PID create a psutil.Process object and lookup all of it's
