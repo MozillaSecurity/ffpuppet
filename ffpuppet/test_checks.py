@@ -25,6 +25,7 @@ class CheckTests(unittest.TestCase):
 
     def test_01(self):
         "test CheckLogContents()"
+        # input contains token
         with open(self.tmpfn, "w") as in_fp:
             in_fp.write("blah\nfoo\ntest\n123")
         checker = CheckLogContents([self.tmpfn], [re.compile("test")])
@@ -32,16 +33,32 @@ class CheckTests(unittest.TestCase):
         with open(self.tmpfn, "wb") as log_fp:
             checker.dump_log(log_fp)
             self.assertGreater(log_fp.tell(), 1)
+        # input does not contains token
         checker = CheckLogContents([self.tmpfn], [re.compile("no_token")])
         self.assertFalse(checker.check())
         with open(self.tmpfn, "wb") as log_fp:
             checker.dump_log(log_fp)
             self.assertEqual(log_fp.tell(), 0)
-        checker = CheckLogContents([self.tmpfn], [])
+        # log does not exist
+        checker = CheckLogContents(["missing_log"], [re.compile("no_token")])
         self.assertFalse(checker.check())
         with open(self.tmpfn, "wb") as log_fp:
             checker.dump_log(log_fp)
             self.assertEqual(log_fp.tell(), 0)
+        # input exceeds line buffer
+        try:
+            CheckLogSize.buf_limit = 10
+            with open(self.tmpfn, "w") as in_fp:
+                in_fp.write("A" * 20)
+                in_fp.write("test")
+                in_fp.write("A" * 20)
+            checker = CheckLogContents([self.tmpfn], [re.compile("test")])
+            self.assertTrue(checker.check())
+        finally:
+            CheckLogSize.buf_limit = 0x20000
+        with open(self.tmpfn, "wb") as log_fp:
+            checker.dump_log(log_fp)
+            self.assertGreater(log_fp.tell(), 1)
 
     def test_02(self):
         "test CheckLogSize()"
