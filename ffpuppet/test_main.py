@@ -67,23 +67,31 @@ class MainTests(TestCase):
 
     def test_04(self):
         "test sending SIGINT"
+        is_windows = sys.platform.startswith('win')
         out_logs = os.path.join(self.tmpdir, "logs")
         with tempfile.TemporaryFile() as console:
             proc = subprocess.Popen(
-                [sys.executable, "-m", "ffpuppet", TESTFF_BIN, "-l", out_logs],
+                [sys.executable, "-m", "ffpuppet", TESTFF_BIN, "-d", "-l", out_logs],
                 cwd=os.path.split(os.path.split(ffpuppet.__file__)[0])[0],
-                shell=False,
                 stderr=console,
                 stdout=console)
-            self.assertIsNone(proc.poll())
             while proc.poll() is None:
                 console.seek(0)
-                if b"launched" in console.read():
+                output = console.read()
+                if b"Running Firefox" in output:
                     break
-            os.kill(proc.pid, signal.SIGINT)
+            # verify we are in a good state otherwise display console output
+            self.assertIn(b"Running Firefox", output)
+            self.assertIsNone(proc.poll())
+            try:
+                proc.send_signal(signal.CTRL_C_EVENT if is_windows else signal.SIGINT)  # pylint: disable=no-member
+                self.assertIsNotNone(proc.wait())
+            except KeyboardInterrupt:
+                pass
             self.assertIsNotNone(proc.wait())
             console.seek(0)
             output = console.read()
         self.assertIn(b"Ctrl+C detected", output)
+        self.assertIn(b"Firefox process closed", output)
         self.assertTrue(os.path.isdir(out_logs))
         self.assertGreater(len(os.listdir(out_logs)), 0)
