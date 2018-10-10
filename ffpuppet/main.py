@@ -33,7 +33,7 @@ def dump_to_console(log_dir, log_quota=0x8000):
     logs = os.listdir(log_dir)
     if not logs:
         return ""
-    logs.sort()  # sort alphabetically
+    logs.sort()
     # display stdout and stderr last to prevent scrolling
     # this assumes stderr contains the relevant information
     for l_order in ("log_stdout", "log_stderr"):
@@ -102,6 +102,9 @@ def parse_args(argv=None):
         "-m", "--memory", type=int,
         help="Process memory limit in MBs (default: no limit)")
     parser.add_argument(
+        "--poll-interval", type=float, default=0.5,
+        help="Delay between checks for results (default: %(default)s)")
+    parser.add_argument(
         "-p", "--prefs",
         help="Custom prefs.js file to use (default: profile default)")
     parser.add_argument(
@@ -169,7 +172,7 @@ def main(argv=None):  # pylint: disable=missing-docstring
             check_prefs(os.path.join(ffp.profile, "prefs.js"), args.prefs)
         log.info("Running Firefox (pid: %d)...", ffp.get_pid())
         while ffp.is_healthy():
-            time.sleep(0.25)
+            time.sleep(args.poll_interval)
     except KeyboardInterrupt:
         log.info("Ctrl+C detected.")
     finally:

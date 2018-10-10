@@ -20,13 +20,13 @@ try:
 except ImportError:
     pass
 
+from .checks import CheckLogContents, CheckLogSize, CheckMemoryUsage
 from .exceptions import LaunchError
 from .helpers import (
     append_prefs, Bootstrapper, create_profile, get_processes, onerror,
     prepare_environment, wait_on_files)
 from .minidump_parser import process_minidumps
 from .puppet_logger import PuppetLogger
-from .workers import log_scanner, log_size_limiter, memory_limiter
 
 log = logging.getLogger("ffpuppet")  # pylint: disable=invalid-name
 
@@ -35,9 +35,7 @@ __all__ = ("FFPuppet")
 
 
 class FFPuppet(object):
-    BS_PORT_MAX = 0xFFFF # bootstrap range
-    BS_PORT_MIN = 0x2000 # bootstrap range
-    LAUNCH_TIMEOUT_MIN = 10 # minimum amount of time to wait for the browser to launch
+    LAUNCH_TIMEOUT_MIN = 10  # minimum amount of time to wait for the browser to launch
     RC_ALERT = "ALERT"  # target crashed/aborted/triggered an assertion failure etc...
     RC_CLOSED = "CLOSED"  # target was closed by call to FFPuppet close()
     RC_EXITED = "EXITED"  # target exited
@@ -45,6 +43,7 @@ class FFPuppet(object):
 
     def __init__(self, use_profile=None, use_valgrind=False, use_xvfb=False, use_gdb=False, use_rr=False):
         self._abort_tokens = set() # tokens used to notify log scanner to kill the browser process
+        self._checks = list()
         self._last_bin_path = None
         self._launches = 0 # number of successful browser launches
         self._logs = PuppetLogger()
@@ -54,7 +53,6 @@ class FFPuppet(object):
         self._use_valgrind = use_valgrind
         self._use_gdb = use_gdb
         self._use_rr = use_rr
-        self._workers = list() # collection of threads and processes
         self._xvfb = None
         self.profile = None # path to profile
         self.reason = self.RC_CLOSED # why the target process was terminated
@@ -67,6 +65,7 @@ class FFPuppet(object):
                     subprocess.call(["valgrind", "--version"], stdout=null_fp, stderr=null_fp)
             except OSError:
                 raise EnvironmentError("Please install Valgrind")
+            self.add_abort_token(r"==\d+==\s")
 
         if use_gdb:
             if not self._platform.startswith("linux"):
@@ -147,12 +146,16 @@ class FFPuppet(object):
         @return: True if the browser process is running and no crash reports can
                  be found otherwise False.
         """
-
-        # the process is closed
         if self.reason is not None or not self.is_running():
             return False
-
-        return False if self._find_dumps() else True
+        if self._find_dumps():
+            log.debug("crash dumps found")
+            return False
+        for check in self._checks:
+            if check.check():
+                log.debug("%r check abort conditions met", check.name)
+                return False
+        return True
 
 
     def _find_dumps(self):
@@ -162,14 +165,12 @@ class FFPuppet(object):
             for fname in os.listdir(self._logs.working_path):
                 if fname.startswith(self._logs.LOG_ASAN_PREFIX):
                     dumps.append(os.path.join(self._logs.working_path, fname))
-
         # check for minidumps
         md_path = os.path.join(self.profile, "minidumps")
         if os.path.isdir(md_path):
             for fname in os.listdir(md_path):
                 if ".dmp" in fname:
                     dumps.append(os.path.join(md_path, fname))
-
         return dumps
 
 
@@ -233,20 +234,19 @@ class FFPuppet(object):
         assert self._logs.closed, "self._logs.closed is not True"
         assert self._proc is None, "self._proc is not None"
         assert self.profile is None, "self.profile is not None"
-        assert not self._workers, "self._workers is not empty"
-
 
 
     def _terminate(self, kill_delay=30):
         assert self._proc is not None
         assert isinstance(kill_delay, (float, int)) and kill_delay >= 0
-        log.debug("_terminate(kill_delay=%0.2f) called", kill_delay)
+        log.debug("_terminate(kill_delay=%0.2f)", kill_delay)
         procs = get_processes(self._proc.pid)
         # perform 2 passes with increasingly aggressive mode
         # mode values: 0 = terminate, 1 = kill
         # on all platforms other than windows start in terminate mode
         mode = 1 if self._platform == "windows" else 0
         while mode < 2:
+            log.debug("%d running process(es)", len(procs))
             # iterate over and terminate/kill processes
             for proc in procs:
                 try:
@@ -258,6 +258,7 @@ class FFPuppet(object):
                     pass
             procs = psutil.wait_procs(procs, timeout=kill_delay)[1]
             if not procs:
+                log.debug("_terminate() was successful")
                 break
             log.debug("timed out (%0.2f), mode %d", kill_delay, mode)
             mode += 1
@@ -290,8 +291,8 @@ class FFPuppet(object):
             else:
                 r_code = self.RC_EXITED
 
-            if not self.is_healthy():
-                log.debug("is_healthy() check failed")
+            if crash_dumps:
+                log.debug("crash dump are available")
                 # wait until all open files are closed (except stdout & stderr)
                 dump_timeout = 300 if self._use_rr else 90
                 if not wait_on_files(self._proc.pid, crash_dumps, recursive=True, timeout=dump_timeout):
@@ -319,17 +320,13 @@ class FFPuppet(object):
             r_code = self.RC_CLOSED
             log.debug("browser process was 'None'")
 
-        log.debug("cleaning up %d worker(s)...", len(self._workers))
-        for worker in self._workers:
-            worker.join()
-            if worker.aborted.is_set():
-                r_code = self.RC_WORKER
-            if not force_close and worker.log_available():
-                worker.dump_log(dst_fp=self._logs.add_log("ffp_worker_%s" % worker.name))
-            worker.clean_up()
-        self._workers = list()
-
         if not force_close:
+            log.debug("reviewing %d check(s)", len(self._checks))
+            for check in self._checks:
+                if check.message is not None:
+                    r_code = self.RC_WORKER
+                    check.dump_log(dst_fp=self._logs.add_log("ffp_worker_%s" % check.name))
+
             # scan for ASan logs
             for fname in os.listdir(self._logs.working_path):
                 if not fname.startswith(self._logs.LOG_ASAN_PREFIX):
@@ -342,6 +339,8 @@ class FFPuppet(object):
                     os.path.join(self.profile, "minidumps"),
                     os.path.join(self._last_bin_path, "symbols"),
                     self._logs.add_log)
+
+        self._checks = list()
 
         if self._proc is not None:
             self._logs.get_fp("stderr").write(
@@ -576,22 +575,16 @@ class FFPuppet(object):
             raise LaunchError("%r is invalid" % prefs_js)
 
         if log_limit:
-            # launch log size monitor thread
-            self._workers.append(log_size_limiter.LogSizeLimiterWorker())
-            self._workers[-1].start(self, log_limit)
-
+            self._checks.append(CheckLogSize(
+                log_limit,
+                self._logs.get_fp("stderr").name,
+                self._logs.get_fp("stdout").name))
         if memory_limit:
-            # launch memory monitor thread
-            self._workers.append(memory_limiter.MemoryLimiterWorker())
-            self._workers[-1].start(self, memory_limit)
-
-        if self._use_valgrind:
-            self.add_abort_token(r"==\d+==\s")
-
+            self._checks.append(CheckMemoryUsage(self.get_pid(), memory_limit))
         if self._abort_tokens:
-            # launch log scanner thread
-            self._workers.append(log_scanner.LogScannerWorker())
-            self._workers[-1].start(self)
+            self._checks.append(CheckLogContents(
+                [self._logs.get_fp("stderr").name, self._logs.get_fp("stdout").name],
+                self._abort_tokens))
 
         self._launches += 1
 
@@ -629,5 +622,5 @@ class FFPuppet(object):
             return self._proc.returncode
         if not psutil.wait_procs(get_processes(self._proc.pid), timeout=timeout)[1]:
             return self._proc.poll()
-        log.debug("wait() timed out (%0.2fs)", timeout)
+        log.debug("wait(timeout=%0.2f) timed out", timeout)
         return None
