@@ -68,10 +68,14 @@ class MainTests(TestCase):
     @unittest.skipIf(sys.platform.startswith('win'), "This test is unsupported on Windows")
     def test_04(self):
         "test sending SIGINT"
+        prefs = os.path.join(self.tmpdir, "pref.js")
+        with open(prefs, "w") as prefs_fp:
+            # spam logs
+            prefs_fp.write("//fftest_big_log\n")
         out_logs = os.path.join(self.tmpdir, "logs")
         with tempfile.TemporaryFile() as console:
             proc = subprocess.Popen(
-                [sys.executable, "-m", "ffpuppet", TESTFF_BIN, "-d", "-l", out_logs],
+                [sys.executable, "-m", "ffpuppet", TESTFF_BIN, "-d", "-p", prefs, "-l", out_logs],
                 cwd=os.path.split(os.path.split(ffpuppet.__file__)[0])[0],
                 stderr=console,
                 stdout=console)
