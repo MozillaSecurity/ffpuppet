@@ -19,7 +19,7 @@ POOL_SIZE = 4  # number of child procs to create
 
 def dummy_process(is_alive, parent_done):
     is_alive.set()
-    print('child process, pid: %d\n' % os.getpid())
+    sys.stdout.write('child process, pid: %d\n' % os.getpid())
     parent_done.wait(EXIT_DELAY)
 
 
@@ -27,7 +27,7 @@ def main(parent_done):
     profile = url = None
     while len(sys.argv) > 1:
         arg = sys.argv.pop(1)
-        if arg in {'-no-remote', '-safe-mode'}:
+        if arg in ('-no-remote', '-safe-mode'):
             pass
         elif arg.startswith('http://'):
             url = arg
@@ -36,8 +36,7 @@ def main(parent_done):
         else:
             raise RuntimeError('unknown argument: %s' % arg)
     if url is None:
-        sys.stdout.write('missing url\n')
-        sys.stdout.flush()
+        sys.stderr.write('missing url\n')
         return 1
     # read prefs to see how to run
     cmd = None
@@ -134,21 +133,18 @@ def main(parent_done):
             blob.append("A" * 1024 * 1024)
     elif cmd == 'soft_assert':
         sys.stdout.write('simulating soft assertion\n')
-        # split '###!!! ASSERTION: tests\n' across multiple reads by the log scanner
-        sys.stdout.write('###!!! ')
         sys.stdout.flush()
-        time.sleep(0.25)
-        sys.stdout.write('ASSERT')
-        sys.stdout.flush()
-        time.sleep(0.25)
-        sys.stdout.write('ION: test\n\nblah...')
-        sys.stdout.flush()
+        sys.stderr.write('A' * 512 * 1024)
+        sys.stderr.write('\n###!!! ASSERTION: test\n\nblah...\n')
+        sys.stderr.flush()
     elif cmd == 'big_log':
         sys.stdout.write('simulating big logs\n')
-        buf = "A" * (1024*1024) # 1MB
+        buf = 'A' * (512 * 1024) # 512KB
         for _ in range(25):
             sys.stdout.write(buf)
+            sys.stderr.write(buf)
             sys.stdout.flush()
+            sys.stderr.flush()
     elif cmd == 'exit_code':
         sys.stdout.write('exit code test\n')
         return exit_code

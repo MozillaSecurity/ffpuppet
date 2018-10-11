@@ -322,10 +322,10 @@ class PuppetTests(TestCase): # pylint: disable=too-many-public-methods
             ffp.add_abort_token(None)
         ffp.add_abort_token(r"ASSERTION:\s\w+")
         ffp.launch(TESTFF_BIN, location=self.tsrv.get_addr(), prefs_js=self.tmpfn)
-        for _ in range(100):
+        for _ in range(200):
             if not ffp.is_healthy():
                 break
-            time.sleep(0.1)
+            time.sleep(0.05)
         ffp.close()
         self.assertEqual(ffp.reason, ffp.RC_WORKER)
         self.assertEqual(len(ffp.available_logs()), 3)
