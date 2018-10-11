@@ -45,18 +45,18 @@ class CheckTests(unittest.TestCase):
         with open(self.tmpfn, "wb") as log_fp:
             checker.dump_log(log_fp)
             self.assertEqual(log_fp.tell(), 0)
-        # input exceeds line buffer
+        # input exceeds chunk_size
         try:
-            CheckLogContents.buf_limit = 10
+            CheckLogContents.chunk_size = CheckLogContents.buf_limit
             with open(self.tmpfn, "w") as in_fp:
-                in_fp.write("A" * 9)
-                in_fp.write("test")
+                in_fp.write("A" * (CheckLogContents.buf_limit - 2))
+                in_fp.write("test123")
                 in_fp.write("A" * 20)
-            checker = CheckLogContents([self.tmpfn], [re.compile("test")])
+            checker = CheckLogContents([self.tmpfn], [re.compile("test123")])
             self.assertFalse(checker.check())
             self.assertTrue(checker.check())
         finally:
-            CheckLogContents.buf_limit = 0x20000
+            CheckLogContents.chunk_size = 0x20000
         with open(self.tmpfn, "wb") as log_fp:
             checker.dump_log(log_fp)
             self.assertGreater(log_fp.tell(), 1)

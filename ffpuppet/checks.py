@@ -38,7 +38,8 @@ class CheckLogContents(Check):
     """
     CheckLogContents will search through the browser logs for a token.
     """
-    buf_limit = 0x20000  # 128KB
+    buf_limit = 1024  # 1KB
+    chunk_size = 0x20000  # 128KB
     name = "log_contents"
     def __init__(self, log_files, search_tokens):
         assert log_files, "log_files is empty"
@@ -46,7 +47,7 @@ class CheckLogContents(Check):
         super(CheckLogContents, self).__init__()
         self.logs = list()
         for log_file in log_files:
-            self.logs.append({"fname": log_file, "line_buf": "", "offset": 0})
+            self.logs.append({"fname": log_file, "buffer": "", "offset": 0})
         self.tokens = search_tokens
 
 
@@ -56,29 +57,21 @@ class CheckLogContents(Check):
                 # check if file has new data
                 if os.stat(log["fname"]).st_size <= log["offset"]:
                     continue
-                # collect new data
                 with open(log["fname"], "r") as scan_fp:
+                    # only collect new data
                     scan_fp.seek(log["offset"], os.SEEK_SET)
-                    data = scan_fp.read(self.buf_limit)
+                    # read and prepend chunk of previously read data
+                    data = "".join([log["buffer"], scan_fp.read(self.chunk_size)])
                     log["offset"] = scan_fp.tell()
             except (IOError, OSError):
                 # log does not exist
                 continue
-            # prepend chunk of previously read line to data
-            if log["line_buf"]:
-                if len(log["line_buf"]) > self.buf_limit:
-                    # trim if we are getting huge lines
-                    log["line_buf"] = log["line_buf"][self.buf_limit * -1:]
-                data = "".join([log["line_buf"], data])
             for token in self.tokens:
                 match = token.search(data)
                 if match:
                     self.message = "TOKEN_LOCATED: %s\n" % match.group()
                     return True
-            try:
-                log["line_buf"] = data.rsplit("\n", 1)[1]
-            except IndexError:
-                log["line_buf"] = data
+            log["buffer"] = data[-1 * self.buf_limit:]
         return False
 
 
