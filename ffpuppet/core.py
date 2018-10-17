@@ -42,20 +42,20 @@ class FFPuppet(object):
     RC_WORKER = "WORKER"  # target was closed by worker thread
 
     def __init__(self, use_profile=None, use_valgrind=False, use_xvfb=False, use_gdb=False, use_rr=False):
-        self._abort_tokens = set() # tokens used to notify log scanner to kill the browser process
+        self._abort_tokens = set()  # tokens used to notify log scanner to kill the browser process
         self._checks = list()
         self._last_bin_path = None
-        self._launches = 0 # number of successful browser launches
+        self._launches = 0  # number of successful browser launches
         self._logs = PuppetLogger()
         self._platform = platform.system().lower()
         self._proc = None
-        self._profile_template = use_profile # profile that is used as a template
+        self._profile_template = use_profile  # profile that is used as a template
         self._use_valgrind = use_valgrind
         self._use_gdb = use_gdb
         self._use_rr = use_rr
         self._xvfb = None
-        self.profile = None # path to profile
-        self.reason = self.RC_CLOSED # why the target process was terminated
+        self.profile = None  # path to profile
+        self.reason = self.RC_CLOSED  # why the target process was terminated
 
         if use_valgrind:
             if not self._platform.startswith("linux"):
@@ -140,7 +140,8 @@ class FFPuppet(object):
 
     def is_healthy(self):
         """
-        Check the browser is functioning by performing a series of checks.
+        Verify the browser is in a known good state by performing a series
+        of checks.
 
         @rtype: bool
         @return: True if the browser is running and determined to be
@@ -148,8 +149,8 @@ class FFPuppet(object):
         """
         if self.reason is not None or not self.is_running():
             return False
-        if self._find_dumps():
-            log.debug("crash dumps found")
+        if self._find_crashreports():
+            log.debug("crash report found")
             return False
         for check in self._checks:
             if check.check():
@@ -158,20 +159,20 @@ class FFPuppet(object):
         return True
 
 
-    def _find_dumps(self):
-        dumps = list()
+    def _find_crashreports(self):
+        reports = list()
         # check for *San logs
         if os.path.isdir(self._logs.working_path):
             for fname in os.listdir(self._logs.working_path):
                 if fname.startswith(self._logs.LOG_ASAN_PREFIX):
-                    dumps.append(os.path.join(self._logs.working_path, fname))
+                    reports.append(os.path.join(self._logs.working_path, fname))
         # check for minidumps
         md_path = os.path.join(self.profile, "minidumps")
         if os.path.isdir(md_path):
             for fname in os.listdir(md_path):
                 if ".dmp" in fname:
-                    dumps.append(os.path.join(md_path, fname))
-        return dumps
+                    reports.append(os.path.join(md_path, fname))
+        return reports
 
 
     def log_length(self, log_id):
@@ -282,7 +283,7 @@ class FFPuppet(object):
 
         if self._proc is not None:
             log.debug("browser pid: %r", self._proc.pid)
-            crash_dumps = self._find_dumps()
+            crash_dumps = self._find_crashreports()
             # set reason code
             if crash_dumps:
                 r_code = self.RC_ALERT
@@ -306,9 +307,10 @@ class FFPuppet(object):
                 else:
                     self._terminate()
             # WARNING: There is a race here if running in multiprocess mode and the parent
-            # process terminates. ATM we do not have a solid way of looking up and waiting
-            # for the children to exit. On the plus side they do exit when the parent
-            # disappears. This seems to only be visible on Windows.
+            # process terminates. ATM we do not have a solid way to lookup and wait for the
+            # children to exit if the parent process terminates before we make the initial
+            # lookup. On the plus side they do exit when the parent disappears.
+            # This seems to only be visible on Windows (infrequently).
 
             # check the process exit code
             exit_code = self._proc.poll()
@@ -332,7 +334,6 @@ class FFPuppet(object):
                 if not fname.startswith(self._logs.LOG_ASAN_PREFIX):
                     continue
                 self._logs.add_log(fname, open(os.path.join(self._logs.working_path, fname), "rb"))
-
             # check for minidumps in the profile and dump them if possible
             if self.profile is not None:
                 process_minidumps(
