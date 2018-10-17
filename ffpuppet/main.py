@@ -124,7 +124,7 @@ def parse_args(argv=None):
              "responsive after launching. (default: %(default)s)")
     parser.add_argument(
         "-u", "--url",
-        help="Server URL or local file to load.")
+        help="Server URL or path to local file to load.")
     parser.add_argument(
         "--valgrind", action="store_true",
         help="Use Valgrind (Linux only)")
@@ -159,6 +159,7 @@ def main(argv=None):  # pylint: disable=missing-docstring
         ffp.add_abort_token(a_token)
 
     try:
+        log.info("Launching Firefox...")
         ffp.launch(
             args.binary,
             location=args.url,

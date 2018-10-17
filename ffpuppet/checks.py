@@ -102,7 +102,8 @@ class CheckLogSize(Check):
 
 class CheckMemoryUsage(Check):
     """
-    CheckMemoryUsage used limit the about of memory used by the browser process.
+    CheckMemoryUsage is used to check the amount of memory used by the browser
+    process and its descendants against a defined limit.
     """
     name = "memory_usage"
     def __init__(self, pid, limit):
@@ -113,8 +114,11 @@ class CheckMemoryUsage(Check):
 
     def check(self):
         """
-        Use psutil to check the amount of memory in use by the process with the
-        matching self.pid.
+        Use psutil to collect memory usage info and compare with limit.
+
+        @rtype: bool
+        @return: True if the total memory usage is greater than or equal to
+        self.limit otherwise False.
         """
         procs = get_processes(self.pid)
         proc_info = list()
