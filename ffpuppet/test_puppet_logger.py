@@ -101,9 +101,6 @@ class PuppetLoggerTests(TestCase):
         plog.add_log("test_new")
         pl_fp = plog.get_fp("test_new")
         pl_fp.write(b"test1")
-        pl_fp.flush()
-        with open(pl_fp.name, "rb") as log_fp:
-            self.assertEqual(log_fp.read(), b"test1")
         cloned = plog.clone_log("test_new")
         try:
             with open(cloned, "rb") as log_fp:
@@ -151,25 +148,24 @@ class PuppetLoggerTests(TestCase):
         "test saving logs"
         plog = PuppetLogger()
         self.addCleanup(plog.clean_up)
+        plog.close()
         # save when there are no logs
         plog.save_logs(self.tmpdir)
         self.assertEqual(len(os.listdir(self.tmpdir)), 0)
+        plog.reset()
         # add small log
         plog.add_log("test_1")
         plog.get_fp("test_1").write(b"test1\ntest1\n")
-        plog.get_fp("test_1").flush()
         # add binary data in log
         plog.add_log("test_2")
         plog.get_fp("test_2").write(b"\x00TEST\xFF\xEF")
-        plog.get_fp("test_2").flush()
         # add empty log
         plog.add_log("test_empty")
-        # add larger log ~512KB log
+        # add larger log (not a power of 2 to help catch buffer issues)
         plog.add_log("test_3")
-        data = b"A" * 1024
-        for _ in range(512):
+        data = b"A" * 1234
+        for _ in range(500):
             plog.get_fp("test_3").write(data)
-        plog.get_fp("test_3").flush()
         meta_test = os.path.join(self.tmpdir, "test_meta.txt")
         meta_fp = open(meta_test, "w+b")
         try:
@@ -179,6 +175,7 @@ class PuppetLoggerTests(TestCase):
             meta_fp.close()
         # delay to check if creation time was copied when save_logs is called
         time.sleep(0.1)
+        plog.close()
         plog.save_logs(self.tmpdir, meta=True)
         # grab meta data and remove test file
         meta_ctime = os.stat(meta_test).st_ctime
@@ -193,6 +190,10 @@ class PuppetLoggerTests(TestCase):
             meta_map = json.load(json_fp)
         self.assertEqual(len(meta_map.keys()), 5)
         self.assertEqual(meta_ctime, meta_map["log_test_meta.txt"]["st_ctime"])
+        # verify all data was copied
+        self.assertEqual(os.stat(plog.get_fp("test_1").name).st_size, 12)
+        self.assertEqual(os.stat(plog.get_fp("test_2").name).st_size, 7)
+        self.assertEqual(os.stat(plog.get_fp("test_3").name).st_size, 500 * 1234)
 
     def test_05(self):
         "test log that does not have a file on disk"

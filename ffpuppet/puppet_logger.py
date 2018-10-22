@@ -56,7 +56,7 @@ class PuppetLogger(object):
         List of IDs for the currently available logs.
 
         @rtype: list
-        @return: A list containing 'log_id's
+        @return: A list containing log IDs
         """
         return self._logs.keys()
 
@@ -72,7 +72,7 @@ class PuppetLogger(object):
         if not self.closed:
             self.close()
 
-        self._logs = dict()
+        self._logs.clear()
         if self.working_path is not None and os.path.isdir(self.working_path):
             shutil.rmtree(self.working_path, onerror=onerror)
         self.working_path = None
@@ -94,24 +94,23 @@ class PuppetLogger(object):
         @rtype: String or None
         @return: Name of the file containing the cloned log or None on failure
         """
-
-        cur_log = self.get_fp(log_id)
-        if cur_log is None:
+        log_fp = self.get_fp(log_id)
+        if log_fp is None:
             return None
-
-        with open(cur_log.name, "rb") as logfp:
+        if not log_fp.closed:
+            log_fp.flush()
+        with open(log_fp.name, "rb") as in_fp:
             if offset is not None:
-                logfp.seek(offset)
+                in_fp.seek(offset)
             if target_file is None:
                 cpyfp = PuppetLogger.open_unique()
                 target_file = cpyfp.name
             else:
                 cpyfp = open(target_file, "wb")
             try:
-                shutil.copyfileobj(logfp, cpyfp, self.LOG_BUF_SIZE)
+                shutil.copyfileobj(in_fp, cpyfp, self.LOG_BUF_SIZE)
             finally:
                 cpyfp.close()
-
         return target_file
 
 
@@ -124,17 +123,13 @@ class PuppetLogger(object):
 
     def get_fp(self, log_id):
         try:
-            cur_log = self._logs[log_id]
+            log_fp = self._logs[log_id]
         except KeyError:
             log.warning("log_id %r does not exist", log_id)
             return None
-        if cur_log.name is None or not os.path.isfile(cur_log.name):
-            raise IOError("log file %r does not exist" % cur_log.name)
-        try:
-            cur_log.flush()
-        except ValueError:  # ignore exception if file is closed
-            pass
-        return cur_log
+        if log_fp.name is None or not os.path.isfile(log_fp.name):
+            raise IOError("log file %r does not exist" % log_fp.name)
+        return log_fp
 
 
     def log_length(self, log_id):
@@ -147,10 +142,12 @@ class PuppetLogger(object):
         @rtype: int
         @return: length of the current browser log in bytes or None if the log does not exist.
         """
-        cur_log = self.get_fp(log_id)
-        if cur_log is None:
+        log_fp = self.get_fp(log_id)
+        if log_fp is None:
             return None
-        return os.stat(cur_log.name).st_size
+        if not log_fp.closed:
+            log_fp.flush()
+        return os.stat(log_fp.name).st_size
 
 
     @staticmethod
