@@ -35,7 +35,7 @@ class PuppetLogger(object):
         Add a log file to the log manager.
 
         @type log_id: String
-        @param log_id: The id (key) of the log to clone (stderr, stdout... etc).
+        @param log_id: ID of the log to add.
 
         @type logfp: file
         @param logfp: logfp is a file object. If None is provided a new log file will be created.
@@ -68,10 +68,8 @@ class PuppetLogger(object):
         @rtype: None
         @return: None
         """
-
         if not self.closed:
             self.close()
-
         self._logs.clear()
         if self.working_path is not None and os.path.isdir(self.working_path):
             shutil.rmtree(self.working_path, onerror=onerror)
@@ -80,10 +78,10 @@ class PuppetLogger(object):
 
     def clone_log(self, log_id, offset=None, target_file=None):
         """
-        Create a copy of the current browser log.
+        Create a copy of the specified log.
 
         @type log_id: String
-        @param log_id: The id (key) of the log to clone (stderr, stdout... etc).
+        @param log_id: ID of the log to clone.
 
         @type target_file: String
         @param target_file: The log contents will be saved to target_file.
@@ -115,6 +113,12 @@ class PuppetLogger(object):
 
 
     def close(self):
+        """
+        Close all open file objects.
+
+        @rtype: None
+        @return: None
+        """
         for lfp in self._logs.values():
             if not lfp.closed:
                 lfp.close()
@@ -122,6 +126,15 @@ class PuppetLogger(object):
 
 
     def get_fp(self, log_id):
+        """
+        Lookup log file object by ID.
+
+        @type log_id: String
+        @param log_id: ID of the log (stderr, stdout... etc).
+
+        @rtype: file object
+        @return: A file object if ID is valid otherwise None.
+        """
         try:
             log_fp = self._logs[log_id]
         except KeyError:
@@ -134,13 +147,13 @@ class PuppetLogger(object):
 
     def log_length(self, log_id):
         """
-        Get the length of the browser log.
+        Get the length of the specified log.
 
         @type log_id: String
-        @param log_id: The id (key) of the log to clone (stderr, stdout... etc).
+        @param log_id: ID of the log to measure.
 
         @rtype: int
-        @return: length of the current browser log in bytes or None if the log does not exist.
+        @return: length of the specified log in bytes or None if the log does not exist.
         """
         log_fp = self.get_fp(log_id)
         if log_fp is None:
@@ -190,11 +203,11 @@ class PuppetLogger(object):
 
     def save_logs(self, log_path, meta=False):
         """
-        The browser log will be saved to log_file.
+        The browser logs will be saved to log_path.
         This should only be called after close().
 
         @type log_path: String
-        @param log_path: Directory to dump log file in. Existing files will be overwritten.
+        @param log_path: Directory to copy log files to. Existing files will be overwritten.
 
         @type meta: bool
         @param meta: Output JSON file containing log file meta data
@@ -204,7 +217,7 @@ class PuppetLogger(object):
         """
         assert self.closed, "save_logs() cannot be called before calling close()"
         meta_map = dict() if meta else None
-        # copy log to location specified by log_file
+        # copy log to location specified by log_path
         if not os.path.isdir(log_path):
             os.makedirs(log_path)
         log_path = os.path.abspath(log_path)
