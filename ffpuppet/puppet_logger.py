@@ -205,9 +205,8 @@ class PuppetLogger(object):
         @rtype: None
         @return: None
         """
-
+        assert self.closed, "save_logs() cannot be called before calling close()"
         meta_map = dict() if meta else None
-
         # copy log to location specified by log_file
         if not os.path.isdir(log_path):
             os.makedirs(log_path)
