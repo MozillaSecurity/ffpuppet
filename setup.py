@@ -13,4 +13,4 @@ if __name__ == '__main__':
           package_data={'': ['cmds.gdb']},
           description='A python module that aids in the automation of Firefox at the process level',
           entry_points={"console_scripts": ["ffpuppet = ffpuppet.main:main"]},
-          packages=['ffpuppet', 'ffpuppet.workers'])
+          packages=['ffpuppet'])
