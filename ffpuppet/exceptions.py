@@ -22,3 +22,10 @@ class BrowserTimeoutError(LaunchError):
     Raised when the browser process appears to hang during launch
     """
     pass
+
+
+class TerminateError(Exception):
+    """
+    Raised when attempts to terminate the browser fail
+    """
+    pass
