@@ -47,7 +47,6 @@ class FFPuppet(object):
         self._last_bin_path = None
         self._launches = 0  # number of successful browser launches
         self._logs = PuppetLogger()
-        self._platform = platform.system().lower()
         self._proc = None
         self._profile_template = use_profile  # profile that is used as a template
         self._use_valgrind = use_valgrind
@@ -57,8 +56,9 @@ class FFPuppet(object):
         self.profile = None  # path to profile
         self.reason = self.RC_CLOSED  # why the target process was terminated
 
+        plat = platform.system().lower()
         if use_valgrind:
-            if not self._platform.startswith("linux"):
+            if not plat.startswith("linux"):
                 raise EnvironmentError("Valgrind is only supported on Linux")
             try:
                 with open(os.devnull, "w") as null_fp:
@@ -68,7 +68,7 @@ class FFPuppet(object):
             self.add_abort_token(r"==\d+==\s")
 
         if use_gdb:
-            if not self._platform.startswith("linux"):
+            if not plat.startswith("linux"):
                 raise EnvironmentError("GDB is only supported on Linux")
             try:
                 with open(os.devnull, "w") as null_fp:
@@ -77,7 +77,7 @@ class FFPuppet(object):
                 raise EnvironmentError("Please install GDB")
 
         if use_rr:
-            if not self._platform.startswith("linux"):
+            if not plat.startswith("linux"):
                 raise EnvironmentError("RR is only supported on Linux")
             try:
                 with open(os.devnull, "w") as null_fp:
@@ -86,7 +86,7 @@ class FFPuppet(object):
                 raise EnvironmentError("Please install RR")
 
         if use_xvfb:
-            if not self._platform.startswith("linux"):
+            if not plat.startswith("linux"):
                 raise EnvironmentError("Xvfb is only supported on Linux")
             try:
                 self._xvfb = xvfbwrapper.Xvfb(width=1280, height=1024)
@@ -237,15 +237,15 @@ class FFPuppet(object):
         assert self.profile is None, "self.profile is not None"
 
 
-    def _terminate(self, kill_delay=30):
-        assert self._proc is not None
-        assert isinstance(kill_delay, (float, int)) and kill_delay >= 0
-        log.debug("_terminate(kill_delay=%0.2f)", kill_delay)
-        procs = get_processes(self._proc.pid)
+    @staticmethod
+    def _terminate(pid, kill_delay=30):
+        assert kill_delay >= 0
+        log.debug("_terminate(%d, kill_delay=%0.2f)", pid, kill_delay)
+        procs = get_processes(pid)
         # perform 2 passes with increasingly aggressive mode
         # mode values: 0 = terminate, 1 = kill
         # on all platforms other than windows start in terminate mode
-        mode = 1 if self._platform == "windows" else 0
+        mode = 1 if platform.system() == "Windows" else 0
         while mode < 2:
             log.debug("%d running process(es)", len(procs))
             # iterate over and terminate/kill processes
@@ -302,10 +302,7 @@ class FFPuppet(object):
             # terminate the browser process if needed
             if self.wait(timeout=0) is None:
                 log.debug("browser needs to be terminated")
-                if self._use_valgrind:
-                    self._terminate(0.1)
-                else:
-                    self._terminate()
+                self._terminate(self._proc.pid)
             # WARNING: There is a race here if running in multiprocess mode and the parent
             # process terminates. ATM we do not have a solid way to lookup and wait for the
             # children to exit if the parent process terminates before we make the initial
@@ -340,24 +337,19 @@ class FFPuppet(object):
                     os.path.join(self.profile, "minidumps"),
                     os.path.join(self._last_bin_path, "symbols"),
                     self._logs.add_log)
-
-        self._checks = list()
-
-        if self._proc is not None:
             self._logs.get_fp("stderr").write(
                 ("[ffpuppet] Reason code: %s\n" % r_code).encode("utf-8"))
-            self._proc = None
 
-        # close browser logger
+        self._proc = None
         self._logs.close()
-
+        self._checks = list()
         # remove temporary profile directory if necessary
         if self.profile is not None and os.path.isdir(self.profile):
             shutil.rmtree(self.profile, onerror=onerror)
             self.profile = None
-
         log.debug("exit reason code %r", r_code)
-        self.reason = r_code
+        if self.reason is None:
+            self.reason = r_code
 
 
     @property
@@ -378,7 +370,10 @@ class FFPuppet(object):
         @rtype: int
         @return: browser process ID
         """
-        return None if self._proc is None else self._proc.pid
+        try:
+            return self._proc.pid
+        except AttributeError:
+            return None
 
 
     def build_launch_cmd(self, bin_path, additional_args=None):
@@ -558,11 +553,12 @@ class FFPuppet(object):
             stderr.flush()
             sanitizer_logs = os.path.join(self._logs.working_path, self._logs.LOG_ASAN_PREFIX)
             # launch the browser
+            plat = platform.system().lower()
             log.debug("launch command: %r", " ".join(cmd))
             self._proc = subprocess.Popen(
                 cmd,
                 bufsize=0,  # unbuffered (for log scanners)
-                creationflags=subprocess.CREATE_NEW_PROCESS_GROUP if self._platform == "windows" else 0,
+                creationflags=subprocess.CREATE_NEW_PROCESS_GROUP if plat == "windows" else 0,
                 env=prepare_environment(self._last_bin_path, sanitizer_logs, env_mod=env_mod),
                 shell=False,
                 stderr=stderr,
@@ -597,7 +593,10 @@ class FFPuppet(object):
         @rtype: bool
         @return: True if the process is running otherwise False
         """
-        return self._proc is not None and self._proc.poll() is None
+        try:
+            return self._proc.poll() is None
+        except AttributeError:
+            return False
 
 
     def wait(self, timeout=None):
@@ -614,14 +613,15 @@ class FFPuppet(object):
         @return: exit code of process if it exits and None if timeout expired or the process does
                  not exist
         """
-        assert timeout is None or (isinstance(timeout, (float, int)) and timeout >= 0)
-
-        # check if the parent process is running before performing lookup
-        if self._proc is None:
-            return None
-        elif self._proc.poll() is not None:
-            return self._proc.returncode
-        if not psutil.wait_procs(get_processes(self._proc.pid), timeout=timeout)[1]:
-            return self._proc.poll()
-        log.debug("wait(timeout=%0.2f) timed out", timeout)
+        assert timeout is None or timeout >= 0
+        try:
+            # check if the parent process is running before performing lookup
+            if self._proc.poll() is not None:
+                return self._proc.returncode
+            if not psutil.wait_procs(get_processes(self._proc.pid), timeout=timeout)[1]:
+                return self._proc.poll()
+            log.debug("wait(timeout=%0.2f) timed out", timeout)
+        except AttributeError:
+            # if close() called in parallel self._proc is set to None
+            pass
         return None

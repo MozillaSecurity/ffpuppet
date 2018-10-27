@@ -234,15 +234,13 @@ class PuppetTests(TestCase): # pylint: disable=too-many-public-methods
         # call when ffp._proc is running
         self.assertTrue(ffp.is_running())
         self.assertIsNone(ffp.wait(timeout=0))
-        ffp._terminate()  # pylint: disable=protected-access
+        ffp._terminate(ffp._proc.pid)  # pylint: disable=protected-access
         # call when ffp._proc is not running
         self.assertFalse(ffp.is_running())
         self.assertIsNotNone(ffp.wait(timeout=0))  # with a timeout of zero
         self.assertIsNotNone(ffp.wait())  # without a timeout
         ffp.close()
         self.assertEqual(ffp.reason, ffp.RC_EXITED)
-        with self.assertRaisesRegex(AssertionError, ""):
-            ffp._terminate()  # pylint: disable=protected-access
         self.assertIsNone(ffp.wait(timeout=None))
 
     def test_08(self):
