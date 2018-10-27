@@ -21,7 +21,7 @@ except ImportError:
     pass
 
 from .checks import CheckLogContents, CheckLogSize, CheckMemoryUsage
-from .exceptions import LaunchError
+from .exceptions import LaunchError, TerminateError
 from .helpers import (
     append_prefs, Bootstrapper, create_profile, get_processes, onerror,
     prepare_environment, wait_on_files)
@@ -263,6 +263,8 @@ class FFPuppet(object):
                 break
             log.debug("timed out (%0.2f), mode %d", kill_delay, mode)
             mode += 1
+        else:
+            raise TerminateError("Failed to terminate browser")
 
 
     def close(self, force_close=False):
@@ -309,11 +311,8 @@ class FFPuppet(object):
             # lookup. On the plus side they do exit when the parent disappears.
             # This seems to only be visible on Windows (infrequently).
 
-            # check the process exit code
-            exit_code = self._proc.poll()
-            if exit_code is None:
-                raise RuntimeError("Failed to terminate browser")
-            elif exit_code in (-6, -11):
+            # check the process exit code if needed
+            if r_code == self.RC_EXITED and self._proc.poll() not in (0, -1, 1):
                 r_code = self.RC_ALERT
         else:
             r_code = self.RC_CLOSED
