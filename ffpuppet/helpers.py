@@ -458,21 +458,15 @@ def prepare_environment(target_dir, sanitizer_log, env_mod=None):
     return env
 
 
-def wait_on_files(pid, wait_files, poll_rate=0.1, recursive=True, timeout=60):
+def wait_on_files(wait_files, poll_rate=0.25, timeout=60):
     """
-    Wait for wait_files if open by a process (pid) and it's children (if recursive) to close.
-
-    @type pid: int
-    @param pid: pid of process
+    Wait for all processes to no longer be using any file in wait_files
 
     @type wait_files: list
-    @param wait_files: a list of files that should no longer be open by the process
+    @param wait_files: Files that must no longer be open by a process
 
     @type poll_rate: float
     @param poll_rate: Amount of time in seconds to wait between checks
-
-    @type recursive: bool
-    @return: Scan all children and grandchildren for open files
 
     @type timeout: float
     @param timeout: Amount of time in seconds to poll
@@ -480,32 +474,25 @@ def wait_on_files(pid, wait_files, poll_rate=0.1, recursive=True, timeout=60):
     @rtype: bool
     @return: True if all files were closed within timeout else False
     """
-
     assert poll_rate >= 0, "Invalid poll_rate %d, must be greater than or equal to 0" % poll_rate
     assert timeout >= 0, "Invalid timeout %d, must be greater than or equal to 0" % timeout
-    assert poll_rate <= timeout, "poll_rate must be less then or equal to timeout"
-    wait_end = time.time() + timeout
+    poll_rate = min(poll_rate, timeout)
+    deadline = time.time() + timeout
     # call realpath() and normcase() on each file for cross platform compatibility
     wait_files = {os.path.normcase(os.path.realpath(x)) for x in wait_files if os.path.exists(x)}
-    try:
-        procs = get_processes(pid, recursive=recursive)
-        while procs and wait_files:
-            open_files = set()
-            for proc in procs:
-                try:
-                    # WARNING: Process.open_files() has issues on Windows!
-                    # https://psutil.readthedocs.io/en/latest/#psutil.Process.open_files
-                    open_files.update(
-                        {os.path.normcase(os.path.realpath(x.path)) for x in proc.open_files()})
-                except (psutil.AccessDenied, psutil.NoSuchProcess):
-                    pass
-            # check if any open files are in the wait file list
-            if not wait_files.intersection(open_files):
-                break
-            elif wait_end <= time.time():
-                log.debug("Timeout waiting for: %s", ", ".join(x for x in open_files if x in wait_files))
-                return False
-            procs = psutil.wait_procs(procs, timeout=poll_rate)[1]
-    except (psutil.AccessDenied, psutil.NoSuchProcess):
-        pass
+    while wait_files:
+        open_files = set()
+        for proc in psutil.process_iter(attrs=["open_files"]):
+            if not proc.info["open_files"]:
+                continue
+            # WARNING: Process.open_files() has issues on Windows!
+            # https://psutil.readthedocs.io/en/latest/#psutil.Process.open_files
+            open_files.update({os.path.normcase(os.path.realpath(x.path)) for x in proc.info["open_files"]})
+        # check if any open files are in the wait file list
+        if not wait_files.intersection(open_files):
+            break
+        elif deadline <= time.time():
+            log.debug("Timeout waiting for: %s", ", ".join(x for x in open_files if x in wait_files))
+            return False
+        time.sleep(poll_rate)
     return True
