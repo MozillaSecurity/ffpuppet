@@ -172,8 +172,10 @@ class PuppetTests(TestCase): # pylint: disable=too-many-public-methods
         self.addCleanup(ffp.clean_up)
         ffp.close()
         ffp.save_logs(os.path.join(self.logs, "no_logs"))
-        ffp.launch(TESTFF_BIN, location=self.tsrv.get_addr())
-        ffp.wait(timeout=0.25)  # wait for log prints
+        with open(self.tmpfn, "w") as prefs:
+            prefs.write("//fftest_exit_code_0\n")
+        ffp.launch(TESTFF_BIN, location=self.tsrv.get_addr(), prefs_js=self.tmpfn)
+        ffp.wait(timeout=10)
         ffp.close()
         self.assertTrue(ffp._logs.closed)  # pylint: disable=protected-access
         log_ids = ffp.available_logs()
@@ -228,20 +230,18 @@ class PuppetTests(TestCase): # pylint: disable=too-many-public-methods
         "test wait()"
         ffp = FFPuppet()
         self.addCleanup(ffp.clean_up)
-        # call when ffp._proc is None
         self.assertIsNone(ffp.wait())
-        ffp.launch(TESTFF_BIN, location=self.tsrv.get_addr())
-        # call when ffp._proc is running
-        self.assertTrue(ffp.is_running())
-        self.assertIsNone(ffp.wait(timeout=0))
-        ffp._terminate(ffp._proc.pid)  # pylint: disable=protected-access
-        # call when ffp._proc is not running
-        self.assertFalse(ffp.is_running())
-        self.assertIsNotNone(ffp.wait(timeout=0))  # with a timeout of zero
-        self.assertIsNotNone(ffp.wait())  # without a timeout
+        with open(self.tmpfn, "w") as prefs:
+            prefs.write("//fftest_exit_code_0\n")
+        ffp.launch(TESTFF_BIN, location=self.tsrv.get_addr(), prefs_js=self.tmpfn)
+        self.assertIsNotNone(ffp.wait(timeout=10))
         ffp.close()
         self.assertEqual(ffp.reason, ffp.RC_EXITED)
-        self.assertIsNone(ffp.wait(timeout=None))
+        ffp.launch(TESTFF_BIN, location=self.tsrv.get_addr())
+        self.assertTrue(ffp.is_running())
+        self.assertIsNone(ffp.wait(timeout=0))
+        ffp.close()
+        self.assertEqual(ffp.reason, ffp.RC_CLOSED)
 
     def test_08(self):
         "test clone_log()"
@@ -370,13 +370,15 @@ class PuppetTests(TestCase): # pylint: disable=too-many-public-methods
         with self.assertRaisesRegex(IOError, "Cannot find"):
             ffp.launch(TESTFF_BIN, location="fake_file.none")
         ffp.close()
+        with open(self.tmpfn, "w") as prefs:
+            prefs.write("//fftest_exit_code_0\n")
         with tempfile.NamedTemporaryFile() as test_fp:
             test_fp.write(b"test")
             test_fp.seek(0)
             # needs realpath() for OSX & normcase() for Windows
-            fname = os.path.realpath(os.path.normcase(test_fp.name))
-            ffp.launch(TESTFF_BIN, location=fname)
-            ffp.wait(timeout=0.25) # wait for log prints
+            fname = os.path.normcase(os.path.realpath(test_fp.name))
+            ffp.launch(TESTFF_BIN, location=fname, prefs_js=self.tmpfn)
+            ffp.wait(timeout=10)
             ffp.close()
             ffp.save_logs(self.logs)
         with open(os.path.join(self.logs, "log_stdout.txt"), "r") as log_fp:
