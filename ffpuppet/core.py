@@ -285,31 +285,33 @@ class FFPuppet(object):
 
         if self._proc is not None:
             log.debug("browser pid: %r", self._proc.pid)
-            crash_dumps = self._find_crashreports()
+            crash_reports = self._find_crashreports()
             # set reason code
-            if crash_dumps:
+            if crash_reports:
                 r_code = self.RC_ALERT
             elif self.is_running():
                 r_code = self.RC_CLOSED
             else:
                 r_code = self.RC_EXITED
 
-            if crash_dumps:
-                log.debug("crash dump are available")
+            while crash_reports:
+                log.debug("%d crash report(s) are available", len(crash_reports))
                 # wait until all open files are closed (except stdout & stderr)
-                dump_timeout = 300 if self._use_rr else 90
-                if not wait_on_files(self._proc.pid, crash_dumps, recursive=True, timeout=dump_timeout):
+                report_wait = 300 if self._use_rr else 90
+                if not wait_on_files(crash_reports, timeout=report_wait):
                     log.warning("wait_on_files() Timed out")
+                    break
+                new_reports = self._find_crashreports()
+                # verify no new reports have appeared
+                if not set(new_reports) - set(crash_reports):
+                    break
+                log.debug("more reports have appeared")
+                crash_reports = new_reports
 
             # terminate the browser process if needed
             if self.wait(timeout=0) is None:
                 log.debug("browser needs to be terminated")
                 self._terminate(self._proc.pid)
-            # WARNING: There is a race here if running in multiprocess mode and the parent
-            # process terminates. ATM we do not have a solid way to lookup and wait for the
-            # children to exit if the parent process terminates before we make the initial
-            # lookup. On the plus side they do exit when the parent disappears.
-            # This seems to only be visible on Windows (infrequently).
 
             # check the process exit code if needed
             if r_code == self.RC_EXITED and self._proc.poll() not in (0, -1, 1):

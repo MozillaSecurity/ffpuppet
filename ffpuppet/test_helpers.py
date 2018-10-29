@@ -299,13 +299,13 @@ class HelperTests(TestCase):  # pylint: disable=too-many-public-methods
     def test_07(self):
         "test wait_on_files()"
         with tempfile.NamedTemporaryFile() as wait_fp:
-            self.assertFalse(wait_on_files(os.getpid(), [wait_fp.name, self.tmpfn], timeout=0.1))
+            self.assertFalse(wait_on_files([wait_fp.name, self.tmpfn], timeout=0.1))
         # existing but closed file
-        self.assertTrue(wait_on_files(os.getpid(), [self.tmpfn], timeout=0.1))
+        self.assertTrue(wait_on_files([self.tmpfn], timeout=0.1))
         # file that does not exist
-        self.assertTrue(wait_on_files(os.getpid(), ["no_file"], timeout=0.1))
+        self.assertTrue(wait_on_files(["no_file"], timeout=0.1))
         # empty file list
-        self.assertTrue(wait_on_files(os.getpid(), []))
+        self.assertTrue(wait_on_files([]))
 
     def test_08(self):
         "test bootstrapper"
