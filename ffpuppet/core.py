@@ -338,8 +338,9 @@ class FFPuppet(object):
                     os.path.join(self.profile, "minidumps"),
                     os.path.join(self._last_bin_path, "symbols"),
                     self._logs.add_log)
-            self._logs.get_fp("stderr").write(
-                ("[ffpuppet] Reason code: %s\n" % r_code).encode("utf-8"))
+            if self._logs.get_fp("stderr"):
+                self._logs.get_fp("stderr").write(
+                    ("[ffpuppet] Reason code: %s\n" % r_code).encode("utf-8"))
 
         self._proc = None
         self._logs.close()
