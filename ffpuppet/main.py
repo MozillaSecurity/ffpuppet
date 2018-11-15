@@ -134,7 +134,17 @@ def parse_args(argv=None):
     parser.add_argument(
         "--xvfb", action="store_true",
         help="Use Xvfb (Linux only)")
-    return parser.parse_args(argv)
+
+    args = parser.parse_args(argv)
+    if args.extension is not None:
+        for ext in args.extension:
+            if not os.path.exists(ext):
+                parser.error("%r does not exist" % ext)
+
+    if args.prefs is not None and not os.path.isfile(args.prefs):
+        parser.error("file not found %r" % args.prefs)
+
+    return args
 
 
 def main(argv=None):  # pylint: disable=missing-docstring
