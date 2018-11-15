@@ -60,7 +60,7 @@ class SanitizerConfig(object):
 
     @property
     def options(self):
-        return ":".join(["=".join([k, v]) for k, v in self._options.items()])
+        return ":".join("=".join([k, v]) for k, v in self._options.items())
 
 
 class Bootstrapper(object):
@@ -433,6 +433,9 @@ def prepare_environment(target_dir, sanitizer_log, env_mod=None):
     env["MOZ_DISABLE_GMP_SANDBOX"] = "1"
     env["MOZ_DISABLE_GPU_SANDBOX"] = "1"
     env["MOZ_DISABLE_NPAPI_SANDBOX"] = "1"
+    env["MOZ_DISABLE_PDFIUM_SANDBOX"] = "1"
+    env["MOZ_DISABLE_RDD_SANDBOX"] = "1"
+    env["MOZ_DISABLE_VR_SANDBOX"] = "1"
     env["MOZ_GDB_SLEEP"] = "0"
     env["XRE_NO_WINDOWS_CRASH_DIALOG"] = "1"
     env["XPCOM_DEBUG_BREAK"] = "warn"
