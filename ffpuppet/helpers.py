@@ -465,7 +465,7 @@ def wait_on_files(wait_files, poll_rate=0.25, timeout=60):
     """
     Wait for all processes to no longer be using any file in wait_files
 
-    @type wait_files: list
+    @type wait_files: iterable
     @param wait_files: Files that must no longer be open by a process
 
     @type poll_rate: float

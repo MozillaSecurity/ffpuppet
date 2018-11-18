@@ -149,7 +149,7 @@ class FFPuppet(object):
         """
         if self.reason is not None or not self.is_running():
             return False
-        if self._find_crashreports():
+        if any(self._crashreports()):
             log.debug("crash report found")
             return False
         for check in self._checks:
@@ -159,20 +159,18 @@ class FFPuppet(object):
         return True
 
 
-    def _find_crashreports(self):
-        reports = list()
+    def _crashreports(self):
         # check for *San logs
         if os.path.isdir(self._logs.working_path):
             for fname in os.listdir(self._logs.working_path):
                 if fname.startswith(self._logs.LOG_ASAN_PREFIX):
-                    reports.append(os.path.join(self._logs.working_path, fname))
+                    yield os.path.join(self._logs.working_path, fname)
         # check for minidumps
         md_path = os.path.join(self.profile, "minidumps")
         if os.path.isdir(md_path):
             for fname in os.listdir(md_path):
                 if ".dmp" in fname:
-                    reports.append(os.path.join(md_path, fname))
-        return reports
+                    yield os.path.join(md_path, fname)
 
 
     def log_length(self, log_id):
@@ -285,7 +283,7 @@ class FFPuppet(object):
 
         if self._proc is not None:
             log.debug("browser pid: %r", self._proc.pid)
-            crash_reports = self._find_crashreports()
+            crash_reports = set(self._crashreports())
             # set reason code
             if crash_reports:
                 r_code = self.RC_ALERT
@@ -301,9 +299,9 @@ class FFPuppet(object):
                 if not wait_on_files(crash_reports, timeout=report_wait):
                     log.warning("wait_on_files() Timed out")
                     break
-                new_reports = self._find_crashreports()
+                new_reports = set(self._crashreports())
                 # verify no new reports have appeared
-                if not set(new_reports) - set(crash_reports):
+                if not new_reports - crash_reports:
                     break
                 log.debug("more reports have appeared")
                 crash_reports = new_reports
