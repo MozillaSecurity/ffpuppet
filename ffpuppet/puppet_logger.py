@@ -61,7 +61,7 @@ class PuppetLogger(object):
         return self._logs.keys()
 
 
-    def clean_up(self):
+    def clean_up(self, ignore_errors=False):
         """
         Remove log files from disk.
 
@@ -72,7 +72,10 @@ class PuppetLogger(object):
             self.close()
         self._logs.clear()
         if self.working_path is not None and os.path.isdir(self.working_path):
-            shutil.rmtree(self.working_path, onerror=onerror)
+            shutil.rmtree(
+                self.working_path,
+                ignore_errors=ignore_errors,
+                onerror=onerror)
         self.working_path = None
 
 

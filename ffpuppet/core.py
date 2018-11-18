@@ -223,7 +223,7 @@ class FFPuppet(object):
 
         log.debug("clean_up() called")
         self.close(force_close=True)
-        self._logs.clean_up()
+        self._logs.clean_up(ignore_errors=True)
 
         # close Xvfb
         if self._xvfb is not None:

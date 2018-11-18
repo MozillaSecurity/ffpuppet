@@ -2,6 +2,7 @@ import json
 import logging
 import os
 import shutil
+import stat
 import sys
 import tempfile
 import time
@@ -203,3 +204,22 @@ class PuppetLoggerTests(TestCase):
             plog.add_log("test", logfp=log_fp)
             with self.assertRaisesRegex(IOError, r"log file\s.+?\sdoes not exist"):
                 plog.get_fp("test")
+
+    def test_06(self):
+        "test clean_up() with inaccessible directory"
+        plog = PuppetLogger()
+        self.addCleanup(plog.clean_up, ignore_errors=True)
+        plog.add_log("test")
+        os.chmod(plog.working_path, stat.S_IRUSR)
+        plog.close()
+        old_working_path = plog.working_path
+        try:
+            self.assertTrue(os.path.isdir(plog.working_path))
+            with self.assertRaises(OSError):
+                plog.clean_up()
+            plog.clean_up(ignore_errors=True)
+            self.assertIsNone(plog.working_path)
+            self.assertTrue(os.path.isdir(old_working_path))
+        finally:
+            os.chmod(old_working_path, stat.S_IRWXU)
+            shutil.rmtree(old_working_path)
