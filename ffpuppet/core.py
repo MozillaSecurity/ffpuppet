@@ -237,22 +237,15 @@ class FFPuppet(object):
 
     @staticmethod
     def _terminate(pid, kill_delay=30):
-        assert kill_delay >= 0
         log.debug("_terminate(%d, kill_delay=%0.2f)", pid, kill_delay)
         procs = get_processes(pid)
-        # perform 2 passes with increasingly aggressive mode
-        # mode values: 0 = terminate, 1 = kill
-        # on all platforms other than windows start in terminate mode
-        mode = 1 if platform.system() == "Windows" else 0
+        mode = 0
         while mode < 2:
             log.debug("%d running process(es)", len(procs))
             # iterate over and terminate/kill processes
             for proc in procs:
                 try:
-                    if mode == 1:
-                        proc.kill()
-                    else:
-                        proc.terminate()
+                    proc.kill() if mode > 0 else proc.terminate()
                 except (psutil.AccessDenied, psutil.NoSuchProcess):
                     pass
             procs = psutil.wait_procs(procs, timeout=kill_delay)[1]
@@ -262,6 +255,11 @@ class FFPuppet(object):
             log.debug("timed out (%0.2f), mode %d", kill_delay, mode)
             mode += 1
         else:
+            for proc in procs:
+                try:
+                    log.warning("Failed to terminate process %d (%s)", proc.pid, proc.name())
+                except (psutil.AccessDenied, psutil.NoSuchProcess):
+                    pass
             raise TerminateError("Failed to terminate browser")
 
 
