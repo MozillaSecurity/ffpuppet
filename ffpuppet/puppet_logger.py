@@ -8,7 +8,7 @@ import os
 import shutil
 import tempfile
 
-from .helpers import onerror
+from .helpers import onerror, wait_on_files
 
 log = logging.getLogger("puppet_logger")  # pylint: disable=invalid-name
 
@@ -125,7 +125,19 @@ class PuppetLogger(object):
         for lfp in self._logs.values():
             if not lfp.closed:
                 lfp.close()
+        if not self.closed:
+            wait_on_files(self.files, timeout=10)
         self.closed = True
+
+
+    @property
+    def files(self):
+        """
+        Generator containing file names
+        """
+        for lfp in self._logs.values():
+            if lfp.name is not None:
+                yield lfp.name
 
 
     def get_fp(self, log_id):
@@ -181,13 +193,11 @@ class PuppetLogger(object):
         @rtype: file object
         @return: An open file object.
         """
-
         tmp_fd, log_file = tempfile.mkstemp(
             suffix=".txt",
             prefix="ffp_log_",
             dir=base_dir)
         os.close(tmp_fd)
-
         # use open() so the file object 'name' attribute is correct
         return open(log_file, mode)
 

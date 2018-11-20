@@ -475,7 +475,9 @@ class PuppetTests(TestCase): # pylint: disable=too-many-public-methods
             self.addCleanup(ffps[-1].clean_up)
             # NOTE: launching truly in parallel can DoS the test webserver
             ffps[-1].launch(TESTFF_BIN, location=self.tsrv.get_addr())
-        for ffp in ffps:
+        # list of ffps needs to be reversed to deal with inheriting open file handles in Popen
+        # this is not a problem in production only in the test environment
+        for ffp in reversed(ffps):
             self.assertEqual(ffp.launches, 1)
             ffp.close()
 

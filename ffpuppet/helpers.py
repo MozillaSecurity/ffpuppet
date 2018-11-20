@@ -24,7 +24,8 @@ from .exceptions import BrowserTerminatedError, BrowserTimeoutError, LaunchError
 log = logging.getLogger("ffpuppet")  # pylint: disable=invalid-name
 
 __author__ = "Tyson Smith"
-__all__ = ("check_prefs", "create_profile", "onerror", "prepare_environment", "wait_on_files")
+__all__ = ("check_prefs", "create_profile", "get_processes", "onerror",
+           "prepare_environment", "wait_on_files")
 
 
 class SanitizerConfig(object):
@@ -484,18 +485,19 @@ def wait_on_files(wait_files, poll_rate=0.25, timeout=60):
     # call realpath() and normcase() on each file for cross platform compatibility
     wait_files = {os.path.normcase(os.path.realpath(x)) for x in wait_files if os.path.exists(x)}
     while wait_files:
-        open_files = set()
         for proc in psutil.process_iter(attrs=["open_files"]):
             if not proc.info["open_files"]:
                 continue
             # WARNING: Process.open_files() has issues on Windows!
             # https://psutil.readthedocs.io/en/latest/#psutil.Process.open_files
-            open_files.update({os.path.normcase(os.path.realpath(x.path)) for x in proc.info["open_files"]})
-        # check if any open files are in the wait file list
-        if not wait_files.intersection(open_files):
+            blocking = {os.path.normcase(os.path.realpath(x.path)) for x in proc.info["open_files"]}
+            if wait_files.intersection(blocking):
+                log.debug("blocking files: %s", "".join(x for x in blocking))
+                break
+        else:
             break
-        elif deadline <= time.time():
-            log.debug("Timeout waiting for: %s", ", ".join(x for x in open_files if x in wait_files))
+        if deadline <= time.time():
+            log.debug("wait_on_files(timeout=%d) timed out", timeout)
             return False
         time.sleep(poll_rate)
     return True
