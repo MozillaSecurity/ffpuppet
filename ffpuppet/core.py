@@ -308,6 +308,8 @@ class FFPuppet(object):
             if self.wait(timeout=0) is None:
                 log.debug("browser needs to be terminated")
                 self._terminate(self._proc.pid)
+                # wait for reports triggered by the call to _terminate()
+                wait_on_files(self._crashreports(), timeout=10)
 
             # check the process exit code if needed
             if r_code == self.RC_EXITED and self._proc.poll() not in (0, -1, 1):
