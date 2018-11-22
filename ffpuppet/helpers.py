@@ -462,6 +462,19 @@ def prepare_environment(target_dir, sanitizer_log, env_mod=None):
     return env
 
 
+def true_path(path):
+    """
+    Use realpath() and normcase() on path for cross platform compatibility.
+
+    @type path: String
+    @param path: File or directory path
+
+    @rtype: String
+    @return: Normalized real path of given path
+    """
+    return os.path.normcase(os.path.realpath(path))
+
+
 def wait_on_files(wait_files, poll_rate=0.25, timeout=60):
     """
     Wait for all processes to no longer be using any file in wait_files
@@ -481,22 +494,37 @@ def wait_on_files(wait_files, poll_rate=0.25, timeout=60):
     assert poll_rate >= 0, "Invalid poll_rate %d, must be greater than or equal to 0" % poll_rate
     assert timeout >= 0, "Invalid timeout %d, must be greater than or equal to 0" % timeout
     poll_rate = min(poll_rate, timeout)
+    wait_files = {true_path(x) for x in wait_files if os.path.isfile(x)}
+    if not wait_files:
+        return True
+    blocking_procs = list()
     deadline = time.time() + timeout
-    # call realpath() and normcase() on each file for cross platform compatibility
-    wait_files = {os.path.normcase(os.path.realpath(x)) for x in wait_files if os.path.exists(x)}
-    while wait_files:
-        for proc in psutil.process_iter(attrs=["open_files"]):
-            if not proc.info["open_files"]:
-                continue
-            # WARNING: Process.open_files() has issues on Windows!
-            # https://psutil.readthedocs.io/en/latest/#psutil.Process.open_files
-            blocking = {os.path.normcase(os.path.realpath(x.path)) for x in proc.info["open_files"]}
-            if wait_files.intersection(blocking):
-                log.debug("blocking files: %s", "".join(x for x in blocking))
-                break
+    while True:
+        if not blocking_procs:
+            # first pass collect all blocking processes
+            for proc in psutil.process_iter(attrs=["pid", "open_files"]):
+                if not proc.info["open_files"]:
+                    continue
+                # WARNING: Process.open_files() has issues on Windows!
+                # https://psutil.readthedocs.io/en/latest/#psutil.Process.open_files
+                if wait_files.intersection({true_path(x.path) for x in proc.info["open_files"]}):
+                    try:
+                        blocking_procs.append(psutil.Process(proc.info["pid"]))
+                    except psutil.NoSuchProcess:
+                        pass
         else:
+            # only check previously blocking processes
+            procs = list()
+            for proc in blocking_procs:
+                try:
+                    if wait_files.intersection({true_path(x.path) for x in proc.open_files()}):
+                        procs.append(proc)
+                except (psutil.AccessDenied, psutil.NoSuchProcess):
+                    pass
+            blocking_procs = procs
+        if not blocking_procs:
             break
-        if deadline <= time.time():
+        elif deadline <= time.time():
             log.debug("wait_on_files(timeout=%d) timed out", timeout)
             return False
         time.sleep(poll_rate)
