@@ -72,10 +72,14 @@ class PuppetLogger(object):
             self.close()
         self._logs.clear()
         if self.working_path is not None and os.path.isdir(self.working_path):
-            shutil.rmtree(
-                self.working_path,
-                ignore_errors=ignore_errors,
-                onerror=onerror)
+            for attempt in range(2):
+                try:
+                    shutil.rmtree(self.working_path, ignore_errors=ignore_errors, onerror=onerror)
+                    break
+                except OSError:
+                    if attempt > 0:
+                        raise
+                    wait_on_files(self.files, timeout=10)
         self.working_path = None
 
 
@@ -125,8 +129,6 @@ class PuppetLogger(object):
         for lfp in self._logs.values():
             if not lfp.closed:
                 lfp.close()
-        if not self.closed:
-            wait_on_files(self.files, timeout=10)
         self.closed = True
 
 
