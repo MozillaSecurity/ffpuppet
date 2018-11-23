@@ -70,7 +70,6 @@ class PuppetLogger(object):
         """
         if not self.closed:
             self.close()
-        self._logs.clear()
         if self.working_path is not None and os.path.isdir(self.working_path):
             for attempt in range(2):
                 try:
@@ -80,6 +79,7 @@ class PuppetLogger(object):
                     if attempt > 0:
                         raise
                     wait_on_files(self.files, timeout=10)
+        self._logs.clear()
         self.working_path = None
 
 
