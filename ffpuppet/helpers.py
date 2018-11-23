@@ -497,35 +497,29 @@ def wait_on_files(wait_files, poll_rate=0.25, timeout=60):
     wait_files = {true_path(x) for x in wait_files if os.path.isfile(x)}
     if not wait_files:
         return True
-    blocking_procs = list()
     deadline = time.time() + timeout
-    while True:
-        if not blocking_procs:
-            # first pass collect all blocking processes
-            for proc in psutil.process_iter(attrs=["pid", "open_files"]):
-                if not proc.info["open_files"]:
-                    continue
-                # WARNING: Process.open_files() has issues on Windows!
-                # https://psutil.readthedocs.io/en/latest/#psutil.Process.open_files
-                if wait_files.intersection({true_path(x.path) for x in proc.info["open_files"]}):
-                    try:
-                        blocking_procs.append(psutil.Process(proc.info["pid"]))
-                    except psutil.NoSuchProcess:
-                        pass
-        else:
-            # only check previously blocking processes
-            procs = list()
-            for proc in blocking_procs:
-                try:
-                    if wait_files.intersection({true_path(x.path) for x in proc.open_files()}):
-                        procs.append(proc)
-                except (psutil.AccessDenied, psutil.NoSuchProcess):
-                    pass
-            blocking_procs = procs
-        if not blocking_procs:
-            break
-        elif deadline <= time.time():
-            log.debug("wait_on_files(timeout=%d) timed out", timeout)
-            return False
-        time.sleep(poll_rate)
+    # collect all blocking processes
+    procs = list()
+    for proc in psutil.process_iter(attrs=["pid", "open_files"]):
+        if not proc.info["open_files"]:
+            continue
+        # WARNING: Process.open_files() has issues on Windows!
+        # https://psutil.readthedocs.io/en/latest/#psutil.Process.open_files
+        if wait_files.intersection({true_path(x.path) for x in proc.info["open_files"]}):
+            try:
+                procs.append(psutil.Process(proc.info["pid"]))
+            except psutil.NoSuchProcess:
+                pass
+    # only check previously blocking processes
+    while procs:
+        try:
+            if wait_files.intersection({true_path(x.path) for x in procs[-1].open_files()}):
+                if deadline <= time.time():
+                    log.debug("wait_on_files(timeout=%d) timed out", timeout)
+                    return False
+                time.sleep(poll_rate)
+                continue
+        except (psutil.AccessDenied, psutil.NoSuchProcess):
+            pass
+        procs.pop()
     return True
