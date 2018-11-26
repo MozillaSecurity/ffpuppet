@@ -61,9 +61,17 @@ class PuppetLogger(object):
         return self._logs.keys()
 
 
-    def clean_up(self, ignore_errors=False):
+    def clean_up(self, ignore_errors=False, wait_delay=10):
         """
         Remove log files from disk.
+
+        @type ignore_errors: bool
+        @param ignore_errors: Errors triggered by removing files and directories
+                              will be ignored.
+
+        @type wait_delay: int
+        @param wait_delay: Maximum amount of time to wait for files to close if
+                           an error is hit before retrying.
 
         @rtype: None
         @return: None
@@ -78,7 +86,7 @@ class PuppetLogger(object):
                 except OSError:
                     if attempt > 0:
                         raise
-                    wait_on_files(self.files, timeout=10)
+                    wait_on_files(self.files, timeout=wait_delay)
         self._logs.clear()
         self.working_path = None
 
