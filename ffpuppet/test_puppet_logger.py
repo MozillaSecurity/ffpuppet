@@ -3,6 +3,7 @@ import logging
 import os
 import shutil
 import stat
+import sys
 import tempfile
 import time
 import unittest
@@ -191,9 +192,26 @@ class PuppetLoggerTests(unittest.TestCase):
             self.assertTrue(os.path.isdir(plog.working_path))
             with self.assertRaises(OSError):
                 plog.clean_up()
+            self.assertIsNotNone(plog.working_path)
             plog.clean_up(ignore_errors=True)
             self.assertIsNone(plog.working_path)
             self.assertTrue(os.path.isdir(old_working_path))
         finally:
             os.chmod(old_working_path, stat.S_IRWXU)
             shutil.rmtree(old_working_path)
+
+    @unittest.skipIf(not sys.platform.startswith('win'), "Only supported on Windows")
+    def test_07(self):
+        "test clean_up() with in-use file"
+        plog = PuppetLogger()
+        self.addCleanup(plog.clean_up, ignore_errors=True)
+        plog.add_log("test")
+        fname = plog.get_fp("test").name
+        plog.close()
+        with open(fname, "r") as _:
+            with self.assertRaises(OSError):
+                plog.clean_up(wait_delay=0)
+            self.assertTrue(os.path.isfile(fname))
+            self.assertIsNotNone(plog.working_path)
+        plog.clean_up()
+        self.assertFalse(os.path.isfile(fname))
