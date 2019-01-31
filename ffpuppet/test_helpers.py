@@ -281,6 +281,7 @@ class HelperTests(TestCase):  # pylint: disable=too-many-public-methods
     def test_06(self):
         "test prepare_environment() using some predefined environment variables"
         pre = {
+            "LSAN_OPTIONS": "lopt=newopt",
             "RUST_BACKTRACE":None,  # remove
             "TEST_FAKE":None,  # remove non existing entry
             "TEST_VAR":"123",  # add
@@ -288,6 +289,8 @@ class HelperTests(TestCase):  # pylint: disable=too-many-public-methods
         env = prepare_environment("", "blah", pre)
         self.assertIn("ASAN_OPTIONS", env)
         self.assertIn("LSAN_OPTIONS", env)
+        self.assertIn("lopt=newopt", env["LSAN_OPTIONS"].split(":"))
+        self.assertIn("max_leaks=1", env["LSAN_OPTIONS"].split(":"))
         self.assertIn("UBSAN_OPTIONS", env)
         self.assertIn("TEST_VAR", env)
         self.assertEqual(env["TEST_VAR"], "123")

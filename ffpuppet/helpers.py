@@ -448,8 +448,7 @@ def prepare_environment(target_dir, sanitizer_log, env_mod=None):
     if "RUST_BACKTRACE" not in env:
         env["RUST_BACKTRACE"] = "full"
 
-    configure_sanitizers(env, target_dir, sanitizer_log)
-
+    # merge env_mod
     if env_mod is not None:
         assert isinstance(env_mod, dict)
         for env_name, env_value in env_mod.items():
@@ -458,6 +457,8 @@ def prepare_environment(target_dir, sanitizer_log, env_mod=None):
                 env[env_name] = env_value
             elif env_name in env:
                 del env[env_name]
+
+    configure_sanitizers(env, target_dir, sanitizer_log)
 
     return env
 
