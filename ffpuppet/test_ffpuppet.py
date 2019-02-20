@@ -372,19 +372,26 @@ class PuppetTests(TestCase): # pylint: disable=too-many-public-methods
         ffp.close()
         with open(self.tmpfn, "w") as prefs:
             prefs.write("//fftest_exit_code_0\n")
-        with tempfile.NamedTemporaryFile() as test_fp:
-            test_fp.write(b"test")
-            test_fp.seek(0)
-            # needs realpath() for OSX & normcase() for Windows
-            fname = os.path.normcase(os.path.realpath(test_fp.name))
-            ffp.launch(TESTFF_BIN, location=fname, prefs_js=self.tmpfn)
-            ffp.wait(timeout=10)
-            ffp.close()
-            ffp.save_logs(self.logs)
+        fd, test_file = tempfile.mkstemp()
+        os.close(fd)
+        self.addCleanup(os.remove, test_file)
+        with open(test_file, "w") as test_fp:
+            test_fp.write("test")
+        # needs realpath() for OSX & normcase() for Windows
+        fname = os.path.normcase(os.path.realpath(test_file))
+        ffp.launch(TESTFF_BIN, location=fname, prefs_js=self.tmpfn)
+        ffp.wait(timeout=10)
+        ffp.close()
+        ffp.save_logs(self.logs)
         with open(os.path.join(self.logs, "log_stdout.txt"), "r") as log_fp:
-            location = log_fp.read().splitlines()[-2].strip()
-        self.assertIn("url: 'file:///", location)
-        location = os.path.normcase(location.split("file:///")[-1][:-1])
+            self.assertIn("url: 'file:///", log_fp.read())
+            log_fp.seek(0)
+            for line in log_fp:
+                if "file:///" in line:
+                    location = os.path.normcase(line.split("'")[1].split("file:///")[1])
+                    break
+            else:
+                assert False, "Could not parse location"
         self.assertFalse(location.startswith("/"))
         self.assertEqual(os.path.normpath(os.path.join("/", location)), fname)
 
