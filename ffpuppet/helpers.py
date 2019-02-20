@@ -132,14 +132,13 @@ class Bootstrapper(object):
             while len(conn.recv(4096)) == 4096:
                 pass
             log.debug("sending response with redirect url: %r", url)
-            body = "<head>" \
-                   "<meta http-equiv=\"refresh\" content=\"0; url=%s\"/>" \
-                   "</head>" % ("about:blank" if url is None else url)
-            response = "HTTP/1.1 200 OK\r\n" \
-                       "Content-Length: %d\r\n" \
-                       "Content-Type: text/html\r\n" \
-                       "Connection: close\r\n\r\n%s" % (len(body), body)
-            conn.sendall(response.encode("ascii"))
+            if url is None:
+                resp = "HTTP/1.1 204 No Content\r\nConnection: close\r\n\r\n"
+            else:
+                resp = "HTTP/1.1 301 Moved Permanently\r\n" \
+                       "Location: %s\r\n" \
+                       "Connection: close\r\n\r\n" % (url)
+            conn.sendall(resp.encode("ascii"))
             log.debug("bootstrap complete (%0.2fs)", (time.time() - start_time))
 
         except socket.error as soc_e:

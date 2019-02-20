@@ -5,13 +5,12 @@
 
 from multiprocessing import Event, freeze_support, Process
 import os
-import re
 import sys
 import time
 try:
-    from urllib.request import urlopen
+    from urllib.request import urlopen, URLError
 except ImportError:
-    from urllib2 import urlopen
+    from urllib2 import urlopen, URLError
 
 EXIT_DELAY = 45
 POOL_SIZE = 4  # number of child procs to create
@@ -98,31 +97,25 @@ def main(parent_done):
             is_alive.wait()
             is_alive.clear()
 
-    target_url = None # should be set to the value passed to launch()'s 'location' arg
-    while url is not None:
-        if url.startswith("about"):
-            break
-        elif url.startswith("file://"):
-            break
-
-        conn = urlopen(url)
+    target_url = None
+    if url:
         try:
-            data = conn.read().decode('utf-8')
-            # check for redirects
-            redirect = re.search(r"content=\"0;\surl=([^\"]+)\"", data)
-            if redirect is not None:
-                url = redirect.group(1)
-                if url is not None:
-                    target_url = url
-                continue
-            sys.stdout.write(data)
+            conn = urlopen(url)
+        except URLError as req_err:
+            # can't redirect to file:// from http://
+            conn = urlopen(req_err.reason.split('\'')[1])
+        try:
+            # this should set target_url to the value passed to launch()'s 'location' arg
+            target_url = conn.geturl()
+            if target_url == url:
+                target_url = None
+            sys.stdout.write(conn.read().decode('utf-8'))
             sys.stdout.write('\n')
             sys.stdout.flush()
         finally:
             conn.close()
-        break
 
-    sys.stdout.write('url: %s\n' % target_url)
+    sys.stdout.write('url: %r\n' % target_url)
     sys.stdout.flush()
 
     if cmd == 'memory':
