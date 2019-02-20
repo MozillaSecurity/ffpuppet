@@ -190,7 +190,7 @@ class PuppetTests(TestCase): # pylint: disable=too-many-public-methods
         self.assertIn("log_stdout.txt", log_list)
         self.assertIn(ffp._logs.META_FILE, log_list)  # pylint: disable=protected-access
         with open(os.path.join(log_dir, "log_stdout.txt"), "r") as log_fp:
-            self.assertIn("url: http://", log_fp.read().strip())
+            self.assertIn("url: 'http://", log_fp.read())
         for fname in log_list:
             with open(os.path.join(log_dir, fname)) as log_fp:
                 log_data = log_fp.read().splitlines()
@@ -383,8 +383,8 @@ class PuppetTests(TestCase): # pylint: disable=too-many-public-methods
             ffp.save_logs(self.logs)
         with open(os.path.join(self.logs, "log_stdout.txt"), "r") as log_fp:
             location = log_fp.read().splitlines()[-2].strip()
-        self.assertIn("url: file:///", location)
-        location = os.path.normcase(location.split("file:///")[-1])
+        self.assertIn("url: 'file:///", location)
+        location = os.path.normcase(location.split("file:///")[-1][:-1])
         self.assertFalse(location.startswith("/"))
         self.assertEqual(os.path.normpath(os.path.join("/", location)), fname)
 
