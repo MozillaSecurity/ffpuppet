@@ -61,11 +61,11 @@ class FFPuppet(object):
             if not plat.startswith("linux"):
                 raise EnvironmentError("Valgrind is only supported on Linux")
             try:
-                with open(os.devnull, "w") as null_fp:
-                    subprocess.call(["valgrind", "--version"], stdout=null_fp, stderr=null_fp)
-            except OSError:
+                version = subprocess.check_output(["valgrind", "--version"]).split("-")[-1].split(".")
+                if float(".".join((version[0], version[1]))) < 3.14:
+                    raise EnvironmentError("Valgrind >= 3.14 is required")
+            except (IndexError, subprocess.CalledProcessError):
                 raise EnvironmentError("Please install Valgrind")
-            self.add_abort_token(r"==\d+==\s")
 
         if use_gdb:
             if not plat.startswith("linux"):
@@ -147,7 +147,11 @@ class FFPuppet(object):
         @return: True if the browser is running and determined to be
                  in a valid functioning state otherwise False.
         """
-        if self.reason is not None or not self.is_running():
+        if self.reason is not None:
+            log.debug("reason is set to %r", self.reason)
+            return False
+        if not self.is_running():
+            log.debug("is_running() returned False")
             return False
         if any(self._crashreports()):
             log.debug("crash report found")
@@ -160,11 +164,16 @@ class FFPuppet(object):
 
 
     def _crashreports(self):
-        # check for *San logs
+        # check for *San and Valgind logs
         if os.path.isdir(self._logs.working_path):
             for fname in os.listdir(self._logs.working_path):
                 if fname.startswith(self._logs.LOG_ASAN_PREFIX):
                     yield os.path.join(self._logs.working_path, fname)
+                elif fname.startswith(self._logs.LOG_VALGRIND_PREFIX):
+                    full_name = os.path.join(self._logs.working_path, fname)
+                    if os.stat(full_name).st_size:
+                        yield full_name
+
         # check for minidumps
         md_path = os.path.join(self.profile, "minidumps")
         if os.path.isdir(md_path):
@@ -325,11 +334,15 @@ class FFPuppet(object):
                     r_code = self.RC_WORKER
                     check.dump_log(dst_fp=self._logs.add_log("ffp_worker_%s" % check.name))
 
-            # scan for ASan logs
+            # scan for ASan and Valgrind logs
             for fname in os.listdir(self._logs.working_path):
-                if not fname.startswith(self._logs.LOG_ASAN_PREFIX):
-                    continue
-                self._logs.add_log(fname, open(os.path.join(self._logs.working_path, fname), "rb"))
+                if fname.startswith(self._logs.LOG_ASAN_PREFIX):
+                    self._logs.add_log(fname, open(os.path.join(self._logs.working_path, fname), "rb"))
+                elif self._use_valgrind and fname.startswith(self._logs.LOG_VALGRIND_PREFIX):
+                    full_name = os.path.join(self._logs.working_path, fname)
+                    if os.stat(full_name).st_size:
+                        self._logs.add_log(fname, open(full_name, "rb"))
+
             # check for minidumps in the profile and dump them if possible
             if self.profile is not None:
                 process_minidumps(
@@ -406,17 +419,31 @@ class FFPuppet(object):
             cmd.extend(additional_args)
 
         if self._use_valgrind:
-            cmd = [
+            valgrind_cmd = [
                 "valgrind",
                 "-q",
-                #"---error-limit=no",
-                "--smc-check=all-non-file",
+                "--error-exitcode=99",
+                "--exit-on-first-error=yes",
+                #"--soname-synonyms=somalloc=NONE", # use with jemalloc builds
+                "--expensive-definedness-checks=yes",
+                "--fair-sched=try",
+                "--gen-suppressions=all",
+                "--leak-check=no",
+                "--log-file=%s.%%p" % os.path.join(self._logs.working_path, self._logs.LOG_VALGRIND_PREFIX),
+                "--read-inline-info=no",
                 "--show-mismatched-frees=no",
                 "--show-possibly-lost=no",
-                "--read-inline-info=yes",
-                #"--leak-check=full",
-                #"--track-origins=yes",
-                "--vex-iropt-register-updates=allregs-at-mem-access"] + cmd
+                "--smc-check=all-non-file",
+                "--trace-children=yes",
+                "--track-origins=yes",
+                "--vex-iropt-register-updates=allregs-at-mem-access"]
+
+            sup_file = os.environ.get("VALGRIND_SUP_PATH", "")
+            log.debug("using Valgrind suppressions from file: %r", sup_file)
+            if os.path.isfile(sup_file):
+                valgrind_cmd.append("--suppressions=%s" % sup_file)
+
+            cmd = valgrind_cmd + cmd
 
         if self._use_gdb:
             cmd = [
@@ -532,6 +559,9 @@ class FFPuppet(object):
             if safe_mode:
                 launch_args.insert(0, "-safe-mode")
 
+            # clean up existing log files
+            self._logs.reset()
+
             cmd = self.build_launch_cmd(
                 bin_path,
                 additional_args=launch_args)
@@ -541,9 +571,9 @@ class FFPuppet(object):
                     env_mod = dict()
                 # https://developer.gimp.org/api/2.0/glib/glib-running.html#G_DEBUG
                 env_mod["G_DEBUG"] = "gc-friendly"
+                env_mod["MOZ_AVOID_OPENGL_ALTOGETHER"] = "1"
 
-            # clean up existing log files
-            self._logs.reset()
+
             # open logs
             self._logs.add_log("stdout")
             stderr = self._logs.add_log("stderr")

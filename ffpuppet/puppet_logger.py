@@ -19,7 +19,8 @@ __all__ = ("PuppetLogger")
 
 
 class PuppetLogger(object):
-    LOG_ASAN_PREFIX = "ffp_asan_%d.log" % os.getpid()  # prefix for ASan logs
+    LOG_ASAN_PREFIX = "ffp_asan_%d.log" % os.getpid()
+    LOG_VALGRIND_PREFIX = "valgrind.%d"  % os.getpid()
     LOG_BUF_SIZE = 0x10000  # buffer size used to copy logs
     META_FILE = "log_metadata.json"
 
