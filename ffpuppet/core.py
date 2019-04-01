@@ -62,8 +62,10 @@ class FFPuppet(object):
             if not plat.startswith("linux"):
                 raise EnvironmentError("Valgrind is only supported on Linux")
             try:
-                version = subprocess.check_output(["valgrind", "--version"]).split(b"-")[-1].split(b".")
-                if float(b".".join((version[0], version[1]))) < FFPuppet.VALGRIND_MIN_VERSION:
+                match = re.match(
+                    b"valgrind-(?P<ver>\\d+\\.\\d+)",
+                    subprocess.check_output(["valgrind", "--version"]))
+                if not match or float(match.group("ver")) < FFPuppet.VALGRIND_MIN_VERSION:
                     raise EnvironmentError("Valgrind >= %0.2f is required" % FFPuppet.VALGRIND_MIN_VERSION)
             except (IndexError, subprocess.CalledProcessError):
                 raise EnvironmentError("Please install Valgrind")
