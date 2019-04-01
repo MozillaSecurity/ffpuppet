@@ -40,6 +40,7 @@ class FFPuppet(object):
     RC_CLOSED = "CLOSED"  # target was closed by call to FFPuppet close()
     RC_EXITED = "EXITED"  # target exited
     RC_WORKER = "WORKER"  # target was closed by worker thread
+    VALGRIND_MIN_VERSION = 3.14  # minimum allowed verision of Valgrind
 
     def __init__(self, use_profile=None, use_valgrind=False, use_xvfb=False, use_gdb=False, use_rr=False):
         self._abort_tokens = set()  # tokens used to notify log scanner to kill the browser process
@@ -62,8 +63,8 @@ class FFPuppet(object):
                 raise EnvironmentError("Valgrind is only supported on Linux")
             try:
                 version = subprocess.check_output(["valgrind", "--version"]).split("-")[-1].split(".")
-                if float(".".join((version[0], version[1]))) < 3.14:
-                    raise EnvironmentError("Valgrind >= 3.14 is required")
+                if float(".".join((version[0], version[1]))) < FFPuppet.VALGRIND_MIN_VERSION:
+                    raise EnvironmentError("Valgrind >= %0.2f is required" % FFPuppet.VALGRIND_MIN_VERSION)
             except (IndexError, subprocess.CalledProcessError):
                 raise EnvironmentError("Please install Valgrind")
 

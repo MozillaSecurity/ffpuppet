@@ -436,19 +436,27 @@ class PuppetTests(TestCase): # pylint: disable=too-many-public-methods
             with self.assertRaisesRegex(EnvironmentError, "Valgrind is only supported on Linux"):
                 FFPuppet(use_valgrind=True)
         else:
-            ffp = FFPuppet(use_valgrind=True)
-            self.addCleanup(ffp.clean_up)
-            bin_path = str(subprocess.check_output(["which", "echo"]).strip().decode("ascii"))
-            # launch will fail b/c 'echo' will exit right away but that's fine
-            with self.assertRaisesRegex(LaunchError, "Failure during browser startup"):
-                self.assertEqual(ffp.launch(bin_path), 0)
-            ffp.close()
-            ffp.save_logs(self.logs)
-            with open(os.path.join(self.logs, "log_stderr.txt"), "rb") as log_fp:
-                log_data = log_fp.read()
-            # verify Valgrind ran and executed the script
-            self.assertIn(b"valgrind -q", log_data)
-            self.assertIn(b"[ffpuppet] Reason code: EXITED", log_data)
+            vmv = FFPuppet.VALGRIND_MIN_VERSION
+            try:
+                FFPuppet.VALGRIND_MIN_VERSION = 9999999999.99
+                with self.assertRaisesRegex(EnvironmentError, r"Valgrind >= \d+\.\d+ is required"):
+                    ffp = FFPuppet(use_valgrind=True)
+                FFPuppet.VALGRIND_MIN_VERSION = 0
+                ffp = FFPuppet(use_valgrind=True)
+                self.addCleanup(ffp.clean_up)
+                bin_path = str(subprocess.check_output(["which", "echo"]).strip().decode("ascii"))
+                # launch will fail b/c 'echo' will exit right away but that's fine
+                with self.assertRaisesRegex(LaunchError, "Failure during browser startup"):
+                    self.assertEqual(ffp.launch(bin_path), 0)
+                ffp.close()
+                ffp.save_logs(self.logs)
+                with open(os.path.join(self.logs, "log_stderr.txt"), "rb") as log_fp:
+                    log_data = log_fp.read()
+                # verify Valgrind ran and executed the script
+                self.assertIn(b"valgrind -q", log_data)
+                self.assertIn(b"[ffpuppet] Reason code: EXITED", log_data)
+            finally:
+                FFPuppet.VALGRIND_MIN_VERSION = vmv
 
     def test_20(self):
         "test detecting invalid prefs file"
