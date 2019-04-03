@@ -1,11 +1,12 @@
+# coding=utf-8
+"""ffpuppet minidump parser tests"""
 # This Source Code Form is subject to the terms of the Mozilla Public
-# License, v. 2.0. If a copy of the MPL was not distributed with this
-# file, You can obtain one at http://mozilla.org/MPL/2.0/.
+# License, v. 2.0. If a copy of the MPL was not distributed with this file,
+# You can obtain one at http://mozilla.org/MPL/2.0/.
 
 import logging
 import os
 import shutil
-import sys
 import tempfile
 import time
 import unittest
@@ -13,21 +14,10 @@ import unittest
 from .minidump_parser import MinidumpParser, process_minidumps
 
 logging.basicConfig(level=logging.DEBUG if bool(os.getenv("DEBUG")) else logging.INFO)
-log = logging.getLogger("minidump_test")
-
-class TestCase(unittest.TestCase):
-
-    if sys.version_info.major == 2:
-
-        def assertRegex(self, *args, **kwds):
-            return self.assertRegexpMatches(*args, **kwds)
-
-        def assertRaisesRegex(self, *args, **kwds):
-            return self.assertRaisesRegexp(*args, **kwds)
-
+log = logging.getLogger("minidump_test")  # pylint: disable=invalid-name
 
 CWD = os.path.realpath(os.path.dirname(__file__))
-TESTMDSW_BIN = os.path.join(CWD, "testmdsw", "testmdsw.exe") if sys.platform.startswith('win') else os.path.join(CWD, "testmdsw.py")
+TESTMDSW_BIN = os.path.join(CWD, "testmdsw.py")
 
 MinidumpParser.MDSW_BIN = TESTMDSW_BIN
 MinidumpParser.MDSW_MAX_STACK = 8
@@ -56,23 +46,17 @@ class DummyLogger(object):
         return self._files[file_name]
 
     def close(self):
-        for fp in self._files.values():
-            fp.close()
+        for o_fp in self._files.values():
+            o_fp.close()
         if self._working_path is not None and os.path.isdir(self._working_path):
             shutil.rmtree(self._working_path)
 
 
-class MinidumpParserTests(TestCase):  # pylint: disable=too-many-public-methods
-
-    @classmethod
-    def setUpClass(cls):
-        if sys.platform.startswith('win') and not os.path.isfile(TESTMDSW_BIN):
-            raise EnvironmentError("testmdsw.exe is missing see testmdsw.py for build instructions") # pragma: no cover
-
+class MinidumpParserTests(unittest.TestCase):  # pylint: disable=too-many-public-methods
     def setUp(self):
         self.lgr = DummyLogger()
-        fd, self.tmpfn = tempfile.mkstemp(prefix="helper_test_")
-        os.close(fd)
+        tmpfd, self.tmpfn = tempfile.mkstemp(prefix="helper_test_")
+        os.close(tmpfd)
         self.tmpdir = tempfile.mkdtemp(prefix="helper_test_")
         MinidumpParser.FAILURE_DIR = self.tmpdir
 

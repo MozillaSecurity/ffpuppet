@@ -1,6 +1,8 @@
+# coding=utf-8
+"""ffpuppet helpers tests"""
 # This Source Code Form is subject to the terms of the Mozilla Public
-# License, v. 2.0. If a copy of the MPL was not distributed with this
-# file, You can obtain one at http://mozilla.org/MPL/2.0/.
+# License, v. 2.0. If a copy of the MPL was not distributed with this file,
+# You can obtain one at http://mozilla.org/MPL/2.0/.
 
 import logging
 import multiprocessing
@@ -18,23 +20,19 @@ from .helpers import (
     get_processes, prepare_environment, SanitizerConfig, wait_on_files)
 
 logging.basicConfig(level=logging.DEBUG if bool(os.getenv("DEBUG")) else logging.INFO)
-log = logging.getLogger("helpers_test")
+log = logging.getLogger("helpers_test")  # pylint: disable=invalid-name
 
 class TestCase(unittest.TestCase):
 
     if sys.version_info.major == 2:
-
-        def assertRegex(self, *args, **kwds):
-            return self.assertRegexpMatches(*args, **kwds)
-
-        def assertRaisesRegex(self, *args, **kwds):
-            return self.assertRaisesRegexp(*args, **kwds)
+        def assertRaisesRegex(self, *args, **kwds):  # pylint: disable=arguments-differ,invalid-name
+            return self.assertRaisesRegexp(*args, **kwds)  # pylint: disable=deprecated-method
 
 
 # this needs to be here in order to work correctly on Windows
 def dummy_process(is_alive, is_done):
     is_alive.set()
-    print("I'm process %d" % os.getpid())
+    sys.stdout.write("I'm process %d\n" % os.getpid())
     is_done.wait(5)
 
 
@@ -193,8 +191,8 @@ class HelperTests(TestCase):  # pylint: disable=too-many-public-methods
         def parse(opt_str):
             opts = dict()
             for entry in SanitizerConfig.re_delim.split(opt_str):
-                k, v = entry.split("=")
-                opts[k] = v
+                key, value = entry.split("=")
+                opts[key] = value
             return opts
 
         # create dummy llvm-symbolizer

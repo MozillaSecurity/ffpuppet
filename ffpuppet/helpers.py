@@ -44,7 +44,7 @@ class SanitizerConfig(object):
     def load_options(self, env, key):
         assert isinstance(env, dict)
         if key not in env:
-            return None
+            return
         assert isinstance(env[key], str)
         assert " " not in env[key], "%s should not contain spaces, join options with ':'" % key
         for option in self.re_delim.split(env[key]):
@@ -124,7 +124,7 @@ class Bootstrapper(object):
                 except socket.timeout:
                     if time.time() >= time_limit:
                         raise BrowserTimeoutError("Launching browser timed out (%ds)" % timeout)
-                    elif not cb_continue():
+                    if not cb_continue():
                         raise BrowserTerminatedError("Failure during browser startup")
                     conn = None  # browser is alive but we have not received a connection
 

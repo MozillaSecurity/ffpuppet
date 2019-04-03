@@ -1,6 +1,9 @@
+# coding=utf-8
+"""ffpuppet main.py tests"""
 # This Source Code Form is subject to the terms of the Mozilla Public
-# License, v. 2.0. If a copy of the MPL was not distributed with this
-# file, You can obtain one at http://mozilla.org/MPL/2.0/.
+# License, v. 2.0. If a copy of the MPL was not distributed with this file,
+# You can obtain one at http://mozilla.org/MPL/2.0/.
+# pylint: disable=missing-docstring
 
 import logging
 import os
@@ -15,11 +18,13 @@ import ffpuppet
 from .main import main
 
 logging.basicConfig(level=logging.DEBUG if bool(os.getenv("DEBUG")) else logging.INFO)
-log = logging.getLogger("ffp_test")
+log = logging.getLogger("ffp_test")  # pylint: disable=invalid-name
 
 CWD = os.path.realpath(os.path.dirname(__file__))
-TESTFF_BIN = os.path.join(CWD, "testff", "testff.exe") if sys.platform.startswith('win') else os.path.join(CWD, "testff.py")
-TESTMDSW_BIN = os.path.join(CWD, "testmdsw", "testmdsw.exe") if sys.platform.startswith('win') else os.path.join(CWD, "testmdsw.py")
+PLAT = sys.platform.lower()
+
+TESTFF_BIN = os.path.join(CWD, "testff.py")
+TESTMDSW_BIN = os.path.join(CWD, "testmdsw.py")
 
 ffpuppet.FFPuppet.MDSW_BIN = TESTMDSW_BIN
 ffpuppet.FFPuppet.MDSW_MAX_STACK = 8
@@ -28,10 +33,10 @@ class TestCase(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        if sys.platform.startswith('win') and not os.path.isfile(TESTFF_BIN):
-            raise EnvironmentError("testff.exe is missing see testff.py for build instructions") # pragma: no cover
-        if sys.platform.startswith('win') and not os.path.isfile(TESTMDSW_BIN):
-            raise EnvironmentError("testmdsw.exe is missing see testmdsw.py for build instructions") # pragma: no cover
+        if PLAT.startswith("win") and not os.path.isfile(TESTFF_BIN):
+            raise EnvironmentError("testff.exe is missing see testff.py for build instructions")  # pragma: no cover
+        if PLAT.startswith("win") and not os.path.isfile(TESTMDSW_BIN):
+            raise EnvironmentError("testmdsw.exe is missing see testmdsw.py for build instructions")  # pragma: no cover
 
 
 class MainTests(TestCase):
@@ -65,7 +70,7 @@ class MainTests(TestCase):
             prefs_fp.write("//fftest_big_log\n")
         main([TESTFF_BIN, "-v", "-d", "-p", prefs, "--log-limit", "1", "-a", "blah_test"])
 
-    @unittest.skipIf(sys.platform.startswith('win'), "This test is unsupported on Windows")
+    @unittest.skipIf(PLAT.startswith('win'), "This test is unsupported on Windows")
     def test_04(self):
         "test sending SIGINT"
         prefs = os.path.join(self.tmpdir, "pref.js")

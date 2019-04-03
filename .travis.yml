@@ -1,39 +1,56 @@
+dist: xenial
+sudo: false
+cache: pip
 language: python
-sudo: true
-
+python:
+  - 2.7
+  - 3.4
+  - 3.5
+  - 3.6
+  - 3.7
 matrix:
   include:
-    - os: linux
-      python: 2.7
-    - os: linux
-      python: 3.4
-    - os: linux
-      python: 3.5
-    - os: linux
-      python: 3.6
-    - os: linux
-      python: 3.7-dev
     - os: osx
-      language: generic
-  allow_failures:
-    - os: linux
-      python: 3.8-dev
-
+      language: sh
+      python: 2.7
+      before_install:
+        - brew update
+        - brew upgrade python
+        - python3 -m venv venv
+        - source venv/bin/activate
+    - os: osx
+      language: sh
+      python: 3.7
+      before_install:
+        - brew update
+        - brew upgrade python
+        - python -m venv venv
+        - source venv/bin/activate
+    - os: windows
+      language: sh
+      python: 3.7
+      before_install:
+        - choco install python3
+        - export PATH="/c/Python37:/c/Python37/Scripts:$PATH"
+        - python -m pip install --upgrade pip wheel
+    - os: windows
+      language: sh
+      python: 2.7
+      before_install:
+        - choco install python2
+        - export PATH="/c/Python27:/c/Python27/Scripts:$PATH"
+        - python -m pip install --upgrade pip wheel
 addons:
   apt:
     packages:
       - gdb
       - valgrind
-
 before_install:
-  - if [[ $TRAVIS_OS_NAME == "linux" ]]; then LATEST_VERSION=$(curl -s "https://github.com/Mozilla/rr/releases/latest" | grep -o 'tag/[v.0-9]*' | awk -F/ '{print $2}'); fi
-  - if [[ $TRAVIS_OS_NAME == "linux" ]]; then sudo sysctl kernel.perf_event_paranoid=1; curl -L -o /tmp/rr.deb "https://github.com/mozilla/rr/releases/download/$LATEST_VERSION/rr-$LATEST_VERSION-Linux-$(uname -m).deb"; sudo dpkg -i /tmp/rr.deb; rm /tmp/rr.deb; fi
-  - if [[ $TRAVIS_OS_NAME == "osx" ]]; then pip2 install pytest; fi
-  - if [[ $TRAVIS_OS_NAME == "osx" ]]; then pip2 install -r requirements.txt; else pip install -r requirements.txt; fi
-  - if [[ $TRAVIS_OS_NAME == "linux" ]] && [ $TRAVIS_PYTHON_VERSION == 2.7 -o $TRAVIS_PYTHON_VERSION == 3.5 ]; then pip install pylint pytest-cov python-coveralls; fi
-
+  - pip install --upgrade setuptools pip
+  - pip install --upgrade "psutil >= 4.4.0" "xvfbwrapper >= 0.2.9; sys_platform == 'linux' or sys_platform == 'linux2'"
+  - pip install --upgrade pytest python-coveralls pylint
+  - pip install --upgrade pytest-pylint pytest-cov
 script:
-  - if [[ $TRAVIS_OS_NAME == "linux" ]] && [ $TRAVIS_PYTHON_VERSION == 2.7 -o $TRAVIS_PYTHON_VERSION == 3.5 ]; then pytest -v --cov=. --cov-report term-missing --cov-config .coveragerc && pylint --errors-only --ignored-classes=_socketobject --ignore=testff.py,testmdsw.py,debugger_windbg.py ffpuppet; else pytest -v; fi
-
+  - python -m pytest
 after_success:
-  - if [[ $TRAVIS_OS_NAME == "linux" ]] && [ $TRAVIS_PYTHON_VERSION == 2.7 -o $TRAVIS_PYTHON_VERSION == 3.5 ]; then coveralls; fi
+  - coveralls

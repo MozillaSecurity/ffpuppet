@@ -1,10 +1,9 @@
 [run]
 omit =
 	ffpuppet/__main__.py
-	ffpuppet/workers/debugger_windbg.py
-	setup.py
 	ffpuppet/testff.py
 	ffpuppet/testmdsw.py
+	setup.py
 
 [report]
 exclude_lines =

@@ -1,7 +1,5 @@
 #!/usr/bin/env python
-
-# To create an exe file for testing on Windows (tested with Python 3.4):
-# python -m py2exe.build_exe -O -b 0 -d testmdsw testmdsw.py
+"""fake minidump_stackwalk"""
 
 import os
 import sys
@@ -21,7 +19,7 @@ def main():
             sys.exit(1)
         sys.stdout.write(data)
     else:
-        print("COULD NOT OPEN %r" % dmp_file)
+        sys.stdout.write("COULD NOT OPEN %r\n" % dmp_file)
         sys.exit(1)
 
     sys.exit(0)

@@ -8,6 +8,7 @@ import platform
 import re
 import shutil
 import subprocess
+import sys
 
 try:  # py 2-3 compatibility
     from urllib import pathname2url  # pylint: disable=no-name-in-module
@@ -34,7 +35,7 @@ __author__ = "Tyson Smith"
 __all__ = ("FFPuppet")
 
 
-class FFPuppet(object):
+class FFPuppet(object):  # pylint: disable=too-many-instance-attributes
     LAUNCH_TIMEOUT_MIN = 10  # minimum amount of time to wait for the browser to launch
     RC_ALERT = "ALERT"  # target crashed/aborted/triggered an assertion failure etc...
     RC_CLOSED = "CLOSED"  # target was closed by call to FFPuppet close()
@@ -409,7 +410,14 @@ class FFPuppet(object):
         if not isinstance(bin_path, str):
             raise TypeError("Expecting 'str' got %r" % type(bin_path).__name__)
 
-        cmd = [bin_path, "-no-remote"]
+        # if a python script is passed use 'sys.executable' as the binary
+        # this is used by the test framework
+        if bin_path.lower().endswith(".py"):
+            cmd = [sys.executable]
+        else:
+            cmd = []
+
+        cmd += [bin_path, "-no-remote"]
         if self.profile is not None:
             cmd += ["-profile", self.profile]
 

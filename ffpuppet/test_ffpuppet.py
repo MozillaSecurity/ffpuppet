@@ -1,3 +1,9 @@
+# coding=utf-8
+"""ffpuppet tests"""
+# This Source Code Form is subject to the terms of the Mozilla Public
+# License, v. 2.0. If a copy of the MPL was not distributed with this file,
+# You can obtain one at http://mozilla.org/MPL/2.0/.
+
 import errno
 import logging
 import os
@@ -10,10 +16,10 @@ import tempfile
 import threading
 import time
 import unittest
-try: # py 2-3 compatibility
-    from BaseHTTPServer import HTTPServer, BaseHTTPRequestHandler # pylint: disable=import-error
+try:  # py 2-3 compatibility
+    from BaseHTTPServer import HTTPServer, BaseHTTPRequestHandler  # pylint: disable=import-error
 except ImportError:
-    from http.server import HTTPServer, BaseHTTPRequestHandler # pylint: disable=import-error
+    from http.server import HTTPServer, BaseHTTPRequestHandler  # pylint: disable=import-error
 
 from psutil import AccessDenied, NoSuchProcess, Process, wait_procs
 
@@ -23,11 +29,12 @@ from .helpers import get_processes, onerror
 from .minidump_parser import MinidumpParser
 
 logging.basicConfig(level=logging.DEBUG if bool(os.getenv("DEBUG")) else logging.INFO)
-log = logging.getLogger("ffp_test")
+log = logging.getLogger("ffp_test")  # pylint: disable=invalid-name
 
 CWD = os.path.realpath(os.path.dirname(__file__))
-TESTFF_BIN = os.path.join(CWD, "testff", "testff.exe") if sys.platform.startswith("win") else os.path.join(CWD, "testff.py")
-TESTMDSW_BIN = os.path.join(CWD, "testmdsw", "testmdsw.exe") if sys.platform.startswith("win") else os.path.join(CWD, "testmdsw.py")
+PLAT = sys.platform.lower()
+TESTFF_BIN = os.path.join(CWD, "testff.py")
+TESTMDSW_BIN = os.path.join(CWD, "testmdsw.py")
 
 MinidumpParser.MDSW_BIN = TESTMDSW_BIN
 MinidumpParser.MDSW_MAX_STACK = 8
@@ -36,15 +43,15 @@ class TestCase(unittest.TestCase):
 
     if sys.version_info.major == 2:
 
-        def assertRegex(self, *args, **kwds):
-            return self.assertRegexpMatches(*args, **kwds)
+        def assertRegex(self, *args, **kwds):  # pylint: disable=arguments-differ,invalid-name
+            return self.assertRegexpMatches(*args, **kwds)  # pylint: disable=deprecated-method
 
-        def assertRaisesRegex(self, *args, **kwds):
-            return self.assertRaisesRegexp(*args, **kwds)
+        def assertRaisesRegex(self, *args, **kwds):  # pylint: disable=arguments-differ,invalid-name
+            return self.assertRaisesRegexp(*args, **kwds)  # pylint: disable=deprecated-method
 
 
 class ReqHandler(BaseHTTPRequestHandler):
-    def do_GET(self):
+    def do_GET(self):  # pylint: disable=invalid-name
         self.send_response(200)
         self.end_headers()
         self.wfile.write(b"hello world")
@@ -56,7 +63,7 @@ class HTTPTestServer(object):
         while True:
             try:
                 self._httpd = HTTPServer(("127.0.0.1", 0), self._handler)
-            except socket.error as soc_e: # pragma: no cover
+            except socket.error as soc_e:  # pragma: no cover
                 if soc_e.errno in (errno.EADDRINUSE, 10013):  # Address already in use
                     continue
                 raise
@@ -81,13 +88,9 @@ class HTTPTestServer(object):
             httpd.socket.close()
 
 
-class PuppetTests(TestCase): # pylint: disable=too-many-public-methods
+class PuppetTests(TestCase):  # pylint: disable=too-many-public-methods
     @classmethod
     def setUpClass(cls):
-        if sys.platform.startswith('win') and not os.path.isfile(TESTFF_BIN):
-            raise EnvironmentError("testff.exe is missing see testff.py for build instructions") # pragma: no cover
-        if sys.platform.startswith('win') and not os.path.isfile(TESTMDSW_BIN):
-            raise EnvironmentError("testmdsw.exe is missing see testmdsw.py for build instructions") # pragma: no cover
         cls.tsrv = HTTPTestServer()
 
     @classmethod
@@ -95,8 +98,8 @@ class PuppetTests(TestCase): # pylint: disable=too-many-public-methods
         cls.tsrv.shutdown()
 
     def setUp(self):
-        fd, self.tmpfn = tempfile.mkstemp(prefix="ffp_test_log_")
-        os.close(fd)
+        tmpfd, self.tmpfn = tempfile.mkstemp(prefix="ffp_test_log_")
+        os.close(tmpfd)
         self.logs = tempfile.mkdtemp(prefix="ffp_test_log_")
 
     def tearDown(self):
@@ -105,7 +108,7 @@ class PuppetTests(TestCase): # pylint: disable=too-many-public-methods
         if os.path.isdir(self.logs):
             shutil.rmtree(self.logs, onerror=onerror)
 
-    @unittest.skipIf(sys.platform.startswith('win'), "Unsupported on Windows")
+    @unittest.skipIf(PLAT.startswith("win"), "Unsupported on Windows")
     def test_00(self):
         "test that invalid executables raise the right exception"
         ffp = FFPuppet()
@@ -149,7 +152,7 @@ class PuppetTests(TestCase): # pylint: disable=too-many-public-methods
     def test_03(self):
         "test hang on start"
         ffp = FFPuppet()
-        default_timeout = ffp.LAUNCH_TIMEOUT_MIN
+        default_timeout = ffp.LAUNCH_TIMEOUT_MIN  # pylint: disable=invalid-name
         try:
             ffp.LAUNCH_TIMEOUT_MIN = 1
             self.addCleanup(ffp.clean_up)
@@ -280,7 +283,8 @@ class PuppetTests(TestCase): # pylint: disable=too-many-public-methods
         self.addCleanup(ffp.clean_up)
         with open(self.tmpfn, 'w') as prefs:
             prefs.write('//fftest_memory\n')
-        ffp.launch(TESTFF_BIN, location=self.tsrv.get_addr(), prefs_js=self.tmpfn, memory_limit=0x100000) # 1MB
+        # launch with 1MB memory limit
+        ffp.launch(TESTFF_BIN, location=self.tsrv.get_addr(), prefs_js=self.tmpfn, memory_limit=0x100000)
         for _ in range(100):
             if not ffp.is_healthy():
                 break
@@ -356,7 +360,7 @@ class PuppetTests(TestCase): # pylint: disable=too-many-public-methods
 
     def test_14(self):
         "test launching under Xvfb"
-        if not sys.platform.startswith("linux"):
+        if not PLAT.startswith("linux"):
             with self.assertRaisesRegex(EnvironmentError, "Xvfb is only supported on Linux"):
                 ffp = FFPuppet(use_xvfb=True)
         else:
@@ -372,8 +376,8 @@ class PuppetTests(TestCase): # pylint: disable=too-many-public-methods
         ffp.close()
         with open(self.tmpfn, "w") as prefs:
             prefs.write("//fftest_exit_code_0\n")
-        fd, test_file = tempfile.mkstemp()
-        os.close(fd)
+        tmpfd, test_file = tempfile.mkstemp()
+        os.close(tmpfd)
         self.addCleanup(os.remove, test_file)
         with open(test_file, "w") as test_fp:
             test_fp.write("test")
@@ -404,7 +408,7 @@ class PuppetTests(TestCase): # pylint: disable=too-many-public-methods
 
     def test_17(self):
         "test launching with gdb"
-        if not sys.platform.startswith("linux"):
+        if not PLAT.startswith("linux"):
             with self.assertRaisesRegex(EnvironmentError, "GDB is only supported on Linux"):
                 FFPuppet(use_gdb=True)
         else:
@@ -432,7 +436,7 @@ class PuppetTests(TestCase): # pylint: disable=too-many-public-methods
 
     def test_19(self):
         "test launching with Valgrind"
-        if not sys.platform.startswith("linux"):
+        if not PLAT.startswith("linux"):
             with self.assertRaisesRegex(EnvironmentError, "Valgrind is only supported on Linux"):
                 FFPuppet(use_valgrind=True)
         else:
@@ -632,12 +636,12 @@ class PuppetTests(TestCase): # pylint: disable=too-many-public-methods
 
     def test_28(self):
         "test launching with RR"
-        if not sys.platform.startswith("linux"):
+        if not PLAT.startswith("linux"):
             with self.assertRaisesRegex(EnvironmentError, "RR is only supported on Linux"):
                 FFPuppet(use_rr=True)
         else:
             try:
-                # TODO: this can hang if ptrace is blocked by seccomp
+                # TODO: this can hang if ptrace is blocked by seccomp  # pylint: disable=fixme
                 proc = subprocess.Popen(["rr", "check"], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
             except OSError:
                 self.skipTest("RR not installed")
