@@ -8,11 +8,20 @@ python:
   - 3.5
   - 3.6
   - 3.7
+  - 3.8-dev
 matrix:
   include:
     - os: osx
       language: generic
       python: 2.7
+    - os: osx
+      language: sh
+      python: 3.7
+      before_install:
+        - brew update
+        - brew upgrade python
+        - python3 -m venv venv
+        - source venv/bin/activate
     - os: windows
       language: sh
       python: 2.7
@@ -40,9 +49,8 @@ before_install:
 install:
   - python -m pip install -e .
 before_script:
-  - pip install --upgrade pytest python-coveralls pylint
-  - pip install --upgrade pytest-pylint pytest-cov
+  - pip install --upgrade pytest pytest-pylint pytest-cov codecov 
 script:
   - python -m pytest
 after_success:
-  - coveralls
+  - codecov
