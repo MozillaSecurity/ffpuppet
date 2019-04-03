@@ -1,5 +1,4 @@
 [MASTER]
-jobs=2
 ignore=ffpuppet/testff.py,ffpuppet/testmdsw.py
 
 [MESSAGES CONTROL]

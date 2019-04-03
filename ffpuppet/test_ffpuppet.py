@@ -154,7 +154,7 @@ class PuppetTests(TestCase):  # pylint: disable=too-many-public-methods
         ffp = FFPuppet()
         default_timeout = ffp.LAUNCH_TIMEOUT_MIN  # pylint: disable=invalid-name
         try:
-            ffp.LAUNCH_TIMEOUT_MIN = 1
+            ffp.LAUNCH_TIMEOUT_MIN = 1  # pylint: disable=invalid-name
             self.addCleanup(ffp.clean_up)
             with open(self.tmpfn, 'w') as prefs:
                 prefs.write('//fftest_startup_hang\n')
