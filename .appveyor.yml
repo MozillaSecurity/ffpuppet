@@ -13,8 +13,7 @@ environment:
 install:
     - "%PYTHON%\\python.exe -m pip install --upgrade setuptools pip"
     - "%PYTHON%\\python.exe -m pip install -e ."
-    - "%PYTHON%\\python.exe -m pip install --upgrade pylint pytest pytest-pylint"
-    - py -3.4 -m pip install py2exe
+    - "%PYTHON%\\python.exe -m pip install --upgrade pylint pytest pytest-pylint pytest-cov"
 build: off
 test_script:
     - "%PYTHON%\\python.exe -m pytest"
