@@ -11,21 +11,11 @@ python:
 matrix:
   include:
     - os: osx
-      language: sh
+      language: generic
       python: 2.7
-      before_install:
-        - brew update
-        - brew upgrade python
-        - python -m venv venv
-        - source venv/bin/activate
     - os: osx
-      language: sh
+      language: generic
       python: 3.7
-      before_install:
-        - brew update
-        - brew upgrade python
-        - python3 -m venv venv
-        - source venv/bin/activate
     - os: windows
       language: sh
       python: 2.7
@@ -40,6 +30,9 @@ matrix:
         - choco install python3
         - export PATH="/c/Python37:/c/Python37/Scripts:$PATH"
         - python -m pip install --upgrade pip wheel
+  allow_failures:
+    - os: linux
+      python: 3.8-dev
 addons:
   apt:
     packages:
