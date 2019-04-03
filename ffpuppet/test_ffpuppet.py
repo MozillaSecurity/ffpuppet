@@ -3,6 +3,7 @@
 # This Source Code Form is subject to the terms of the Mozilla Public
 # License, v. 2.0. If a copy of the MPL was not distributed with this file,
 # You can obtain one at http://mozilla.org/MPL/2.0/.
+# pylint: disable=invalid-name
 
 import errno
 import logging
@@ -29,7 +30,7 @@ from .helpers import get_processes, onerror
 from .minidump_parser import MinidumpParser
 
 logging.basicConfig(level=logging.DEBUG if bool(os.getenv("DEBUG")) else logging.INFO)
-log = logging.getLogger("ffp_test")  # pylint: disable=invalid-name
+log = logging.getLogger("ffp_test")
 
 CWD = os.path.realpath(os.path.dirname(__file__))
 PLAT = sys.platform.lower()
@@ -43,15 +44,15 @@ class TestCase(unittest.TestCase):
 
     if sys.version_info.major == 2:
 
-        def assertRegex(self, *args, **kwds):  # pylint: disable=arguments-differ,invalid-name
+        def assertRegex(self, *args, **kwds):  # pylint: disable=arguments-differ
             return self.assertRegexpMatches(*args, **kwds)  # pylint: disable=deprecated-method
 
-        def assertRaisesRegex(self, *args, **kwds):  # pylint: disable=arguments-differ,invalid-name
+        def assertRaisesRegex(self, *args, **kwds):  # pylint: disable=arguments-differ
             return self.assertRaisesRegexp(*args, **kwds)  # pylint: disable=deprecated-method
 
 
 class ReqHandler(BaseHTTPRequestHandler):
-    def do_GET(self):  # pylint: disable=invalid-name
+    def do_GET(self):
         self.send_response(200)
         self.end_headers()
         self.wfile.write(b"hello world")
@@ -152,9 +153,9 @@ class PuppetTests(TestCase):  # pylint: disable=too-many-public-methods
     def test_03(self):
         "test hang on start"
         ffp = FFPuppet()
-        default_timeout = ffp.LAUNCH_TIMEOUT_MIN  # pylint: disable=invalid-name
+        default_timeout = ffp.LAUNCH_TIMEOUT_MIN
         try:
-            ffp.LAUNCH_TIMEOUT_MIN = 1  # pylint: disable=invalid-name
+            ffp.LAUNCH_TIMEOUT_MIN = 1
             self.addCleanup(ffp.clean_up)
             with open(self.tmpfn, 'w') as prefs:
                 prefs.write('//fftest_startup_hang\n')

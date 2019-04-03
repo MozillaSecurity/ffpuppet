@@ -2,7 +2,7 @@
 ignore=ffpuppet/testff.py,ffpuppet/testmdsw.py
 
 [MESSAGES CONTROL]
-disable=missing-docstring,too-many-arguments,too-many-branches,too-many-locals,too-many-statements,useless-object-inheritance
+disable=duplicate-code,missing-docstring,too-many-arguments,too-many-branches,too-many-locals,too-many-statements,useless-object-inheritance
 
 [FORMAT]
 max-line-length=120

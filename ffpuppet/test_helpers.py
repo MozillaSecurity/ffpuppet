@@ -7,7 +7,6 @@
 import logging
 import multiprocessing
 import os
-import platform
 import shutil
 import socket
 import sys
@@ -22,18 +21,19 @@ from .helpers import (
 logging.basicConfig(level=logging.DEBUG if bool(os.getenv("DEBUG")) else logging.INFO)
 log = logging.getLogger("helpers_test")  # pylint: disable=invalid-name
 
-class TestCase(unittest.TestCase):
-
-    if sys.version_info.major == 2:
-        def assertRaisesRegex(self, *args, **kwds):  # pylint: disable=arguments-differ,invalid-name
-            return self.assertRaisesRegexp(*args, **kwds)  # pylint: disable=deprecated-method
-
 
 # this needs to be here in order to work correctly on Windows
 def dummy_process(is_alive, is_done):
     is_alive.set()
     sys.stdout.write("I'm process %d\n" % os.getpid())
     is_done.wait(5)
+
+
+class TestCase(unittest.TestCase):
+
+    if sys.version_info.major == 2:
+        def assertRaisesRegex(self, *args, **kwds):  # pylint: disable=arguments-differ,invalid-name
+            return self.assertRaisesRegexp(*args, **kwds)  # pylint: disable=deprecated-method
 
 
 class HelperTests(TestCase):  # pylint: disable=too-many-public-methods
@@ -187,7 +187,7 @@ class HelperTests(TestCase):  # pylint: disable=too-many-public-methods
 
     def test_04(self):
         "test configure_sanitizers()"
-        is_windows = platform.system().lower().startswith("windows")
+        is_windows = sys.platform.startswith("win")
         def parse(opt_str):
             opts = dict()
             for entry in SanitizerConfig.re_delim.split(opt_str):
