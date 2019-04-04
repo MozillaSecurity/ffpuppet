@@ -17,7 +17,7 @@ logging.basicConfig(level=logging.DEBUG if bool(os.getenv("DEBUG")) else logging
 log = logging.getLogger("minidump_test")  # pylint: disable=invalid-name
 
 CWD = os.path.realpath(os.path.dirname(__file__))
-TESTMDSW_BIN = os.path.join(CWD, "testmdsw.py")
+TESTMDSW_BIN = os.path.join(CWD, "resources", "testmdsw.py")
 
 MinidumpParser.MDSW_BIN = TESTMDSW_BIN
 MinidumpParser.MDSW_MAX_STACK = 8

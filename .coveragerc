@@ -1,8 +1,8 @@
 [run]
 omit =
 	ffpuppet/__main__.py
-	ffpuppet/testff.py
-	ffpuppet/testmdsw.py
+	ffpuppet/resources/*
+	ffpuppet/test_*.py
 	setup.py
 
 [report]

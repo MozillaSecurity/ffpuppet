@@ -23,23 +23,14 @@ log = logging.getLogger("ffp_test")  # pylint: disable=invalid-name
 CWD = os.path.realpath(os.path.dirname(__file__))
 PLAT = sys.platform.lower()
 
-TESTFF_BIN = os.path.join(CWD, "testff.py")
-TESTMDSW_BIN = os.path.join(CWD, "testmdsw.py")
+TESTFF_BIN = os.path.join(CWD, "resources", "testff.py")
+TESTMDSW_BIN = os.path.join(CWD, "resources", "testmdsw.py")
 
 ffpuppet.FFPuppet.MDSW_BIN = TESTMDSW_BIN
 ffpuppet.FFPuppet.MDSW_MAX_STACK = 8
 
-class TestCase(unittest.TestCase):
 
-    @classmethod
-    def setUpClass(cls):
-        if PLAT.startswith("win") and not os.path.isfile(TESTFF_BIN):
-            raise EnvironmentError("testff.exe is missing see testff.py for build instructions")  # pragma: no cover
-        if PLAT.startswith("win") and not os.path.isfile(TESTMDSW_BIN):
-            raise EnvironmentError("testmdsw.exe is missing see testmdsw.py for build instructions")  # pragma: no cover
-
-
-class MainTests(TestCase):
+class MainTests(unittest.TestCase):
 
     def setUp(self):
         self.tmpdir = tempfile.mkdtemp(prefix="ffp_test")

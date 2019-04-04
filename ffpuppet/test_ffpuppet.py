@@ -34,8 +34,8 @@ log = logging.getLogger("ffp_test")
 
 CWD = os.path.realpath(os.path.dirname(__file__))
 PLAT = sys.platform.lower()
-TESTFF_BIN = os.path.join(CWD, "testff.py")
-TESTMDSW_BIN = os.path.join(CWD, "testmdsw.py")
+TESTFF_BIN = os.path.join(CWD, "resources", "testff.py")
+TESTMDSW_BIN = os.path.join(CWD, "resources", "testmdsw.py")
 
 MinidumpParser.MDSW_BIN = TESTMDSW_BIN
 MinidumpParser.MDSW_MAX_STACK = 8
