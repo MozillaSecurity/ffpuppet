@@ -15,10 +15,6 @@ Installation
 
     pip install --user -e <ffpuppet_repository>
 
-##### Installing python modules
-
-    pip install -r requirements.txt
-
 ##### Xvfb on Linux
 
 On Linux `xvfb` can be used in order to run headless (this is not the same as Firefox's `-headless` mode).
@@ -37,18 +33,6 @@ mozilla-central tree, then open or download `releng.manifest`. Either use `toolt
 copy the digest from the file and download it from `https://tooltool.mozilla-releng.net/sha512/<digest>`.
 In either case, the file should be renamed to `minidump_stackwalk` and marked executable (or `minidump_stackwalk.exe`
 on Windows).
-
-##### fuzzPriv Extension
-
-This provides access to operations that are helpful when fuzzing such as calling the garbage collector.
-At the moment there are two versions:
-
-The [legacy](https://github.com/MozillaSecurity/fuzzpriv/tree/legacy) version (the fuzzPriv you know and love)
-can only be used with Nighty, mozilla-central builds and old versions of Firefox.
-
-The [WebExtension](https://github.com/MozillaSecurity/fuzzpriv/tree/master) version can be used with any build
-that supports WebExtensions but certain features are only available when combined with [fuzzing builds](https://tools.taskcluster.net/index/gecko.v2.mozilla-central.latest.firefox/linux64-fuzzing-asan-opt).
-
 
 Browser Builds
 --------------
