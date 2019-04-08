@@ -222,7 +222,7 @@ class FFPuppet(object):
 
     def clean_up(self):
         """
-        Remove all the remaining files that were created during execution.
+        Remove all remaining files created during execution.
         This will clear some state information and should only be called once
         the FFPuppet object is no longer needed. Using the FFPuppet object after
         calling clean_up() is not supported.
