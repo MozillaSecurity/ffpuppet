@@ -352,7 +352,10 @@ class PuppetTests(TestCase): # pylint: disable=too-many-public-methods
         self.assertIsNone(ffp.reason)
         ffp.close()
         ffp.clean_up()
-        ffp.close()
+        with self.assertRaises(AssertionError):
+            ffp.launch(TESTFF_BIN, location=self.tsrv.get_addr())
+        with self.assertRaises(AssertionError):
+            ffp.close()
 
     def test_14(self):
         "test launching under Xvfb"
@@ -427,7 +430,7 @@ class PuppetTests(TestCase): # pylint: disable=too-many-public-methods
         ffp = FFPuppet()
         self.addCleanup(ffp.clean_up)
         ffp.launch(TESTFF_BIN, location=self.tsrv.get_addr())
-        with self.assertRaisesRegex(RuntimeError, "Logs are still in use.+"):
+        with self.assertRaises(AssertionError):
             ffp.save_logs(self.logs)
 
     def test_19(self):
