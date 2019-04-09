@@ -40,7 +40,7 @@ class FFPuppet(object):
     RC_CLOSED = "CLOSED"  # target was closed by call to FFPuppet close()
     RC_EXITED = "EXITED"  # target exited
     RC_WORKER = "WORKER"  # target was closed by worker thread
-    VALGRIND_MIN_VERSION = 3.14  # minimum allowed verision of Valgrind
+    VALGRIND_MIN_VERSION = 3.14  # minimum allowed version of Valgrind
 
     def __init__(self, use_profile=None, use_valgrind=False, use_xvfb=False, use_gdb=False, use_rr=False):
         self._abort_tokens = set()  # tokens used to notify log scanner to kill the browser process
@@ -167,7 +167,7 @@ class FFPuppet(object):
 
 
     def _crashreports(self):
-        # check for *San and Valgind logs
+        # check for *San and Valgrind logs
         if os.path.isdir(self._logs.working_path):
             for fname in os.listdir(self._logs.working_path):
                 if fname.startswith(self._logs.LOG_ASAN_PREFIX):
@@ -214,22 +214,26 @@ class FFPuppet(object):
         """
 
         log.debug("save_logs() called, log_path=%r, meta=%r", log_path, meta)
-        if not self._logs.closed:
-            raise RuntimeError("Logs are still in use. Call close() first!")
+        assert self._launches > -1, "clean_up() has been called"
+        assert self._logs.closed, "Logs are still in use. Call close() first!"
 
         self._logs.save_logs(log_path, meta=meta)
 
 
     def clean_up(self):
         """
-        Remove all the remaining files that could have been created during execution.
-
-        NOTE: Calling launch() after calling clean_up() is not intended and may not work
-        as expected.
+        Remove all remaining files created during execution.
+        This will clear some state information and should only be called once
+        the FFPuppet object is no longer needed. Using the FFPuppet object after
+        calling clean_up() is not supported.
 
         @rtype: None
         @return: None
         """
+
+        if self._launches < 0:
+            log.debug("clean_up() call ignored")
+            return
 
         log.debug("clean_up() called")
         self.close(force_close=True)
@@ -245,6 +249,9 @@ class FFPuppet(object):
         assert self._logs.closed, "self._logs.closed is not True"
         assert self._proc is None, "self._proc is not None"
         assert self.profile is None, "self.profile is not None"
+
+        # negative 'self._launches' indicates clean_up() has been called
+        self._launches = -1
 
 
     @staticmethod
@@ -287,6 +294,7 @@ class FFPuppet(object):
         """
 
         log.debug("close(force_close=%r) called", force_close)
+        assert self._launches > -1, "clean_up() has been called"
         if self.reason is not None:
             self._logs.close()  # make sure browser logs are also closed
             return
@@ -376,6 +384,7 @@ class FFPuppet(object):
         @rtype: int
         @return: successful launch count
         """
+        assert self._launches > -1, "clean_up() has been called"
         return self._launches
 
 
@@ -520,6 +529,8 @@ class FFPuppet(object):
         @rtype: None
         @return: None
         """
+
+        assert self._launches > -1, "clean_up() has been called"
         if self._proc is not None:
             raise LaunchError("Process is already running")
 
@@ -585,8 +596,8 @@ class FFPuppet(object):
             stderr.write(b"\n\n")
             stderr.flush()
             sanitizer_logs = os.path.join(self._logs.working_path, self._logs.LOG_ASAN_PREFIX)
-            # launch the browser
             plat = platform.system().lower()
+            # launch the browser
             log.debug("launch command: %r", " ".join(cmd))
             self._proc = subprocess.Popen(
                 cmd,
