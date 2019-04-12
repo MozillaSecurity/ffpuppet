@@ -6,6 +6,7 @@ import logging
 import os
 import platform
 import re
+import resource
 import shutil
 import subprocess
 
@@ -597,6 +598,11 @@ class FFPuppet(object):
             stderr.flush()
             sanitizer_logs = os.path.join(self._logs.working_path, self._logs.LOG_ASAN_PREFIX)
             plat = platform.system().lower()
+            def set_ulimit():
+                """set up the subprocess environment"""
+                if plat in ("darwin", "linux"):
+                    # ulimit -c 0
+                    resource.setrlimit(resource.RLIMIT_CORE, (0, 0))
             # launch the browser
             log.debug("launch command: %r", " ".join(cmd))
             self._proc = subprocess.Popen(
@@ -604,6 +610,7 @@ class FFPuppet(object):
                 bufsize=0,  # unbuffered (for log scanners)
                 creationflags=subprocess.CREATE_NEW_PROCESS_GROUP if plat == "windows" else 0,
                 env=prepare_environment(self._last_bin_path, sanitizer_logs, env_mod=env_mod),
+                preexec_fn=set_ulimit,
                 shell=False,
                 stderr=stderr,
                 stdout=self._logs.get_fp("stdout"))
