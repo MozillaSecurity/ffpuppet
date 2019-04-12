@@ -10,7 +10,7 @@ import shutil
 import tempfile
 import unittest
 
-from .checks import CheckLogContents, CheckLogSize, CheckMemoryUsage
+from .checks import Check, CheckLogContents, CheckLogSize, CheckMemoryUsage
 
 
 class CheckTests(unittest.TestCase):
@@ -26,6 +26,14 @@ class CheckTests(unittest.TestCase):
             os.remove(self.tmpfn)
 
     def test_01(self):
+        "test Check()"
+        checker = Check()
+        with self.assertRaises(NotImplementedError):
+            checker.check()
+        with tempfile.TemporaryFile() as log_fp:
+            checker.dump_log(log_fp)
+
+    def test_02(self):
         "test CheckLogContents()"
         # input contains token
         with open(self.tmpfn, "w") as in_fp:
@@ -37,6 +45,8 @@ class CheckTests(unittest.TestCase):
             self.assertGreater(log_fp.tell(), 1)
         # input does not contains token
         checker = CheckLogContents([self.tmpfn], [re.compile("no_token")])
+        self.assertFalse(checker.check())
+        # check a 2nd time
         self.assertFalse(checker.check())
         with open(self.tmpfn, "wb") as log_fp:
             checker.dump_log(log_fp)
@@ -63,7 +73,7 @@ class CheckTests(unittest.TestCase):
             checker.dump_log(log_fp)
             self.assertGreater(log_fp.tell(), 1)
 
-    def test_02(self):
+    def test_03(self):
         "test CheckLogSize()"
         stde = os.path.join(self.tmpdir, "stderr")
         stdo = os.path.join(self.tmpdir, "stdout")
@@ -82,7 +92,7 @@ class CheckTests(unittest.TestCase):
             checker.dump_log(log_fp)
             self.assertEqual(log_fp.tell(), 0)
 
-    def test_03(self):
+    def test_04(self):
         "test CheckMemoryUsage()"
         checker = CheckMemoryUsage(os.getpid(), 300 * 1024 * 1024)
         self.assertFalse(checker.check())

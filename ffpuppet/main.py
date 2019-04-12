@@ -16,7 +16,7 @@ log = logging.getLogger("ffpuppet")  # pylint: disable=invalid-name
 
 __author__ = "Tyson Smith"
 
-def dump_to_console(log_dir, log_quota=0x8000):
+def dump_to_console(log_dir, show_warning, log_quota=0x8000):
     """
     Read and merge log files and format for output on the console
 
@@ -64,7 +64,7 @@ def dump_to_console(log_dir, log_quota=0x8000):
                 out_fp.write("\n===\n")
                 # using decode() is a workaround for python 3.4
                 out_fp.write(log_fp.read().decode("ascii", errors="ignore"))
-        if tailed:
+        if show_warning and tailed:
             out_fp.write("\n===\n")
             out_fp.write("=== To capture complete logs use '--log'")
             out_fp.write("\n===\n")
@@ -196,7 +196,7 @@ def main(argv=None):  # pylint: disable=missing-docstring
             log_dir = tempfile.mkdtemp(prefix="ffp_log_")
             try:
                 ffp.save_logs(log_dir)
-                log.info("Dumping browser log...\n%s", dump_to_console(log_dir))
+                log.info("Dumping browser log...\n%s", dump_to_console(log_dir, (args.log is None)))
             finally:
                 if os.path.isdir(log_dir):
                     shutil.rmtree(log_dir)

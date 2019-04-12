@@ -271,7 +271,7 @@ class FFPuppet(object):  # pylint: disable=too-many-instance-attributes
             for proc in procs:
                 try:
                     log.warning("Failed to terminate process %d (%s)", proc.pid, proc.name())
-                except (psutil.AccessDenied, psutil.NoSuchProcess):
+                except (psutil.AccessDenied, psutil.NoSuchProcess):  # pragma: no cover
                     pass
             raise TerminateError("Failed to terminate browser")
 

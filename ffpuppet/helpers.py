@@ -86,7 +86,7 @@ class Bootstrapper(object):
                 if soc_e.errno in (errno.EADDRINUSE, 10013):
                     # Address already in use
                     continue
-                raise soc_e
+                raise soc_e  # pragma: no cover
         else:
             self._socket.close()
             raise LaunchError("Could not find available port")
@@ -373,7 +373,7 @@ def get_processes(pid, recursive=True):
         return procs
     try:
         procs += procs[0].children(recursive=True)
-    except (psutil.AccessDenied, psutil.NoSuchProcess):
+    except (psutil.AccessDenied, psutil.NoSuchProcess):  # pragma: no cover
         pass
     return procs
 
@@ -508,7 +508,7 @@ def wait_on_files(wait_files, poll_rate=0.25, timeout=60):
         if wait_files.intersection({true_path(x.path) for x in proc.info["open_files"]}):
             try:
                 procs.append(psutil.Process(proc.info["pid"]))
-            except psutil.NoSuchProcess:
+            except psutil.NoSuchProcess:  # pragma: no cover
                 pass
     # only check previously blocking processes
     while procs:
@@ -519,7 +519,7 @@ def wait_on_files(wait_files, poll_rate=0.25, timeout=60):
                     return False
                 time.sleep(poll_rate)
                 continue
-        except (psutil.AccessDenied, psutil.NoSuchProcess):
+        except (psutil.AccessDenied, psutil.NoSuchProcess):  # pragma: no cover
             pass
         procs.pop()
     return True

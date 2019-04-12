@@ -36,7 +36,7 @@ class MinidumpParser(object):
         if MinidumpParser.MDSW_BIN.endswith(".py"):
             cmd = [sys.executable, MinidumpParser.MDSW_BIN]
         else:
-            cmd = [MinidumpParser.MDSW_BIN]
+            cmd = [MinidumpParser.MDSW_BIN]  # pragma: no cover
         if extra_flags is None:
             extra_flags = list()
         cmd += extra_flags

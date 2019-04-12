@@ -15,7 +15,7 @@ import tempfile
 import unittest
 
 import ffpuppet
-from .main import main
+from .main import dump_to_console, main
 
 logging.basicConfig(level=logging.DEBUG if bool(os.getenv("DEBUG")) else logging.INFO)
 log = logging.getLogger("ffp_test")  # pylint: disable=invalid-name
@@ -40,9 +40,15 @@ class MainTests(unittest.TestCase):
             shutil.rmtree(self.tmpdir)
 
     def test_01(self):
-        "test calling main with '-h'"
+        "test calling main with '-h' and invalid input"
         with self.assertRaises(SystemExit):
             main(["-h"])
+
+        with self.assertRaises(SystemExit):
+            main([TESTFF_BIN, "-p", "/missing/prefs/file"])
+
+        with self.assertRaises(SystemExit):
+            main([TESTFF_BIN, "-e", "/missing/ext/file"])
 
     def test_02(self):
         "test calling main with test binary/script"
@@ -91,3 +97,13 @@ class MainTests(unittest.TestCase):
         self.assertIn(b"Firefox process closed", output)
         self.assertTrue(os.path.isdir(out_logs))
         self.assertGreater(len(os.listdir(out_logs)), 0)
+
+    def test_05(self):
+        "test dump_to_console()"
+        # call with no logs
+        dump_to_console(self.tmpdir, False)
+        # call with dummy logs
+        with open(os.path.join(self.tmpdir, "log_stdout.txt"), "w") as log_fp:
+            for _ in range(1024):
+                log_fp.write("test")
+        dump_to_console(self.tmpdir, True, log_quota=100)

@@ -3,6 +3,7 @@
 # This Source Code Form is subject to the terms of the Mozilla Public
 # License, v. 2.0. If a copy of the MPL was not distributed with this file,
 # You can obtain one at http://mozilla.org/MPL/2.0/.
+# pylint: disable=protected-access
 
 import logging
 import os
@@ -68,9 +69,13 @@ class MinidumpParserTests(unittest.TestCase):  # pylint: disable=too-many-public
         self.lgr.close()
 
     def test_01(self):
-        "test MinidumpParser() with empty scan path"
+        "test MinidumpParser() with missing and empty scan path"
+        with self.assertRaises(IOError):
+            MinidumpParser('/path/done/not/exist/')
         mdp = MinidumpParser(self.tmpdir)
         self.assertFalse(mdp.dump_files)
+        with self.assertRaises(IOError):
+            mdp.collect_logs(self.lgr.create, '/path/done/not/exist/')
         mdp.collect_logs(self.lgr.create, self.tmpdir)
 
     def test_02(self):
@@ -84,7 +89,7 @@ class MinidumpParserTests(unittest.TestCase):  # pylint: disable=too-many-public
         mdp = MinidumpParser(md_path)
         self.assertEqual(len(mdp.dump_files), 1)
         mdp.collect_logs(self.lgr.create, self.tmpdir)
-        internal_fp = [fp for fp in self.lgr._files.values()][0]  # pylint: disable=protected-access
+        internal_fp = [fp for fp in self.lgr._files.values()][0]
         internal_fp.flush()
         with open(internal_fp.name, "r") as log_fp:
             self.assertTrue(log_fp.read().startswith("WARNING: minidump_stackwalk log was empty"))
@@ -113,7 +118,7 @@ class MinidumpParserTests(unittest.TestCase):  # pylint: disable=too-many-public
         mdp.symbols_path = self.tmpdir  # usually set internally
         md_lines = list()
         with tempfile.TemporaryFile() as log_fp:
-            mdp._read_registers(self.tmpfn, log_fp)  # pylint: disable=protected-access
+            mdp._read_registers(self.tmpfn, log_fp)
             log_fp.seek(0)
             for line in log_fp:  # pylint: disable=not-an-iterable
                 if b"=" not in line:
@@ -148,7 +153,7 @@ class MinidumpParserTests(unittest.TestCase):  # pylint: disable=too-many-public
         mdp.symbols_path = self.tmpdir  # usually set internally
         md_lines = list()
         with tempfile.TemporaryFile() as log_fp:
-            mdp._read_stacktrace(self.tmpfn, log_fp)  # pylint: disable=protected-access
+            mdp._read_stacktrace(self.tmpfn, log_fp)
             log_fp.seek(0)
             md_lines = log_fp.readlines()
         self.assertEqual(len(md_lines), 9)  # only the interesting stack info should be in here
@@ -218,7 +223,7 @@ class MinidumpParserTests(unittest.TestCase):  # pylint: disable=too-many-public
                 out_fp.write("1|0|libpthread-2.23.so||||0xd360\n")
             process_minidumps(self.tmpdir, self.tmpdir, self.lgr.create)
             self.assertEqual(self.lgr.count, 2)
-            self.assertTrue(any(fname.startswith("raw_mdsw_") for fname in self.lgr._files))  # pylint: disable=protected-access
+            self.assertTrue(any(fname.startswith("raw_mdsw_") for fname in self.lgr._files))
         finally:
             os.environ.pop("FFP_DEBUG_MDSW")
 
@@ -238,7 +243,7 @@ class MinidumpParserTests(unittest.TestCase):  # pylint: disable=too-many-public
         mdp.symbols_path = self.tmpdir  # usually set internally
         md_lines = list()
         with tempfile.TemporaryFile() as log_fp, tempfile.TemporaryFile() as raw_fp:
-            mdp._read_stacktrace(self.tmpfn, log_fp, raw_fp=raw_fp)  # pylint: disable=protected-access
+            mdp._read_stacktrace(self.tmpfn, log_fp, raw_fp=raw_fp)
             raw_fp.seek(0, os.SEEK_END)
             self.assertEqual(os.path.getsize(self.tmpfn), raw_fp.tell())
             log_fp.seek(0)
