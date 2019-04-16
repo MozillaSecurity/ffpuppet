@@ -120,24 +120,45 @@ class Bootstrapper(object):
             while conn is None:
                 try:
                     conn, _ = self._socket.accept()
-                    conn.settimeout(timeout)
                 except socket.timeout:
                     if time.time() >= time_limit:
                         raise BrowserTimeoutError("Launching browser timed out (%ds)" % timeout)
                     if not cb_continue():
                         raise BrowserTerminatedError("Failure during browser startup")
-                    conn = None  # browser is alive but we have not received a connection
+                    # browser is alive but we have not received a connection
+                    conn = None
 
-            log.debug("waiting to receive browser connection data")
-            while len(conn.recv(4096)) == 4096:
-                pass
-            log.debug("sending response with redirect url: %r", url)
+            log.debug("waiting to receive browser request")
+            buf_size = 4096
+            received = False
+            conn.settimeout(0.5)
+            while True:
+                try:
+                    request = conn.recv(buf_size)
+                except socket.timeout:
+                    request = None
+                if request or received:
+                    if request is None:
+                        log.debug("timeout waiting for more request data")
+                        break
+                    if len(request) < buf_size:
+                        break
+                    # handle receiving exactly 'buf_size' amount of data
+                    received = True
+                    continue
+                if not cb_continue():
+                    raise BrowserTerminatedError("Failure waiting for request")
+                if time.time() >= time_limit:
+                    raise BrowserTimeoutError("Timed out (%ds) waiting for request" % timeout)
+
+            log.debug("sending response (redirect %r)", url)
             if url is None:
                 resp = "HTTP/1.1 204 No Content\r\nConnection: close\r\n\r\n"
             else:
                 resp = "HTTP/1.1 301 Moved Permanently\r\n" \
                        "Location: %s\r\n" \
-                       "Connection: close\r\n\r\n" % (url)
+                       "Connection: close\r\n\r\n" % url
+            conn.settimeout(max(int(time_limit - time.time()), 1))
             conn.sendall(resp.encode("ascii"))
             log.debug("bootstrap complete (%0.2fs)", (time.time() - start_time))
 
