@@ -448,8 +448,9 @@ def prepare_environment(target_dir, sanitizer_log, env_mod=None):
     env["G_SLICE"] = "always-malloc"
     env["MOZ_AUTOMATION"] = "1"
     env["MOZ_CC_RUN_DURING_SHUTDOWN"] = "1"
-    env["MOZ_CRASHREPORTER"] = "1"
-    env["MOZ_CRASHREPORTER_NO_REPORT"] = "1"
+    if env_mod and "MOZ_CRASHREPORTER_DISABLE" not in env_mod:
+        env["MOZ_CRASHREPORTER"] = "1"
+        env["MOZ_CRASHREPORTER_NO_REPORT"] = "1"
     env["MOZ_DISABLE_CONTENT_SANDBOX"] = "1"
     env["MOZ_DISABLE_GMP_SANDBOX"] = "1"
     env["MOZ_DISABLE_GPU_SANDBOX"] = "1"

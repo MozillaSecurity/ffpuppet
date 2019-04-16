@@ -41,7 +41,7 @@ class FFPuppet(object):  # pylint: disable=too-many-instance-attributes
     RC_CLOSED = "CLOSED"  # target was closed by call to FFPuppet close()
     RC_EXITED = "EXITED"  # target exited
     RC_WORKER = "WORKER"  # target was closed by worker thread
-    VALGRIND_MIN_VERSION = 3.14  # minimum allowed verision of Valgrind
+    VALGRIND_MIN_VERSION = 3.14  # minimum allowed version of Valgrind
 
     def __init__(self, use_profile=None, use_valgrind=False, use_xvfb=False, use_gdb=False, use_rr=False):
         self._abort_tokens = set()  # tokens used to notify log scanner to kill the browser process
@@ -168,12 +168,12 @@ class FFPuppet(object):  # pylint: disable=too-many-instance-attributes
 
 
     def _crashreports(self, skip_md=False):
-        # check for *San and Valgind logs
+        # check for *San and Valgrind logs
         if os.path.isdir(self._logs.working_path):
             for fname in os.listdir(self._logs.working_path):
                 if fname.startswith(self._logs.LOG_ASAN_PREFIX):
                     yield os.path.join(self._logs.working_path, fname)
-                elif fname.startswith(self._logs.LOG_VALGRIND_PREFIX):
+                elif self._use_valgrind and fname.startswith(self._logs.LOG_VALGRIND_PREFIX):
                     full_name = os.path.join(self._logs.working_path, fname)
                     if os.stat(full_name).st_size:
                         yield full_name
@@ -216,22 +216,26 @@ class FFPuppet(object):  # pylint: disable=too-many-instance-attributes
         """
 
         log.debug("save_logs() called, log_path=%r, meta=%r", log_path, meta)
-        if not self._logs.closed:
-            raise RuntimeError("Logs are still in use. Call close() first!")
+        assert self._launches > -1, "clean_up() has been called"
+        assert self._logs.closed, "Logs are still in use. Call close() first!"
 
         self._logs.save_logs(log_path, meta=meta)
 
 
     def clean_up(self):
         """
-        Remove all the remaining files that could have been created during execution.
-
-        NOTE: Calling launch() after calling clean_up() is not intended and may not work
-        as expected.
+        Remove all remaining files created during execution.
+        This will clear some state information and should only be called once
+        the FFPuppet object is no longer needed. Using the FFPuppet object after
+        calling clean_up() is not supported.
 
         @rtype: None
         @return: None
         """
+
+        if self._launches < 0:
+            log.debug("clean_up() call ignored")
+            return
 
         log.debug("clean_up() called")
         self.close(force_close=True)
@@ -247,6 +251,9 @@ class FFPuppet(object):  # pylint: disable=too-many-instance-attributes
         assert self._logs.closed, "self._logs.closed is not True"
         assert self._proc is None, "self._proc is not None"
         assert self.profile is None, "self.profile is not None"
+
+        # negative 'self._launches' indicates clean_up() has been called
+        self._launches = -1
 
 
     @staticmethod
@@ -289,6 +296,7 @@ class FFPuppet(object):  # pylint: disable=too-many-instance-attributes
         """
 
         log.debug("close(force_close=%r) called", force_close)
+        assert self._launches > -1, "clean_up() has been called"
         if self.reason is not None:
             self._logs.close()  # make sure browser logs are also closed
             return
@@ -327,6 +335,7 @@ class FFPuppet(object):  # pylint: disable=too-many-instance-attributes
 
             # check the process exit code if needed
             if r_code == self.RC_EXITED and self._proc.poll() not in (0, -1, 1):
+                log.debug("poll() returned %r", self._proc.poll())
                 r_code = self.RC_ALERT
         else:
             r_code = self.RC_CLOSED
@@ -372,6 +381,7 @@ class FFPuppet(object):  # pylint: disable=too-many-instance-attributes
         @rtype: int
         @return: successful launch count
         """
+        assert self._launches > -1, "clean_up() has been called"
         return self._launches
 
 
@@ -430,7 +440,6 @@ class FFPuppet(object):  # pylint: disable=too-many-instance-attributes
                 "-q",
                 "--error-exitcode=99",
                 "--exit-on-first-error=yes",
-                #"--soname-synonyms=somalloc=NONE", # use with jemalloc builds
                 "--expensive-definedness-checks=yes",
                 "--fair-sched=try",
                 "--gen-suppressions=all",
@@ -444,9 +453,11 @@ class FFPuppet(object):  # pylint: disable=too-many-instance-attributes
                 "--track-origins=yes",
                 "--vex-iropt-register-updates=allregs-at-mem-access"]
 
-            sup_file = os.environ.get("VALGRIND_SUP_PATH", "")
-            log.debug("using Valgrind suppressions from file: %r", sup_file)
-            if os.path.isfile(sup_file):
+            sup_file = os.environ.get("VALGRIND_SUP_PATH", None)
+            if sup_file:
+                if not os.path.isfile(sup_file):
+                    raise IOError("Missing Valgrind suppressions %r" % sup_file)
+                log.debug("using Valgrind suppressions: %r", sup_file)
                 valgrind_cmd.append("--suppressions=%s" % sup_file)
 
             cmd = valgrind_cmd + cmd
@@ -523,6 +534,8 @@ class FFPuppet(object):  # pylint: disable=too-many-instance-attributes
         @rtype: None
         @return: None
         """
+
+        assert self._launches > -1, "clean_up() has been called"
         if self._proc is not None:
             raise LaunchError("Process is already running")
 
@@ -578,7 +591,7 @@ class FFPuppet(object):  # pylint: disable=too-many-instance-attributes
                 # https://developer.gimp.org/api/2.0/glib/glib-running.html#G_DEBUG
                 env_mod["G_DEBUG"] = "gc-friendly"
                 env_mod["MOZ_AVOID_OPENGL_ALTOGETHER"] = "1"
-
+                env_mod["MOZ_CRASHREPORTER_DISABLE"] = "1"
 
             # open logs
             self._logs.add_log("stdout")
@@ -588,8 +601,8 @@ class FFPuppet(object):  # pylint: disable=too-many-instance-attributes
             stderr.write(b"\n\n")
             stderr.flush()
             sanitizer_logs = os.path.join(self._logs.working_path, self._logs.LOG_ASAN_PREFIX)
-            # launch the browser
             plat = platform.system().lower()
+            # launch the browser
             log.debug("launch command: %r", " ".join(cmd))
             self._proc = subprocess.Popen(
                 cmd,
