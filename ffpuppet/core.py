@@ -167,7 +167,7 @@ class FFPuppet(object):  # pylint: disable=too-many-instance-attributes
         return True
 
 
-    def _crashreports(self):
+    def _crashreports(self, skip_md=False):
         # check for *San and Valgind logs
         if os.path.isdir(self._logs.working_path):
             for fname in os.listdir(self._logs.working_path):
@@ -179,11 +179,12 @@ class FFPuppet(object):  # pylint: disable=too-many-instance-attributes
                         yield full_name
 
         # check for minidumps
-        md_path = os.path.join(self.profile, "minidumps")
-        if os.path.isdir(md_path):
-            for fname in os.listdir(md_path):
-                if ".dmp" in fname:
-                    yield os.path.join(md_path, fname)
+        if not skip_md:
+            md_path = os.path.join(self.profile, "minidumps")
+            if os.path.isdir(md_path):
+                for fname in os.listdir(md_path):
+                    if ".dmp" in fname:
+                        yield os.path.join(md_path, fname)
 
 
     def log_length(self, log_id):
@@ -338,15 +339,9 @@ class FFPuppet(object):  # pylint: disable=too-many-instance-attributes
                     r_code = self.RC_WORKER
                     check.dump_log(dst_fp=self._logs.add_log("ffp_worker_%s" % check.name))
 
-            # scan for ASan and Valgrind logs
-            for fname in os.listdir(self._logs.working_path):
-                if fname.startswith(self._logs.LOG_ASAN_PREFIX):
-                    self._logs.add_log(fname, open(os.path.join(self._logs.working_path, fname), "rb"))
-                elif self._use_valgrind and fname.startswith(self._logs.LOG_VALGRIND_PREFIX):
-                    full_name = os.path.join(self._logs.working_path, fname)
-                    if os.stat(full_name).st_size:
-                        self._logs.add_log(fname, open(full_name, "rb"))
-
+            # collect logs (excluding minidumps)
+            for fname in self._crashreports(skip_md=True):
+                self._logs.add_log(os.path.basename(fname), open(fname, "rb"))
             # check for minidumps in the profile and dump them if possible
             if self.profile is not None:
                 process_minidumps(

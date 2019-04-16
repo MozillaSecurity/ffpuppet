@@ -3,7 +3,7 @@
 # This Source Code Form is subject to the terms of the Mozilla Public
 # License, v. 2.0. If a copy of the MPL was not distributed with this file,
 # You can obtain one at http://mozilla.org/MPL/2.0/.
-# pylint: disable=invalid-name
+# pylint: disable=invalid-name,protected-access
 
 import errno
 import logging
@@ -124,7 +124,7 @@ class PuppetTests(TestCase):  # pylint: disable=too-many-public-methods
         self.assertEqual(ffp.launches, 0)
         self.assertEqual(ffp.reason, ffp.RC_CLOSED)
         ffp.launch(TESTFF_BIN, location=self.tsrv.get_addr())
-        self.assertEqual(len(ffp._checks), 0)  # pylint: disable=protected-access
+        self.assertEqual(len(ffp._checks), 0)
         self.assertEqual(ffp.launches, 1)
         self.assertIsNone(ffp.wait(timeout=0))
         self.assertTrue(ffp.is_running())
@@ -132,7 +132,7 @@ class PuppetTests(TestCase):  # pylint: disable=too-many-public-methods
         self.assertIsNone(ffp.reason)
         ffp.close()
         self.assertEqual(ffp.reason, ffp.RC_CLOSED)
-        self.assertIsNone(ffp._proc)  # pylint: disable=protected-access
+        self.assertIsNone(ffp._proc)
         self.assertFalse(ffp.is_running())
         self.assertFalse(ffp.is_healthy())
         self.assertIsNone(ffp.wait(timeout=10))
@@ -181,7 +181,7 @@ class PuppetTests(TestCase):  # pylint: disable=too-many-public-methods
         ffp.launch(TESTFF_BIN, location=self.tsrv.get_addr(), prefs_js=self.tmpfn)
         ffp.wait(timeout=10)
         ffp.close()
-        self.assertTrue(ffp._logs.closed)  # pylint: disable=protected-access
+        self.assertTrue(ffp._logs.closed)
         log_ids = ffp.available_logs()
         self.assertEqual(len(log_ids), 2)
         self.assertIn("stderr", log_ids)
@@ -192,7 +192,7 @@ class PuppetTests(TestCase):  # pylint: disable=too-many-public-methods
         log_list = os.listdir(log_dir)
         self.assertIn("log_stderr.txt", log_list)
         self.assertIn("log_stdout.txt", log_list)
-        self.assertIn(ffp._logs.META_FILE, log_list)  # pylint: disable=protected-access
+        self.assertIn(ffp._logs.META_FILE, log_list)
         with open(os.path.join(log_dir, "log_stdout.txt"), "r") as log_fp:
             self.assertIn("url: 'http://", log_fp.read())
         for fname in log_list:
@@ -204,7 +204,7 @@ class PuppetTests(TestCase):  # pylint: disable=too-many-public-methods
                 self.assertTrue(log_data[-1].startswith('[ffpuppet] Reason code:'))
             elif fname.startswith("log_stdout"):
                 self.assertEqual(log_data[0], "hello world")
-            elif fname.startswith(ffp._logs.META_FILE):  # pylint: disable=protected-access
+            elif fname.startswith(ffp._logs.META_FILE):
                 continue  # ignore
             else:
                 raise AssertionError("Unknown log file %r" % fname)
@@ -530,7 +530,7 @@ class PuppetTests(TestCase):  # pylint: disable=too-many-public-methods
         self.addCleanup(ffp.clean_up)
         ffp.launch(TESTFF_BIN)
         test_logs = list()
-        asan_prefix = os.path.join(ffp._logs.working_path, ffp._logs.LOG_ASAN_PREFIX) # pylint: disable=protected-access
+        asan_prefix = os.path.join(ffp._logs.working_path, ffp._logs.LOG_ASAN_PREFIX)
         for i in range(3):
             test_logs.append(".".join([asan_prefix, str(i)]))
         # small log with nothing interesting
@@ -575,7 +575,7 @@ class PuppetTests(TestCase):  # pylint: disable=too-many-public-methods
         md_dir = os.path.join(ffp.profile, "minidumps")
         if not os.path.isdir(md_dir):
             os.mkdir(md_dir)
-        ffp._last_bin_path = ffp.profile # pylint: disable=protected-access
+        ffp._last_bin_path = ffp.profile
         sym_dir = os.path.join(ffp.profile, "symbols") # needs to exist to satisfy a check
         if not os.path.isdir(sym_dir):
             os.mkdir(sym_dir)
@@ -713,3 +713,43 @@ class PuppetTests(TestCase):  # pylint: disable=too-many-public-methods
         working_prf = ffp.profile
         ffp.close()
         self.assertFalse(os.path.isdir(working_prf))
+
+    def test_31(self):
+        "test _crashreports()"
+        class StubbedLaunch(FFPuppet):
+            def __init__(self):
+                super(StubbedLaunch, self).__init__()
+                self._use_valgrind = True
+
+            def launch(self):  # pylint: disable=arguments-differ
+                self.profile = tempfile.mkdtemp(prefix="ffp_test_profile_")
+                os.mkdir(os.path.join(self.profile, "minidumps"))
+
+            def close(self, force_close=False):
+                if os.path.isdir(self.profile):
+                    shutil.rmtree(self.profile)
+                self.profile = None
+
+        ffp = StubbedLaunch()
+        self.addCleanup(ffp.clean_up)
+        ffp.launch()
+        self.assertFalse(list(ffp._crashreports()))
+
+        san_log = "%s.1" % ffp._logs.LOG_ASAN_PREFIX
+        vg1_log = "%s.1" % ffp._logs.LOG_VALGRIND_PREFIX
+        vg2_log = "%s.2" % ffp._logs.LOG_VALGRIND_PREFIX
+        with open(os.path.join(ffp._logs.working_path, san_log), "w") as ofp:
+            ofp.write("test\n")
+        with open(os.path.join(ffp._logs.working_path, vg1_log), "w") as ofp:
+            ofp.write("test\n")
+        with open(os.path.join(ffp._logs.working_path, vg2_log), "w") as ofp:
+            pass
+        with open(os.path.join(ffp._logs.working_path, "junk.log"), "w") as ofp:
+            ofp.write("test\n")
+        with open(os.path.join(ffp.profile, "minidumps", "test.dmp"), "w") as ofp:
+            ofp.write("test\n")
+        with open(os.path.join(ffp.profile, "minidumps", "test.junk"), "w") as ofp:
+            pass
+
+        self.assertEqual(len(list(ffp._crashreports())), 3)
+        self.assertEqual(len(list(ffp._crashreports(skip_md=True))), 2)
