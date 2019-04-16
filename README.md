@@ -58,11 +58,10 @@ Once installed FFPuppet can be run using the following command:
     python -m ffpuppet
 
 ```
-$ python -m ffpuppet -h
-usage: __main__.py [-h] [-a ABORT_TOKEN] [-d] [-e EXTENSION] [-g]
-                   [--ignore-crashes] [-l LOG] [--log-limit LOG_LIMIT]
-                   [-m MEMORY] [-p PREFS] [-P PROFILE] [--safe-mode]
-                   [-t TIMEOUT] [-u URL] [--valgrind] [-v] [--xvfb]
+usage: __main__.py [-h] [-a ABORT_TOKEN] [-d] [-e EXTENSION] [-g] [-l LOG]
+                   [--log-limit LOG_LIMIT] [-m MEMORY]
+                   [--poll-interval POLL_INTERVAL] [-p PREFS] [-P PROFILE]
+                   [--rr] [-t TIMEOUT] [-u URL] [--valgrind] [-v] [--xvfb]
                    binary
 
 Firefox launcher/wrapper
@@ -76,31 +75,31 @@ optional arguments:
                         Scan the log for the given value and close browser on
                         detection. For example '-a ###!!! ASSERTION:' would be
                         used to detect soft assertions.
-  -d, --dump            Display browser logs on process exit
+  -d, --dump            Display browser logs on process exit. This is only
+                        meant to provide a summary of the logs. To collect
+                        full logs use '--log'.
   -e EXTENSION, --extension EXTENSION
                         Use the fuzzPriv extension. Specify the path to the
                         xpi or the directory containing the unpacked extension.
   -g, --gdb             Use GDB (Linux only)
-  --ignore-crashes      Do not close the browser when a crash is detected
-                        (e10s only)
   -l LOG, --log LOG     Location to save log files
   --log-limit LOG_LIMIT
                         Log file size limit in MBs (default: no limit)
   -m MEMORY, --memory MEMORY
                         Process memory limit in MBs (default: no limit)
+  --poll-interval POLL_INTERVAL
+                        Delay between checks for results (default: 0.5)
   -p PREFS, --prefs PREFS
                         Custom prefs.js file to use (default: profile default)
   -P PROFILE, --profile PROFILE
                         Profile to use. This is non-destructive. A copy of the
                         target profile will be used. (default: new temporary
                         profile is created)
-  --safe-mode           Launch browser in 'safe-mode'. WARNING: Launching in
-                        safe mode blocks with a dialog that must be dismissed
-                        manually.
+  --rr                  Use RR (Linux only)
   -t TIMEOUT, --timeout TIMEOUT
                         Number of seconds to wait for the browser to become
                         responsive after launching. (default: 300)
-  -u URL, --url URL     Server URL or local file to load.
+  -u URL, --url URL     Server URL or path to local file to load.
   --valgrind            Use Valgrind (Linux only)
   -v, --verbose         Output includes debug prints
   --xvfb                Use Xvfb (Linux only)

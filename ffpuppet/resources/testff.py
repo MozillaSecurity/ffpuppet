@@ -25,7 +25,7 @@ def main(parent_done):
     profile = url = None
     while len(sys.argv) > 1:
         arg = sys.argv.pop(1)
-        if arg in ('-no-remote', '-safe-mode'):
+        if arg in ('-no-remote',):
             pass
         elif arg.startswith('http://'):
             url = arg

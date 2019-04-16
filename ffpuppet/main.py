@@ -115,10 +115,6 @@ def parse_args(argv=None):
         "--rr", action="store_true",
         help="Use RR (Linux only)")
     parser.add_argument(
-        "--safe-mode", action="store_true",
-        help="Launch browser in 'safe-mode'. WARNING: Launching in safe mode blocks with a " \
-             "dialog that must be dismissed manually.")
-    parser.add_argument(
         "-t", "--timeout", type=int, default=300,
         help="Number of seconds to wait for the browser to become " \
              "responsive after launching. (default: %(default)s)")
@@ -177,7 +173,6 @@ def main(argv=None):  # pylint: disable=missing-docstring
             log_limit=args.log_limit * 1024 * 1024 if args.log_limit else 0,
             memory_limit=args.memory * 1024 * 1024 if args.memory else 0,
             prefs_js=args.prefs,
-            safe_mode=args.safe_mode,
             extension=args.extension)
         if args.prefs is not None and os.path.isfile(args.prefs):
             check_prefs(os.path.join(ffp.profile, "prefs.js"), args.prefs)

@@ -494,7 +494,7 @@ class FFPuppet(object):  # pylint: disable=too-many-instance-attributes
 
 
     def launch(self, bin_path, env_mod=None, launch_timeout=300, location=None, log_limit=0,
-               memory_limit=0, prefs_js=None, safe_mode=False, extension=None):
+               memory_limit=0, prefs_js=None, extension=None):
         """
         Launch a new browser process.
 
@@ -523,10 +523,6 @@ class FFPuppet(object):  # pylint: disable=too-many-instance-attributes
 
         @type prefs_js: String
         @param prefs_js: Path to a prefs.js file to install in the Firefox profile.
-
-        @type safe_mode: bool
-        @param safe_mode: Launch Firefox in safe mode. WARNING: Launching in safe mode blocks with
-                          a dialog that must be dismissed manually.
 
         @type extension: String, or list of Strings
         @param extension: Path to an extension (e.g. DOMFuzz fuzzPriv extension) to be installed.
@@ -575,8 +571,6 @@ class FFPuppet(object):  # pylint: disable=too-many-instance-attributes
             append_prefs(self.profile, prefs)
 
             launch_args = [bootstrapper.location]
-            if safe_mode:
-                launch_args.insert(0, "-safe-mode")
 
             # clean up existing log files
             self._logs.reset()
