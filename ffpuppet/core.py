@@ -172,7 +172,7 @@ class FFPuppet(object):
             for fname in os.listdir(self._logs.working_path):
                 if fname.startswith(self._logs.LOG_ASAN_PREFIX):
                     yield os.path.join(self._logs.working_path, fname)
-                elif fname.startswith(self._logs.LOG_VALGRIND_PREFIX):
+                elif self._use_valgrind and fname.startswith(self._logs.LOG_VALGRIND_PREFIX):
                     full_name = os.path.join(self._logs.working_path, fname)
                     if os.stat(full_name).st_size:
                         yield full_name
@@ -333,6 +333,7 @@ class FFPuppet(object):
 
             # check the process exit code if needed
             if r_code == self.RC_EXITED and self._proc.poll() not in (0, -1, 1):
+                log.debug("poll() returned %r", self._proc.poll())
                 r_code = self.RC_ALERT
         else:
             r_code = self.RC_CLOSED
@@ -436,7 +437,6 @@ class FFPuppet(object):
                 "-q",
                 "--error-exitcode=99",
                 "--exit-on-first-error=yes",
-                #"--soname-synonyms=somalloc=NONE", # use with jemalloc builds
                 "--expensive-definedness-checks=yes",
                 "--fair-sched=try",
                 "--gen-suppressions=all",
@@ -450,9 +450,11 @@ class FFPuppet(object):
                 "--track-origins=yes",
                 "--vex-iropt-register-updates=allregs-at-mem-access"]
 
-            sup_file = os.environ.get("VALGRIND_SUP_PATH", "")
-            log.debug("using Valgrind suppressions from file: %r", sup_file)
-            if os.path.isfile(sup_file):
+            sup_file = os.environ.get("VALGRIND_SUP_PATH", None)
+            if sup_file:
+                if not os.path.isfile(sup_file):
+                    raise IOError("Missing Valgrind suppressions %r" % sup_file)
+                log.debug("using Valgrind suppressions: %r", sup_file)
                 valgrind_cmd.append("--suppressions=%s" % sup_file)
 
             cmd = valgrind_cmd + cmd
@@ -586,7 +588,7 @@ class FFPuppet(object):
                 # https://developer.gimp.org/api/2.0/glib/glib-running.html#G_DEBUG
                 env_mod["G_DEBUG"] = "gc-friendly"
                 env_mod["MOZ_AVOID_OPENGL_ALTOGETHER"] = "1"
-
+                env_mod["MOZ_CRASHREPORTER_DISABLE"] = "1"
 
             # open logs
             self._logs.add_log("stdout")
