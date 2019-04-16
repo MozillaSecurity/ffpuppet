@@ -756,3 +756,40 @@ class PuppetTests(TestCase):  # pylint: disable=too-many-public-methods
 
         self.assertEqual(len(list(ffp._crashreports())), 3)
         self.assertEqual(len(list(ffp._crashreports(skip_md=True))), 2)
+
+    def test_32(self):
+        "test build_launch_cmd()"
+        ffp = FFPuppet()
+        self.addCleanup(ffp.clean_up)
+        cmd = ffp.build_launch_cmd("bin_path", ["test"])
+        self.assertEqual(len(cmd), 3)
+        self.assertEqual(cmd[0], "bin_path")
+        self.assertEqual(cmd[-1], "test")
+
+        # GDB
+        ffp._use_gdb = True
+        cmd = ffp.build_launch_cmd("bin_path")
+        self.assertGreater(len(cmd), 2)
+        self.assertEqual(cmd[0], "gdb")
+        ffp._use_gdb = False
+
+        # RR
+        ffp._use_rr = True
+        cmd = ffp.build_launch_cmd("bin_path")
+        self.assertGreater(len(cmd), 2)
+        self.assertEqual(cmd[0], "rr")
+        ffp._use_rr = False
+
+        # Valgrind
+        ffp._use_valgrind = True
+        try:
+            os.environ["VALGRIND_SUP_PATH"] = "blah"
+            with self.assertRaises(IOError):
+                ffp.build_launch_cmd("bin_path")
+            os.environ["VALGRIND_SUP_PATH"] = self.tmpfn
+            cmd = ffp.build_launch_cmd("bin_path")
+            self.assertGreater(len(cmd), 2)
+            self.assertEqual(cmd[0], "valgrind")
+        finally:
+            os.environ.pop("VALGRIND_SUP_PATH")
+        ffp._use_valgrind = False

@@ -412,8 +412,7 @@ class FFPuppet(object):  # pylint: disable=too-many-instance-attributes
         @return: List of arguments that make up the launch command
         """
 
-        if not isinstance(bin_path, str):
-            raise TypeError("Expecting 'str' got %r" % type(bin_path).__name__)
+        assert isinstance(bin_path, str), "bin_path must be 'str'"
 
         # if a python script is passed use 'sys.executable' as the binary
         # this is used by the test framework
@@ -427,11 +426,9 @@ class FFPuppet(object):  # pylint: disable=too-many-instance-attributes
             cmd += ["-profile", self.profile]
 
         if additional_args:
-            if not isinstance(additional_args, list):
-                raise TypeError("Expecting 'list' got %r" % type(additional_args).__name__)
+            assert isinstance(additional_args, list), "additional_args must be 'list'"
             for add_arg in additional_args:
-                if not isinstance(add_arg, str):
-                    raise TypeError("Expecting 'str' got %r" % type(add_arg).__name__)
+                assert isinstance(add_arg, str), "additional arguments must be 'str'"
             cmd.extend(additional_args)
 
         if self._use_valgrind:
