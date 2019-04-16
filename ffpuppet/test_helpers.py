@@ -347,10 +347,10 @@ class HelperTests(TestCase):  # pylint: disable=too-many-public-methods
             try:
                 if timeout:
                     return
-                conn.sendall("A" * payload_size)
+                conn.sendall(b"A" * payload_size)
                 # don't send sentinel when multiple of 'buf_size' (test hang code)
                 if payload_size % 4096 != 0:
-                    conn.send("")
+                    conn.send(b"")
                 if error:
                     conn.shutdown(socket.SHUT_RDWR)
                     return
