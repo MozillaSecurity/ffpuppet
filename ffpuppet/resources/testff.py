@@ -2,7 +2,7 @@
 
 """fake firefox"""
 
-from multiprocessing import Event, freeze_support, Process
+from multiprocessing import Event, Process
 import os
 import sys
 import time
@@ -138,7 +138,8 @@ def main(parent_done):
             sys.stdout.flush()
             sys.stderr.flush()
     elif cmd == 'exit_code':
-        sys.stdout.write('exit code test\n')
+        sys.stdout.write('exit code test (%d)\n' % exit_code)
+        sys.stdout.flush()
         return exit_code
 
     try:
@@ -151,12 +152,11 @@ def main(parent_done):
         for proc in proc_pool:
             proc.join()
 
-    sys.stdout.write('exitting normally\n')
+    sys.stdout.write('exiting normally\n')
     sys.stdout.flush()
     return 0
 
 if __name__ == '__main__':
-    freeze_support()  # needed on Windows
     PARENT_DONE = Event()
     try:
         sys.exit(main(PARENT_DONE))
