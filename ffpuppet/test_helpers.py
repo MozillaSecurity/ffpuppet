@@ -233,7 +233,7 @@ class HelperTests(TestCase):  # pylint: disable=too-many-public-methods
         self.assertIn("print_stacktrace", ubsan_opts)
 
         # test bad env
-        with self.assertRaisesRegex(AssertionError, ""):
+        with self.assertRaises(AssertionError):
             configure_sanitizers({"ASAN_OPTIONS":1}, self.tmpdir, "blah")
 
         # test previously set ASAN_SYMBOLIZER_PATH
@@ -263,14 +263,20 @@ class HelperTests(TestCase):  # pylint: disable=too-many-public-methods
         with self.assertRaisesRegex(IOError, r"Suppressions file '.+?' does not exist"):
             configure_sanitizers(env, self.tmpdir, "blah")
 
+        # bad path
+        env = {"ASAN_OPTIONS":"strip_path_prefix=x:\\foo\\bar"}
+        with self.assertRaises(AssertionError):
+            configure_sanitizers(env, self.tmpdir, "blah")
+
         # multiple options
-        env = {"ASAN_OPTIONS":"opt1=1:opt2=:opt3=test:opt4=x:\\foo:opt5=z:/bar:opt6=''"}
+        env = {"ASAN_OPTIONS":"opt1=1:opt2=:opt3=test:opt4='x:\\foo':opt5=\"z:/bar\":opt6=''"}
+        configure_sanitizers(env, self.tmpdir, "blah")
         asan_opts = parse(env["ASAN_OPTIONS"])
         self.assertEqual(asan_opts["opt1"], "1")
         self.assertEqual(asan_opts["opt2"], "")
         self.assertEqual(asan_opts["opt3"], "test")
-        self.assertEqual(asan_opts["opt4"], "x:\\foo")
-        self.assertEqual(asan_opts["opt5"], "z:/bar")
+        self.assertEqual(asan_opts["opt4"], "'x:\\foo'")
+        self.assertEqual(asan_opts["opt5"], "\"z:/bar\"")
         self.assertEqual(asan_opts["opt6"], "''")
 
     def test_05(self):
