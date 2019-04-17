@@ -41,6 +41,14 @@ class SanitizerConfig(object):
         if key not in self._options or overwrite:
             self._options[key] = value
 
+    @staticmethod
+    def is_quoted(token):
+        if token.startswith("'") and token.endswith("'"):
+            return True
+        if token.startswith("\"") and token.endswith("\""):
+            return True
+        return False
+
     def load_options(self, env, key):
         assert isinstance(env, dict)
         if key not in env:
@@ -50,6 +58,8 @@ class SanitizerConfig(object):
         for option in self.re_delim.split(env[key]):
             try:
                 opt_name, opt_value = option.split("=")
+                if ":" in opt_value:
+                    assert self.is_quoted(opt_value), "%s value must be quoted" % opt_name
                 # add a sanity check for suppression files
                 if opt_name == "suppressions":
                     opt_value = os.path.abspath(os.path.expanduser(opt_value))
