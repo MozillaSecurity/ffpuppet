@@ -6,6 +6,7 @@ import logging
 import os
 import shutil
 import subprocess
+import sys
 import tempfile
 
 log = logging.getLogger("ffpuppet")  # pylint: disable=invalid-name
@@ -30,7 +31,12 @@ class MinidumpParser(object):
 
 
     def _call_mdsw(self, dump_file, out_fp, extra_flags=None):
-        cmd = [MinidumpParser.MDSW_BIN]
+        # if a python script is passed use 'sys.executable' as the binary
+        # this is used by the test framework
+        if MinidumpParser.MDSW_BIN.endswith(".py"):
+            cmd = [sys.executable, MinidumpParser.MDSW_BIN]
+        else:
+            cmd = [MinidumpParser.MDSW_BIN]  # pragma: no cover
         if extra_flags is None:
             extra_flags = list()
         cmd += extra_flags
@@ -132,8 +138,14 @@ class MinidumpParser(object):
     @staticmethod
     def mdsw_available():
         try:
+            # if a python script is passed use 'sys.executable' as the binary
+            # this is used by the test framework
+            if MinidumpParser.MDSW_BIN.endswith(".py"):
+                cmd = [sys.executable, MinidumpParser.MDSW_BIN]
+            else:
+                cmd = [MinidumpParser.MDSW_BIN]
             with open(os.devnull, "w") as null_fp:
-                subprocess.call([MinidumpParser.MDSW_BIN], stdout=null_fp, stderr=null_fp)
+                subprocess.call(cmd, stdout=null_fp, stderr=null_fp)
         except OSError:
             return False
         return True

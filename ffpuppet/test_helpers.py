@@ -1,15 +1,17 @@
+# coding=utf-8
+"""ffpuppet helpers tests"""
 # This Source Code Form is subject to the terms of the Mozilla Public
-# License, v. 2.0. If a copy of the MPL was not distributed with this
-# file, You can obtain one at http://mozilla.org/MPL/2.0/.
+# License, v. 2.0. If a copy of the MPL was not distributed with this file,
+# You can obtain one at http://mozilla.org/MPL/2.0/.
 
 import logging
 import multiprocessing
 import os
-import platform
 import shutil
 import socket
 import sys
 import tempfile
+import threading
 import unittest
 
 from .exceptions import BrowserTerminatedError, BrowserTimeoutError, LaunchError
@@ -18,24 +20,21 @@ from .helpers import (
     get_processes, prepare_environment, SanitizerConfig, wait_on_files)
 
 logging.basicConfig(level=logging.DEBUG if bool(os.getenv("DEBUG")) else logging.INFO)
-log = logging.getLogger("helpers_test")
-
-class TestCase(unittest.TestCase):
-
-    if sys.version_info.major == 2:
-
-        def assertRegex(self, *args, **kwds):
-            return self.assertRegexpMatches(*args, **kwds)
-
-        def assertRaisesRegex(self, *args, **kwds):
-            return self.assertRaisesRegexp(*args, **kwds)
+log = logging.getLogger("helpers_test")  # pylint: disable=invalid-name
 
 
 # this needs to be here in order to work correctly on Windows
 def dummy_process(is_alive, is_done):
     is_alive.set()
-    print("I'm process %d" % os.getpid())
+    sys.stdout.write("I'm process %d\n" % os.getpid())
     is_done.wait(5)
+
+
+class TestCase(unittest.TestCase):
+
+    if sys.version_info.major == 2:
+        def assertRaisesRegex(self, *args, **kwds):  # pylint: disable=arguments-differ,invalid-name
+            return self.assertRaisesRegexp(*args, **kwds)  # pylint: disable=deprecated-method
 
 
 class HelperTests(TestCase):  # pylint: disable=too-many-public-methods
@@ -81,6 +80,10 @@ class HelperTests(TestCase):  # pylint: disable=too-many-public-methods
 
     def test_02(self):
         "test check_prefs()"
+        with self.assertRaises(IOError):
+            check_prefs(self.tmpfn, "/missing/file")
+        with self.assertRaises(IOError):
+            check_prefs("/missing/file", self.tmpfn)
         with open(self.tmpfn, 'w') as prefs_fp:  # browser prefs.js dummy
             prefs_fp.write('// comment line\n')
             prefs_fp.write('# comment line\n')
@@ -189,12 +192,12 @@ class HelperTests(TestCase):  # pylint: disable=too-many-public-methods
 
     def test_04(self):
         "test configure_sanitizers()"
-        is_windows = platform.system().lower().startswith("windows")
+        is_windows = sys.platform.startswith("win")
         def parse(opt_str):
             opts = dict()
             for entry in SanitizerConfig.re_delim.split(opt_str):
-                k, v = entry.split("=")
-                opts[k] = v
+                key, value = entry.split("=")
+                opts[key] = value
             return opts
 
         # create dummy llvm-symbolizer
@@ -322,6 +325,89 @@ class HelperTests(TestCase):  # pylint: disable=too-many-public-methods
 
         with self.assertRaises(BrowserTerminatedError):
             bts.wait(lambda: False)
+
+        def _fake_browser(port, error=False, timeout=False, payload_size=5120):
+            conn = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            # 50 x 0.1 = 5 seconds
+            conn.settimeout(0.1)
+            attempts = 50
+            # open connection
+            while True:
+                try:
+                    conn.connect(("127.0.0.1", port))
+                    conn.settimeout(10)
+                except socket.timeout:
+                    attempts -= 1
+                    if attempts > 0:
+                        continue
+                    conn.close()
+                    raise
+                break
+            # send request and receive response
+            try:
+                if timeout:
+                    return
+                conn.sendall(b"A" * payload_size)
+                # don't send sentinel when multiple of 'buf_size' (test hang code)
+                if payload_size % 4096 != 0:
+                    conn.send(b"")
+                if error:
+                    conn.shutdown(socket.SHUT_RDWR)
+                    return
+                conn.recv(8192)
+            finally:
+                conn.close()
+
+        # without redirect
+        browser_thread = threading.Thread(target=_fake_browser, args=(bts.port,))
+        try:
+            browser_thread.start()
+            bts.wait(browser_thread.is_alive, timeout=10)
+        finally:
+            browser_thread.join()
+
+        # with redirect
+        browser_thread = threading.Thread(target=_fake_browser, args=(bts.port,))
+        try:
+            browser_thread.start()
+            bts.wait(browser_thread.is_alive, timeout=10, url="http://localhost/")
+        finally:
+            browser_thread.join()
+
+        # test filling buffer
+        browser_thread = threading.Thread(
+            target=_fake_browser,
+            args=(bts.port,),
+            kwargs={'payload_size': 8192})
+        try:
+            browser_thread.start()
+            bts.wait(lambda: True, timeout=10)
+        finally:
+            browser_thread.join()
+
+        # callback failure
+        browser_thread = threading.Thread(
+            target=_fake_browser,
+            args=(bts.port,),
+            kwargs={'timeout': True})
+        try:
+            browser_thread.start()
+            with self.assertRaises(BrowserTerminatedError):
+                bts.wait(lambda: False, timeout=10)
+        finally:
+            browser_thread.join()
+
+        # timeout waiting for connection data
+        browser_thread = threading.Thread(
+            target=_fake_browser,
+            args=(bts.port,),
+            kwargs={'timeout': True})
+        try:
+            browser_thread.start()
+            with self.assertRaises(BrowserTimeoutError):
+                bts.wait(lambda: True, timeout=0.25)
+        finally:
+            browser_thread.join()
 
         init_soc = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.addCleanup(init_soc.close)

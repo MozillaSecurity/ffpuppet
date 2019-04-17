@@ -44,7 +44,7 @@ class SanitizerConfig(object):
     def load_options(self, env, key):
         assert isinstance(env, dict)
         if key not in env:
-            return None
+            return
         assert isinstance(env[key], str)
         assert " " not in env[key], "%s should not contain spaces, join options with ':'" % key
         for option in self.re_delim.split(env[key]):
@@ -86,7 +86,7 @@ class Bootstrapper(object):
                 if soc_e.errno in (errno.EADDRINUSE, 10013):
                     # Address already in use
                     continue
-                raise soc_e
+                raise soc_e  # pragma: no cover
         else:
             self._socket.close()
             raise LaunchError("Could not find available port")
@@ -120,24 +120,45 @@ class Bootstrapper(object):
             while conn is None:
                 try:
                     conn, _ = self._socket.accept()
-                    conn.settimeout(timeout)
                 except socket.timeout:
                     if time.time() >= time_limit:
                         raise BrowserTimeoutError("Launching browser timed out (%ds)" % timeout)
-                    elif not cb_continue():
+                    if not cb_continue():
                         raise BrowserTerminatedError("Failure during browser startup")
-                    conn = None  # browser is alive but we have not received a connection
+                    # browser is alive but we have not received a connection
+                    conn = None
 
-            log.debug("waiting to receive browser connection data")
-            while len(conn.recv(4096)) == 4096:
-                pass
-            log.debug("sending response with redirect url: %r", url)
+            log.debug("waiting to receive browser request")
+            buf_size = 4096
+            received = False
+            conn.settimeout(0.5)
+            while True:
+                try:
+                    request = conn.recv(buf_size)
+                except socket.timeout:
+                    request = None
+                if request or received:
+                    if request is None:
+                        log.debug("timeout waiting for more request data")
+                        break
+                    if len(request) < buf_size:
+                        break
+                    # handle receiving exactly 'buf_size' amount of data
+                    received = True
+                    continue
+                if not cb_continue():
+                    raise BrowserTerminatedError("Failure waiting for request")
+                if time.time() >= time_limit:
+                    raise BrowserTimeoutError("Timed out (%ds) waiting for request" % timeout)
+
+            log.debug("sending response (redirect %r)", url)
             if url is None:
                 resp = "HTTP/1.1 204 No Content\r\nConnection: close\r\n\r\n"
             else:
                 resp = "HTTP/1.1 301 Moved Permanently\r\n" \
                        "Location: %s\r\n" \
-                       "Connection: close\r\n\r\n" % (url)
+                       "Connection: close\r\n\r\n" % url
+            conn.settimeout(max(int(time_limit - time.time()), 1))
             conn.sendall(resp.encode("ascii"))
             log.debug("bootstrap complete (%0.2fs)", (time.time() - start_time))
 
@@ -373,7 +394,7 @@ def get_processes(pid, recursive=True):
         return procs
     try:
         procs += procs[0].children(recursive=True)
-    except (psutil.AccessDenied, psutil.NoSuchProcess):
+    except (psutil.AccessDenied, psutil.NoSuchProcess):  # pragma: no cover
         pass
     return procs
 
@@ -509,7 +530,7 @@ def wait_on_files(wait_files, poll_rate=0.25, timeout=60):
         if wait_files.intersection({true_path(x.path) for x in proc.info["open_files"]}):
             try:
                 procs.append(psutil.Process(proc.info["pid"]))
-            except psutil.NoSuchProcess:
+            except psutil.NoSuchProcess:  # pragma: no cover
                 pass
     # only check previously blocking processes
     while procs:
@@ -520,7 +541,7 @@ def wait_on_files(wait_files, poll_rate=0.25, timeout=60):
                     return False
                 time.sleep(poll_rate)
                 continue
-        except (psutil.AccessDenied, psutil.NoSuchProcess):
+        except (psutil.AccessDenied, psutil.NoSuchProcess):  # pragma: no cover
             pass
         procs.pop()
     return True

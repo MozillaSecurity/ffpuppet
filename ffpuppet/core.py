@@ -8,6 +8,7 @@ import platform
 import re
 import shutil
 import subprocess
+import sys
 
 try:  # py 2-3 compatibility
     from urllib import pathname2url  # pylint: disable=no-name-in-module
@@ -34,7 +35,7 @@ __author__ = "Tyson Smith"
 __all__ = ("FFPuppet")
 
 
-class FFPuppet(object):
+class FFPuppet(object):  # pylint: disable=too-many-instance-attributes
     LAUNCH_TIMEOUT_MIN = 10  # minimum amount of time to wait for the browser to launch
     RC_ALERT = "ALERT"  # target crashed/aborted/triggered an assertion failure etc...
     RC_CLOSED = "CLOSED"  # target was closed by call to FFPuppet close()
@@ -166,7 +167,7 @@ class FFPuppet(object):
         return True
 
 
-    def _crashreports(self):
+    def _crashreports(self, skip_md=False):
         # check for *San and Valgrind logs
         if os.path.isdir(self._logs.working_path):
             for fname in os.listdir(self._logs.working_path):
@@ -178,11 +179,12 @@ class FFPuppet(object):
                         yield full_name
 
         # check for minidumps
-        md_path = os.path.join(self.profile, "minidumps")
-        if os.path.isdir(md_path):
-            for fname in os.listdir(md_path):
-                if ".dmp" in fname:
-                    yield os.path.join(md_path, fname)
+        if not skip_md:
+            md_path = os.path.join(self.profile, "minidumps")
+            if os.path.isdir(md_path):
+                for fname in os.listdir(md_path):
+                    if ".dmp" in fname:
+                        yield os.path.join(md_path, fname)
 
 
     def log_length(self, log_id):
@@ -277,7 +279,7 @@ class FFPuppet(object):
             for proc in procs:
                 try:
                     log.warning("Failed to terminate process %d (%s)", proc.pid, proc.name())
-                except (psutil.AccessDenied, psutil.NoSuchProcess):
+                except (psutil.AccessDenied, psutil.NoSuchProcess):  # pragma: no cover
                     pass
             raise TerminateError("Failed to terminate browser")
 
@@ -346,15 +348,9 @@ class FFPuppet(object):
                     r_code = self.RC_WORKER
                     check.dump_log(dst_fp=self._logs.add_log("ffp_worker_%s" % check.name))
 
-            # scan for ASan and Valgrind logs
-            for fname in os.listdir(self._logs.working_path):
-                if fname.startswith(self._logs.LOG_ASAN_PREFIX):
-                    self._logs.add_log(fname, open(os.path.join(self._logs.working_path, fname), "rb"))
-                elif self._use_valgrind and fname.startswith(self._logs.LOG_VALGRIND_PREFIX):
-                    full_name = os.path.join(self._logs.working_path, fname)
-                    if os.stat(full_name).st_size:
-                        self._logs.add_log(fname, open(full_name, "rb"))
-
+            # collect logs (excluding minidumps)
+            for fname in self._crashreports(skip_md=True):
+                self._logs.add_log(os.path.basename(fname), open(fname, "rb"))
             # check for minidumps in the profile and dump them if possible
             if self.profile is not None:
                 process_minidumps(
@@ -416,19 +412,23 @@ class FFPuppet(object):
         @return: List of arguments that make up the launch command
         """
 
-        if not isinstance(bin_path, str):
-            raise TypeError("Expecting 'str' got %r" % type(bin_path).__name__)
+        assert isinstance(bin_path, str), "bin_path must be 'str'"
 
-        cmd = [bin_path, "-no-remote"]
+        # if a python script is passed use 'sys.executable' as the binary
+        # this is used by the test framework
+        if bin_path.lower().endswith(".py"):
+            cmd = [sys.executable]
+        else:
+            cmd = []
+
+        cmd += [bin_path, "-no-remote"]
         if self.profile is not None:
             cmd += ["-profile", self.profile]
 
         if additional_args:
-            if not isinstance(additional_args, list):
-                raise TypeError("Expecting 'list' got %r" % type(additional_args).__name__)
+            assert isinstance(additional_args, list), "additional_args must be 'list'"
             for add_arg in additional_args:
-                if not isinstance(add_arg, str):
-                    raise TypeError("Expecting 'str' got %r" % type(add_arg).__name__)
+                assert isinstance(add_arg, str), "additional arguments must be 'str'"
             cmd.extend(additional_args)
 
         if self._use_valgrind:
@@ -491,7 +491,7 @@ class FFPuppet(object):
 
 
     def launch(self, bin_path, env_mod=None, launch_timeout=300, location=None, log_limit=0,
-               memory_limit=0, prefs_js=None, safe_mode=False, extension=None):
+               memory_limit=0, prefs_js=None, extension=None):
         """
         Launch a new browser process.
 
@@ -520,10 +520,6 @@ class FFPuppet(object):
 
         @type prefs_js: String
         @param prefs_js: Path to a prefs.js file to install in the Firefox profile.
-
-        @type safe_mode: bool
-        @param safe_mode: Launch Firefox in safe mode. WARNING: Launching in safe mode blocks with
-                          a dialog that must be dismissed manually.
 
         @type extension: String, or list of Strings
         @param extension: Path to an extension (e.g. DOMFuzz fuzzPriv extension) to be installed.
@@ -572,8 +568,6 @@ class FFPuppet(object):
             append_prefs(self.profile, prefs)
 
             launch_args = [bootstrapper.location]
-            if safe_mode:
-                launch_args.insert(0, "-safe-mode")
 
             # clean up existing log files
             self._logs.reset()

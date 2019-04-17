@@ -1,9 +1,8 @@
 #!/usr/bin/env python
 
-# To create an exe file for testing on Windows (tested with Python 3.4):
-# python -m py2exe.build_exe -O -b 0 -d testff testff.py
+"""fake firefox"""
 
-from multiprocessing import Event, freeze_support, Process
+from multiprocessing import Event, Process
 import os
 import sys
 import time
@@ -26,7 +25,7 @@ def main(parent_done):
     profile = url = None
     while len(sys.argv) > 1:
         arg = sys.argv.pop(1)
-        if arg in ('-no-remote', '-safe-mode'):
+        if arg in ('-no-remote',):
             pass
         elif arg.startswith('http://'):
             url = arg
@@ -79,14 +78,14 @@ def main(parent_done):
         for _ in range(10):  # 10 minutes (basically forever)
             time.sleep(60)
         return 1
-    elif cmd == 'start_crash':
+    if cmd == 'start_crash':
         sys.stdout.write('simulating start up crash\n')
         sys.stdout.flush()
         os.mkdir(os.path.join(profile, "minidumps"))
         with open(os.path.join(profile, "minidumps", "fake_mini.dmp"), "w") as _:
             pass
         return -11
-    elif cmd == 'invalid_js':
+    if cmd == 'invalid_js':
         with open(os.path.join(profile, 'Invalidprefs.js'), "w") as prefs_js:
             prefs_js.write("bad!")
     elif cmd in ('memory', 'multi_proc'):
@@ -139,7 +138,8 @@ def main(parent_done):
             sys.stdout.flush()
             sys.stderr.flush()
     elif cmd == 'exit_code':
-        sys.stdout.write('exit code test\n')
+        sys.stdout.write('exit code test (%d)\n' % exit_code)
+        sys.stdout.flush()
         return exit_code
 
     try:
@@ -152,14 +152,13 @@ def main(parent_done):
         for proc in proc_pool:
             proc.join()
 
-    sys.stdout.write('exitting normally\n')
+    sys.stdout.write('exiting normally\n')
     sys.stdout.flush()
     return 0
 
 if __name__ == '__main__':
-    freeze_support()  # needed on Windows
-    parent_done = Event()
+    PARENT_DONE = Event()
     try:
-        sys.exit(main(parent_done))
+        sys.exit(main(PARENT_DONE))
     finally:
-        parent_done.set()
+        PARENT_DONE.set()

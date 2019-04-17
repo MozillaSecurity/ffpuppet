@@ -1,3 +1,9 @@
+# coding=utf-8
+"""ffpuppet puppet logger tests"""
+# This Source Code Form is subject to the terms of the Mozilla Public
+# License, v. 2.0. If a copy of the MPL was not distributed with this file,
+# You can obtain one at http://mozilla.org/MPL/2.0/.
+
 import json
 import logging
 import os
@@ -11,13 +17,13 @@ import unittest
 from .puppet_logger import PuppetLogger
 
 logging.basicConfig(level=logging.DEBUG if bool(os.getenv("DEBUG")) else logging.INFO)
-log = logging.getLogger("pl_test")
+log = logging.getLogger("pl_test")  # pylint: disable=invalid-name
 
 
 class PuppetLoggerTests(unittest.TestCase):
     def setUp(self):
-        fd, self.tmpfn = tempfile.mkstemp(prefix="plog_test_")
-        os.close(fd)
+        tmpfd, self.tmpfn = tempfile.mkstemp(prefix="plog_test_")
+        os.close(tmpfd)
         self.tmpdir = tempfile.mkdtemp(prefix="plog_test")
 
     def tearDown(self):
@@ -200,7 +206,7 @@ class PuppetLoggerTests(unittest.TestCase):
             os.chmod(old_working_path, stat.S_IRWXU)
             shutil.rmtree(old_working_path)
 
-    @unittest.skipIf(not sys.platform.startswith('win'), "Only supported on Windows")
+    @unittest.skipIf(not sys.platform.startswith("win"), "Only supported on Windows")
     def test_07(self):
         "test clean_up() with in-use file"
         plog = PuppetLogger()

@@ -128,7 +128,7 @@ class CheckMemoryUsage(Check):
                 cur_rss = proc.memory_info().rss
                 total_usage += cur_rss
                 proc_info.append((proc.pid, cur_rss))
-            except (AccessDenied, NoSuchProcess):
+            except (AccessDenied, NoSuchProcess):  # pragma: no cover
                 pass
         if total_usage >= self.limit:
             msg = [

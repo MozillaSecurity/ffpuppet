@@ -1,3 +1,10 @@
+# coding=utf-8
+"""ffpuppet tests"""
+# This Source Code Form is subject to the terms of the Mozilla Public
+# License, v. 2.0. If a copy of the MPL was not distributed with this file,
+# You can obtain one at http://mozilla.org/MPL/2.0/.
+# pylint: disable=invalid-name,protected-access
+
 import errno
 import logging
 import os
@@ -10,10 +17,10 @@ import tempfile
 import threading
 import time
 import unittest
-try: # py 2-3 compatibility
-    from BaseHTTPServer import HTTPServer, BaseHTTPRequestHandler # pylint: disable=import-error
+try:  # py 2-3 compatibility
+    from BaseHTTPServer import HTTPServer, BaseHTTPRequestHandler  # pylint: disable=import-error
 except ImportError:
-    from http.server import HTTPServer, BaseHTTPRequestHandler # pylint: disable=import-error
+    from http.server import HTTPServer, BaseHTTPRequestHandler  # pylint: disable=import-error
 
 from psutil import AccessDenied, NoSuchProcess, Process, wait_procs
 
@@ -26,8 +33,9 @@ logging.basicConfig(level=logging.DEBUG if bool(os.getenv("DEBUG")) else logging
 log = logging.getLogger("ffp_test")
 
 CWD = os.path.realpath(os.path.dirname(__file__))
-TESTFF_BIN = os.path.join(CWD, "testff", "testff.exe") if sys.platform.startswith("win") else os.path.join(CWD, "testff.py")
-TESTMDSW_BIN = os.path.join(CWD, "testmdsw", "testmdsw.exe") if sys.platform.startswith("win") else os.path.join(CWD, "testmdsw.py")
+PLAT = sys.platform.lower()
+TESTFF_BIN = os.path.join(CWD, "resources", "testff.py")
+TESTMDSW_BIN = os.path.join(CWD, "resources", "testmdsw.py")
 
 MinidumpParser.MDSW_BIN = TESTMDSW_BIN
 MinidumpParser.MDSW_MAX_STACK = 8
@@ -36,11 +44,11 @@ class TestCase(unittest.TestCase):
 
     if sys.version_info.major == 2:
 
-        def assertRegex(self, *args, **kwds):
-            return self.assertRegexpMatches(*args, **kwds)
+        def assertRegex(self, *args, **kwds):  # pylint: disable=arguments-differ
+            return self.assertRegexpMatches(*args, **kwds)  # pylint: disable=deprecated-method
 
-        def assertRaisesRegex(self, *args, **kwds):
-            return self.assertRaisesRegexp(*args, **kwds)
+        def assertRaisesRegex(self, *args, **kwds):  # pylint: disable=arguments-differ
+            return self.assertRaisesRegexp(*args, **kwds)  # pylint: disable=deprecated-method
 
 
 class ReqHandler(BaseHTTPRequestHandler):
@@ -56,7 +64,7 @@ class HTTPTestServer(object):
         while True:
             try:
                 self._httpd = HTTPServer(("127.0.0.1", 0), self._handler)
-            except socket.error as soc_e: # pragma: no cover
+            except socket.error as soc_e:  # pragma: no cover
                 if soc_e.errno in (errno.EADDRINUSE, 10013):  # Address already in use
                     continue
                 raise
@@ -81,13 +89,9 @@ class HTTPTestServer(object):
             httpd.socket.close()
 
 
-class PuppetTests(TestCase): # pylint: disable=too-many-public-methods
+class PuppetTests(TestCase):  # pylint: disable=too-many-public-methods
     @classmethod
     def setUpClass(cls):
-        if sys.platform.startswith('win') and not os.path.isfile(TESTFF_BIN):
-            raise EnvironmentError("testff.exe is missing see testff.py for build instructions") # pragma: no cover
-        if sys.platform.startswith('win') and not os.path.isfile(TESTMDSW_BIN):
-            raise EnvironmentError("testmdsw.exe is missing see testmdsw.py for build instructions") # pragma: no cover
         cls.tsrv = HTTPTestServer()
 
     @classmethod
@@ -95,8 +99,8 @@ class PuppetTests(TestCase): # pylint: disable=too-many-public-methods
         cls.tsrv.shutdown()
 
     def setUp(self):
-        fd, self.tmpfn = tempfile.mkstemp(prefix="ffp_test_log_")
-        os.close(fd)
+        tmpfd, self.tmpfn = tempfile.mkstemp(prefix="ffp_test_log_")
+        os.close(tmpfd)
         self.logs = tempfile.mkdtemp(prefix="ffp_test_log_")
 
     def tearDown(self):
@@ -105,7 +109,7 @@ class PuppetTests(TestCase): # pylint: disable=too-many-public-methods
         if os.path.isdir(self.logs):
             shutil.rmtree(self.logs, onerror=onerror)
 
-    @unittest.skipIf(sys.platform.startswith('win'), "Unsupported on Windows")
+    @unittest.skipIf(PLAT.startswith("win"), "Unsupported on Windows")
     def test_00(self):
         "test that invalid executables raise the right exception"
         ffp = FFPuppet()
@@ -120,7 +124,7 @@ class PuppetTests(TestCase): # pylint: disable=too-many-public-methods
         self.assertEqual(ffp.launches, 0)
         self.assertEqual(ffp.reason, ffp.RC_CLOSED)
         ffp.launch(TESTFF_BIN, location=self.tsrv.get_addr())
-        self.assertEqual(len(ffp._checks), 0)  # pylint: disable=protected-access
+        self.assertEqual(len(ffp._checks), 0)
         self.assertEqual(ffp.launches, 1)
         self.assertIsNone(ffp.wait(timeout=0))
         self.assertTrue(ffp.is_running())
@@ -128,7 +132,7 @@ class PuppetTests(TestCase): # pylint: disable=too-many-public-methods
         self.assertIsNone(ffp.reason)
         ffp.close()
         self.assertEqual(ffp.reason, ffp.RC_CLOSED)
-        self.assertIsNone(ffp._proc)  # pylint: disable=protected-access
+        self.assertIsNone(ffp._proc)
         self.assertFalse(ffp.is_running())
         self.assertFalse(ffp.is_healthy())
         self.assertIsNone(ffp.wait(timeout=10))
@@ -177,7 +181,7 @@ class PuppetTests(TestCase): # pylint: disable=too-many-public-methods
         ffp.launch(TESTFF_BIN, location=self.tsrv.get_addr(), prefs_js=self.tmpfn)
         ffp.wait(timeout=10)
         ffp.close()
-        self.assertTrue(ffp._logs.closed)  # pylint: disable=protected-access
+        self.assertTrue(ffp._logs.closed)
         log_ids = ffp.available_logs()
         self.assertEqual(len(log_ids), 2)
         self.assertIn("stderr", log_ids)
@@ -188,7 +192,7 @@ class PuppetTests(TestCase): # pylint: disable=too-many-public-methods
         log_list = os.listdir(log_dir)
         self.assertIn("log_stderr.txt", log_list)
         self.assertIn("log_stdout.txt", log_list)
-        self.assertIn(ffp._logs.META_FILE, log_list)  # pylint: disable=protected-access
+        self.assertIn(ffp._logs.META_FILE, log_list)
         with open(os.path.join(log_dir, "log_stdout.txt"), "r") as log_fp:
             self.assertIn("url: 'http://", log_fp.read())
         for fname in log_list:
@@ -200,7 +204,7 @@ class PuppetTests(TestCase): # pylint: disable=too-many-public-methods
                 self.assertTrue(log_data[-1].startswith('[ffpuppet] Reason code:'))
             elif fname.startswith("log_stdout"):
                 self.assertEqual(log_data[0], "hello world")
-            elif fname.startswith(ffp._logs.META_FILE):  # pylint: disable=protected-access
+            elif fname.startswith(ffp._logs.META_FILE):
                 continue  # ignore
             else:
                 raise AssertionError("Unknown log file %r" % fname)
@@ -280,7 +284,8 @@ class PuppetTests(TestCase): # pylint: disable=too-many-public-methods
         self.addCleanup(ffp.clean_up)
         with open(self.tmpfn, 'w') as prefs:
             prefs.write('//fftest_memory\n')
-        ffp.launch(TESTFF_BIN, location=self.tsrv.get_addr(), prefs_js=self.tmpfn, memory_limit=0x100000) # 1MB
+        # launch with 1MB memory limit
+        ffp.launch(TESTFF_BIN, location=self.tsrv.get_addr(), prefs_js=self.tmpfn, memory_limit=0x100000)
         for _ in range(100):
             if not ffp.is_healthy():
                 break
@@ -359,7 +364,7 @@ class PuppetTests(TestCase): # pylint: disable=too-many-public-methods
 
     def test_14(self):
         "test launching under Xvfb"
-        if not sys.platform.startswith("linux"):
+        if not PLAT.startswith("linux"):
             with self.assertRaisesRegex(EnvironmentError, "Xvfb is only supported on Linux"):
                 ffp = FFPuppet(use_xvfb=True)
         else:
@@ -375,8 +380,8 @@ class PuppetTests(TestCase): # pylint: disable=too-many-public-methods
         ffp.close()
         with open(self.tmpfn, "w") as prefs:
             prefs.write("//fftest_exit_code_0\n")
-        fd, test_file = tempfile.mkstemp()
-        os.close(fd)
+        tmpfd, test_file = tempfile.mkstemp()
+        os.close(tmpfd)
         self.addCleanup(os.remove, test_file)
         with open(test_file, "w") as test_fp:
             test_fp.write("test")
@@ -407,7 +412,7 @@ class PuppetTests(TestCase): # pylint: disable=too-many-public-methods
 
     def test_17(self):
         "test launching with gdb"
-        if not sys.platform.startswith("linux"):
+        if not PLAT.startswith("linux"):
             with self.assertRaisesRegex(EnvironmentError, "GDB is only supported on Linux"):
                 FFPuppet(use_gdb=True)
         else:
@@ -435,7 +440,7 @@ class PuppetTests(TestCase): # pylint: disable=too-many-public-methods
 
     def test_19(self):
         "test launching with Valgrind"
-        if not sys.platform.startswith("linux"):
+        if not PLAT.startswith("linux"):
             with self.assertRaisesRegex(EnvironmentError, "Valgrind is only supported on Linux"):
                 FFPuppet(use_valgrind=True)
         else:
@@ -528,7 +533,7 @@ class PuppetTests(TestCase): # pylint: disable=too-many-public-methods
         self.addCleanup(ffp.clean_up)
         ffp.launch(TESTFF_BIN)
         test_logs = list()
-        asan_prefix = os.path.join(ffp._logs.working_path, ffp._logs.LOG_ASAN_PREFIX) # pylint: disable=protected-access
+        asan_prefix = os.path.join(ffp._logs.working_path, ffp._logs.LOG_ASAN_PREFIX)
         for i in range(3):
             test_logs.append(".".join([asan_prefix, str(i)]))
         # small log with nothing interesting
@@ -573,7 +578,7 @@ class PuppetTests(TestCase): # pylint: disable=too-many-public-methods
         md_dir = os.path.join(ffp.profile, "minidumps")
         if not os.path.isdir(md_dir):
             os.mkdir(md_dir)
-        ffp._last_bin_path = ffp.profile # pylint: disable=protected-access
+        ffp._last_bin_path = ffp.profile
         sym_dir = os.path.join(ffp.profile, "symbols") # needs to exist to satisfy a check
         if not os.path.isdir(sym_dir):
             os.mkdir(sym_dir)
@@ -635,12 +640,12 @@ class PuppetTests(TestCase): # pylint: disable=too-many-public-methods
 
     def test_28(self):
         "test launching with RR"
-        if not sys.platform.startswith("linux"):
+        if not PLAT.startswith("linux"):
             with self.assertRaisesRegex(EnvironmentError, "RR is only supported on Linux"):
                 FFPuppet(use_rr=True)
         else:
             try:
-                # TODO: this can hang if ptrace is blocked by seccomp
+                # TODO: this can hang if ptrace is blocked by seccomp  # pylint: disable=fixme
                 proc = subprocess.Popen(["rr", "check"], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
             except OSError:
                 self.skipTest("RR not installed")
@@ -711,3 +716,80 @@ class PuppetTests(TestCase): # pylint: disable=too-many-public-methods
         working_prf = ffp.profile
         ffp.close()
         self.assertFalse(os.path.isdir(working_prf))
+
+    def test_31(self):
+        "test _crashreports()"
+        class StubbedLaunch(FFPuppet):
+            def __init__(self):
+                super(StubbedLaunch, self).__init__()
+                self._use_valgrind = True
+
+            def launch(self):  # pylint: disable=arguments-differ
+                self.profile = tempfile.mkdtemp(prefix="ffp_test_profile_")
+                os.mkdir(os.path.join(self.profile, "minidumps"))
+
+            def close(self, force_close=False):
+                if os.path.isdir(self.profile):
+                    shutil.rmtree(self.profile)
+                self.profile = None
+
+        ffp = StubbedLaunch()
+        self.addCleanup(ffp.clean_up)
+        ffp.launch()
+        self.assertFalse(list(ffp._crashreports()))
+
+        san_log = "%s.1" % ffp._logs.LOG_ASAN_PREFIX
+        vg1_log = "%s.1" % ffp._logs.LOG_VALGRIND_PREFIX
+        vg2_log = "%s.2" % ffp._logs.LOG_VALGRIND_PREFIX
+        with open(os.path.join(ffp._logs.working_path, san_log), "w") as ofp:
+            ofp.write("test\n")
+        with open(os.path.join(ffp._logs.working_path, vg1_log), "w") as ofp:
+            ofp.write("test\n")
+        with open(os.path.join(ffp._logs.working_path, vg2_log), "w") as ofp:
+            pass
+        with open(os.path.join(ffp._logs.working_path, "junk.log"), "w") as ofp:
+            ofp.write("test\n")
+        with open(os.path.join(ffp.profile, "minidumps", "test.dmp"), "w") as ofp:
+            ofp.write("test\n")
+        with open(os.path.join(ffp.profile, "minidumps", "test.junk"), "w") as ofp:
+            pass
+
+        self.assertEqual(len(list(ffp._crashreports())), 3)
+        self.assertEqual(len(list(ffp._crashreports(skip_md=True))), 2)
+
+    def test_32(self):
+        "test build_launch_cmd()"
+        ffp = FFPuppet()
+        self.addCleanup(ffp.clean_up)
+        cmd = ffp.build_launch_cmd("bin_path", ["test"])
+        self.assertEqual(len(cmd), 3)
+        self.assertEqual(cmd[0], "bin_path")
+        self.assertEqual(cmd[-1], "test")
+
+        # GDB
+        ffp._use_gdb = True
+        cmd = ffp.build_launch_cmd("bin_path")
+        self.assertGreater(len(cmd), 2)
+        self.assertEqual(cmd[0], "gdb")
+        ffp._use_gdb = False
+
+        # RR
+        ffp._use_rr = True
+        cmd = ffp.build_launch_cmd("bin_path")
+        self.assertGreater(len(cmd), 2)
+        self.assertEqual(cmd[0], "rr")
+        ffp._use_rr = False
+
+        # Valgrind
+        ffp._use_valgrind = True
+        try:
+            os.environ["VALGRIND_SUP_PATH"] = "blah"
+            with self.assertRaises(IOError):
+                ffp.build_launch_cmd("bin_path")
+            os.environ["VALGRIND_SUP_PATH"] = self.tmpfn
+            cmd = ffp.build_launch_cmd("bin_path")
+            self.assertGreater(len(cmd), 2)
+            self.assertEqual(cmd[0], "valgrind")
+        finally:
+            os.environ.pop("VALGRIND_SUP_PATH")
+        ffp._use_valgrind = False

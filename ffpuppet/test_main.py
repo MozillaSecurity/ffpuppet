@@ -1,6 +1,9 @@
+# coding=utf-8
+"""ffpuppet main.py tests"""
 # This Source Code Form is subject to the terms of the Mozilla Public
-# License, v. 2.0. If a copy of the MPL was not distributed with this
-# file, You can obtain one at http://mozilla.org/MPL/2.0/.
+# License, v. 2.0. If a copy of the MPL was not distributed with this file,
+# You can obtain one at http://mozilla.org/MPL/2.0/.
+# pylint: disable=missing-docstring
 
 import logging
 import os
@@ -12,29 +15,22 @@ import tempfile
 import unittest
 
 import ffpuppet
-from .main import main
+from .main import dump_to_console, main
 
 logging.basicConfig(level=logging.DEBUG if bool(os.getenv("DEBUG")) else logging.INFO)
-log = logging.getLogger("ffp_test")
+log = logging.getLogger("ffp_test")  # pylint: disable=invalid-name
 
 CWD = os.path.realpath(os.path.dirname(__file__))
-TESTFF_BIN = os.path.join(CWD, "testff", "testff.exe") if sys.platform.startswith('win') else os.path.join(CWD, "testff.py")
-TESTMDSW_BIN = os.path.join(CWD, "testmdsw", "testmdsw.exe") if sys.platform.startswith('win') else os.path.join(CWD, "testmdsw.py")
+PLAT = sys.platform.lower()
+
+TESTFF_BIN = os.path.join(CWD, "resources", "testff.py")
+TESTMDSW_BIN = os.path.join(CWD, "resources", "testmdsw.py")
 
 ffpuppet.FFPuppet.MDSW_BIN = TESTMDSW_BIN
 ffpuppet.FFPuppet.MDSW_MAX_STACK = 8
 
-class TestCase(unittest.TestCase):
 
-    @classmethod
-    def setUpClass(cls):
-        if sys.platform.startswith('win') and not os.path.isfile(TESTFF_BIN):
-            raise EnvironmentError("testff.exe is missing see testff.py for build instructions") # pragma: no cover
-        if sys.platform.startswith('win') and not os.path.isfile(TESTMDSW_BIN):
-            raise EnvironmentError("testmdsw.exe is missing see testmdsw.py for build instructions") # pragma: no cover
-
-
-class MainTests(TestCase):
+class MainTests(unittest.TestCase):
 
     def setUp(self):
         self.tmpdir = tempfile.mkdtemp(prefix="ffp_test")
@@ -44,9 +40,15 @@ class MainTests(TestCase):
             shutil.rmtree(self.tmpdir)
 
     def test_01(self):
-        "test calling main with '-h'"
+        "test calling main with '-h' and invalid input"
         with self.assertRaises(SystemExit):
             main(["-h"])
+
+        with self.assertRaises(SystemExit):
+            main([TESTFF_BIN, "-p", "/missing/prefs/file"])
+
+        with self.assertRaises(SystemExit):
+            main([TESTFF_BIN, "-e", "/missing/ext/file"])
 
     def test_02(self):
         "test calling main with test binary/script"
@@ -65,7 +67,7 @@ class MainTests(TestCase):
             prefs_fp.write("//fftest_big_log\n")
         main([TESTFF_BIN, "-v", "-d", "-p", prefs, "--log-limit", "1", "-a", "blah_test"])
 
-    @unittest.skipIf(sys.platform.startswith('win'), "This test is unsupported on Windows")
+    @unittest.skipIf(PLAT.startswith('win'), "This test is unsupported on Windows")
     def test_04(self):
         "test sending SIGINT"
         prefs = os.path.join(self.tmpdir, "pref.js")
@@ -95,3 +97,13 @@ class MainTests(TestCase):
         self.assertIn(b"Firefox process closed", output)
         self.assertTrue(os.path.isdir(out_logs))
         self.assertGreater(len(os.listdir(out_logs)), 0)
+
+    def test_05(self):
+        "test dump_to_console()"
+        # call with no logs
+        dump_to_console(self.tmpdir, False)
+        # call with dummy logs
+        with open(os.path.join(self.tmpdir, "log_stdout.txt"), "w") as log_fp:
+            for _ in range(1024):
+                log_fp.write("test")
+        dump_to_console(self.tmpdir, True, log_quota=100)

@@ -16,7 +16,7 @@ log = logging.getLogger("ffpuppet")  # pylint: disable=invalid-name
 
 __author__ = "Tyson Smith"
 
-def dump_to_console(log_dir, log_quota=0x8000):
+def dump_to_console(log_dir, show_warning, log_quota=0x8000):
     """
     Read and merge log files and format for output on the console
 
@@ -64,7 +64,7 @@ def dump_to_console(log_dir, log_quota=0x8000):
                 out_fp.write("\n===\n")
                 # using decode() is a workaround for python 3.4
                 out_fp.write(log_fp.read().decode("ascii", errors="ignore"))
-        if tailed:
+        if show_warning and tailed:
             out_fp.write("\n===\n")
             out_fp.write("=== To capture complete logs use '--log'")
             out_fp.write("\n===\n")
@@ -114,10 +114,6 @@ def parse_args(argv=None):
     parser.add_argument(
         "--rr", action="store_true",
         help="Use RR (Linux only)")
-    parser.add_argument(
-        "--safe-mode", action="store_true",
-        help="Launch browser in 'safe-mode'. WARNING: Launching in safe mode blocks with a " \
-             "dialog that must be dismissed manually.")
     parser.add_argument(
         "-t", "--timeout", type=int, default=300,
         help="Number of seconds to wait for the browser to become " \
@@ -177,7 +173,6 @@ def main(argv=None):  # pylint: disable=missing-docstring
             log_limit=args.log_limit * 1024 * 1024 if args.log_limit else 0,
             memory_limit=args.memory * 1024 * 1024 if args.memory else 0,
             prefs_js=args.prefs,
-            safe_mode=args.safe_mode,
             extension=args.extension)
         if args.prefs is not None and os.path.isfile(args.prefs):
             check_prefs(os.path.join(ffp.profile, "prefs.js"), args.prefs)
@@ -196,7 +191,7 @@ def main(argv=None):  # pylint: disable=missing-docstring
             log_dir = tempfile.mkdtemp(prefix="ffp_log_")
             try:
                 ffp.save_logs(log_dir)
-                log.info("Dumping browser log...\n%s", dump_to_console(log_dir))
+                log.info("Dumping browser log...\n%s", dump_to_console(log_dir, (args.log is None)))
             finally:
                 if os.path.isdir(log_dir):
                     shutil.rmtree(log_dir)

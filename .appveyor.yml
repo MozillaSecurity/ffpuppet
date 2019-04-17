@@ -11,11 +11,9 @@ environment:
         - PYTHON: "C:\\Python36-x64"
         - PYTHON: "C:\\Python37-x64"
 install:
-    - "%PYTHON%\\python.exe -m pip install -r requirements.txt"
-    - "%PYTHON%\\python.exe -m pip install pylint pytest"
-    - py -3.4 -m pip install py2exe
-    - py -3.4 -m py2exe.build_exe -O -b 0 -d "ffpuppet\\testff" "ffpuppet\\testff.py"
-    - py -3.4 -m py2exe.build_exe -O -b 0 -d "ffpuppet\\testmdsw" "ffpuppet\\testmdsw.py"
+    - "%PYTHON%\\python.exe -m pip install --upgrade setuptools pip"
+    - "%PYTHON%\\python.exe -m pip install -e ."
+    - "%PYTHON%\\python.exe -m pip install --upgrade pylint pytest pytest-pylint pytest-cov"
 build: off
 test_script:
-    - "%PYTHON%\\python.exe -m pytest -v && %PYTHON%\\python.exe -m pylint --errors-only --ignored-classes=_socketobject --ignore=testff.py,testmdsw.py,debugger_windbg.py ffpuppet"
+    - "%PYTHON%\\python.exe -m pytest"
