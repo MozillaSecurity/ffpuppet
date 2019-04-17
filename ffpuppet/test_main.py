@@ -50,6 +50,9 @@ class MainTests(unittest.TestCase):
         with self.assertRaises(SystemExit):
             main([TESTFF_BIN, "-e", "/missing/ext/file"])
 
+        with self.assertRaises(SystemExit):
+            main([TESTFF_BIN, "--gdb", "--valgrind"])
+
     def test_02(self):
         "test calling main with test binary/script"
         out_logs = os.path.join(self.tmpdir, "logs")

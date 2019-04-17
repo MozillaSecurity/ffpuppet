@@ -6,6 +6,7 @@ import argparse
 import logging
 import os
 import shutil
+import sys
 import tempfile
 import time
 
@@ -90,9 +91,6 @@ def parse_args(argv=None):
         help="Use the fuzzPriv extension. Specify the path to the xpi or the directory " \
              "containing the unpacked extension.")
     parser.add_argument(
-        "-g", "--gdb", action="store_true",
-        help="Use GDB (Linux only)")
-    parser.add_argument(
         "-l", "--log",
         help="Location to save log files")
     parser.add_argument(
@@ -112,9 +110,6 @@ def parse_args(argv=None):
         help="Profile to use. This is non-destructive. A copy of the target profile " \
              "will be used. (default: new temporary profile is created)")
     parser.add_argument(
-        "--rr", action="store_true",
-        help="Use RR (Linux only)")
-    parser.add_argument(
         "-t", "--timeout", type=int, default=300,
         help="Number of seconds to wait for the browser to become " \
              "responsive after launching. (default: %(default)s)")
@@ -122,14 +117,24 @@ def parse_args(argv=None):
         "-u", "--url",
         help="Server URL or path to local file to load.")
     parser.add_argument(
-        "--valgrind", action="store_true",
-        help="Use Valgrind (Linux only)")
-    parser.add_argument(
         "-v", "--verbose", action="store_true",
         help="Output includes debug prints")
-    parser.add_argument(
-        "--xvfb", action="store_true",
-        help="Use Xvfb (Linux only)")
+    if sys.platform.startswith("linux"):
+        parser.add_argument(
+            "--xvfb", action="store_true",
+            help="Use Xvfb")
+
+    dbg_group = parser.add_argument_group("Supported Debuggers")
+    if sys.platform.startswith("linux"):
+        dbg_group.add_argument(
+            "--gdb", action="store_true",
+            help="Use GDB")
+        dbg_group.add_argument(
+            "--valgrind", action="store_true",
+            help="Use Valgrind")
+        dbg_group.add_argument(
+            "--rr", action="store_true",
+            help="Use RR")
 
     args = parser.parse_args(argv)
     if args.extension is not None:
@@ -139,6 +144,11 @@ def parse_args(argv=None):
 
     if args.prefs is not None and not os.path.isfile(args.prefs):
         parser.error("file not found %r" % args.prefs)
+
+    # NOTE: mutually_exclusive_group will fail if no arguments are added
+    # so sum() enabled debuggers instead
+    if sum((args.gdb, args.rr, args.valgrind)) > 1:
+        parser.error("Only a singe debugger can be enabled")
 
     return args
 

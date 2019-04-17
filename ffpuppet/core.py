@@ -58,8 +58,10 @@ class FFPuppet(object):  # pylint: disable=too-many-instance-attributes
         self.profile = None  # path to profile
         self.reason = self.RC_CLOSED  # why the target process was terminated
 
+
         plat = platform.system().lower()
         if use_valgrind:
+            assert not (use_gdb or use_rr), "only a single debugger can be enabled"
             if not plat.startswith("linux"):
                 raise EnvironmentError("Valgrind is only supported on Linux")
             try:
@@ -72,6 +74,7 @@ class FFPuppet(object):  # pylint: disable=too-many-instance-attributes
                 raise EnvironmentError("Please install Valgrind")
 
         if use_gdb:
+            assert not (use_rr or use_valgrind), "only a single debugger can be enabled"
             if not plat.startswith("linux"):
                 raise EnvironmentError("GDB is only supported on Linux")
             try:
@@ -81,6 +84,7 @@ class FFPuppet(object):  # pylint: disable=too-many-instance-attributes
                 raise EnvironmentError("Please install GDB")
 
         if use_rr:
+            assert not (use_gdb or use_valgrind), "only a single debugger can be enabled"
             if not plat.startswith("linux"):
                 raise EnvironmentError("RR is only supported on Linux")
             try:
@@ -459,7 +463,7 @@ class FFPuppet(object):  # pylint: disable=too-many-instance-attributes
 
             cmd = valgrind_cmd + cmd
 
-        if self._use_gdb:
+        elif self._use_gdb:
             cmd = [
                 "gdb",
                 "-nx",
@@ -482,9 +486,9 @@ class FFPuppet(object):  # pylint: disable=too-many-instance-attributes
                 "-ex", "quit_with_code",
                 "-return-child-result",
                 "-batch",
-                "--args"] + cmd # enable gdb
+                "--args"] + cmd
 
-        if self._use_rr:
+        elif self._use_rr:
             cmd = ["rr", "record"] + cmd
 
         return cmd

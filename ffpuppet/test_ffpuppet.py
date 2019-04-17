@@ -415,20 +415,24 @@ class PuppetTests(TestCase):  # pylint: disable=too-many-public-methods
         if not PLAT.startswith("linux"):
             with self.assertRaisesRegex(EnvironmentError, "GDB is only supported on Linux"):
                 FFPuppet(use_gdb=True)
-        else:
-            ffp = FFPuppet(use_gdb=True)
-            self.addCleanup(ffp.clean_up)
-            bin_path = str(subprocess.check_output(["which", "echo"]).strip().decode("ascii"))
-            # launch will fail b/c 'echo' will exit right away but that's fine
-            with self.assertRaisesRegex(LaunchError, "Failure during browser startup"):
-                self.assertEqual(ffp.launch(bin_path), 0)
-            ffp.close()
-            ffp.save_logs(self.logs)
-            with open(os.path.join(self.logs, "log_stdout.txt"), "rb") as log_fp:
-                log_data = log_fp.read()
-            # verify GDB ran and executed the script
-            self.assertRegex(log_data, br"[Inferior \d+ (process \d+) exited with code \d+]")
-            self.assertRegex(log_data, br"\+quit_with_code")
+            return
+        try:
+            subprocess.check_call(["which", "gdb"])
+        except subprocess.CalledProcessError:
+            raise unittest.SkipTest("GDB is not installed")
+        ffp = FFPuppet(use_gdb=True)
+        self.addCleanup(ffp.clean_up)
+        bin_path = str(subprocess.check_output(["which", "echo"]).strip().decode("ascii"))
+        # launch will fail b/c 'echo' will exit right away but that's fine
+        with self.assertRaisesRegex(LaunchError, "Failure during browser startup"):
+            self.assertEqual(ffp.launch(bin_path), 0)
+        ffp.close()
+        ffp.save_logs(self.logs)
+        with open(os.path.join(self.logs, "log_stdout.txt"), "rb") as log_fp:
+            log_data = log_fp.read()
+        # verify GDB ran and executed the script
+        self.assertRegex(log_data, br"[Inferior \d+ (process \d+) exited with code \d+]")
+        self.assertRegex(log_data, br"\+quit_with_code")
 
     def test_18(self):
         "test calling save_logs() before close()"
@@ -443,28 +447,32 @@ class PuppetTests(TestCase):  # pylint: disable=too-many-public-methods
         if not PLAT.startswith("linux"):
             with self.assertRaisesRegex(EnvironmentError, "Valgrind is only supported on Linux"):
                 FFPuppet(use_valgrind=True)
-        else:
-            vmv = FFPuppet.VALGRIND_MIN_VERSION
-            try:
-                FFPuppet.VALGRIND_MIN_VERSION = 9999999999.99
-                with self.assertRaisesRegex(EnvironmentError, r"Valgrind >= \d+\.\d+ is required"):
-                    ffp = FFPuppet(use_valgrind=True)
-                FFPuppet.VALGRIND_MIN_VERSION = 0
+            return
+        try:
+            subprocess.check_call(["which", "valgrind"])
+        except subprocess.CalledProcessError:
+            raise unittest.SkipTest("Valgrind is not installed")
+        vmv = FFPuppet.VALGRIND_MIN_VERSION
+        try:
+            FFPuppet.VALGRIND_MIN_VERSION = 9999999999.99
+            with self.assertRaisesRegex(EnvironmentError, r"Valgrind >= \d+\.\d+ is required"):
                 ffp = FFPuppet(use_valgrind=True)
-                self.addCleanup(ffp.clean_up)
-                bin_path = str(subprocess.check_output(["which", "echo"]).strip().decode("ascii"))
-                # launch will fail b/c 'echo' will exit right away but that's fine
-                with self.assertRaisesRegex(LaunchError, "Failure during browser startup"):
-                    self.assertEqual(ffp.launch(bin_path), 0)
-                ffp.close()
-                ffp.save_logs(self.logs)
-                with open(os.path.join(self.logs, "log_stderr.txt"), "rb") as log_fp:
-                    log_data = log_fp.read()
-                # verify Valgrind ran and executed the script
-                self.assertIn(b"valgrind -q", log_data)
-                self.assertIn(b"[ffpuppet] Reason code: EXITED", log_data)
-            finally:
-                FFPuppet.VALGRIND_MIN_VERSION = vmv
+            FFPuppet.VALGRIND_MIN_VERSION = 0
+            ffp = FFPuppet(use_valgrind=True)
+            self.addCleanup(ffp.clean_up)
+            bin_path = str(subprocess.check_output(["which", "echo"]).strip().decode("ascii"))
+            # launch will fail b/c 'echo' will exit right away but that's fine
+            with self.assertRaisesRegex(LaunchError, "Failure during browser startup"):
+                self.assertEqual(ffp.launch(bin_path), 0)
+            ffp.close()
+            ffp.save_logs(self.logs)
+            with open(os.path.join(self.logs, "log_stderr.txt"), "rb") as log_fp:
+                log_data = log_fp.read()
+            # verify Valgrind ran and executed the script
+            self.assertIn(b"valgrind -q", log_data)
+            self.assertIn(b"[ffpuppet] Reason code: EXITED", log_data)
+        finally:
+            FFPuppet.VALGRIND_MIN_VERSION = vmv
 
     def test_20(self):
         "test detecting invalid prefs file"
@@ -643,32 +651,32 @@ class PuppetTests(TestCase):  # pylint: disable=too-many-public-methods
         if not PLAT.startswith("linux"):
             with self.assertRaisesRegex(EnvironmentError, "RR is only supported on Linux"):
                 FFPuppet(use_rr=True)
-        else:
-            try:
-                # TODO: this can hang if ptrace is blocked by seccomp  # pylint: disable=fixme
-                proc = subprocess.Popen(["rr", "check"], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-            except OSError:
-                self.skipTest("RR not installed")
-            _, stderr = proc.communicate()
-            proc.wait()
-            if b"Unable to open performance counter" in stderr:
-                self.skipTest("This machine doesn't support performance counters needed by RR")
-            ffp = FFPuppet(use_rr=True)
-            self.addCleanup(ffp.clean_up)
-            rr_dir = tempfile.mkdtemp(prefix="test_ffp_rr")
-            self.addCleanup(shutil.rmtree, rr_dir, onerror=onerror)
-            bin_path = str(subprocess.check_output(["which", "echo"]).strip().decode("ascii"))
-            # launch will fail b/c 'echo' will exit right away but that's fine
-            with self.assertRaisesRegex(LaunchError, "Failure during browser startup"):
-                ffp.launch(bin_path, env_mod={"_RR_TRACE_DIR": rr_dir})
-            ffp.close()
-            self.assertEqual(ffp.reason, ffp.RC_EXITED)
-            ffp.save_logs(self.logs)
-            with open(os.path.join(self.logs, "log_stderr.txt"), "rb") as log_fp:
-                log_data = log_fp.read()
-            # verify RR ran and executed the script
-            self.assertIn(b"rr record", log_data)
-            self.assertIn(b"[ffpuppet] Reason code:", log_data)
+            return
+        try:
+            # TODO: this can hang if ptrace is blocked by seccomp  # pylint: disable=fixme
+            proc = subprocess.Popen(["rr", "check"], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        except OSError:
+            self.skipTest("RR not installed")
+        _, stderr = proc.communicate()
+        proc.wait()
+        if b"Unable to open performance counter" in stderr:
+            self.skipTest("This machine doesn't support performance counters needed by RR")
+        ffp = FFPuppet(use_rr=True)
+        self.addCleanup(ffp.clean_up)
+        rr_dir = tempfile.mkdtemp(prefix="test_ffp_rr")
+        self.addCleanup(shutil.rmtree, rr_dir, onerror=onerror)
+        bin_path = str(subprocess.check_output(["which", "echo"]).strip().decode("ascii"))
+        # launch will fail b/c 'echo' will exit right away but that's fine
+        with self.assertRaisesRegex(LaunchError, "Failure during browser startup"):
+            ffp.launch(bin_path, env_mod={"_RR_TRACE_DIR": rr_dir})
+        ffp.close()
+        self.assertEqual(ffp.reason, ffp.RC_EXITED)
+        ffp.save_logs(self.logs)
+        with open(os.path.join(self.logs, "log_stderr.txt"), "rb") as log_fp:
+            log_data = log_fp.read()
+        # verify RR ran and executed the script
+        self.assertIn(b"rr record", log_data)
+        self.assertIn(b"[ffpuppet] Reason code:", log_data)
 
     def test_29(self):
         "test rmtree error handler"
