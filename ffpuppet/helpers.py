@@ -62,9 +62,10 @@ class SanitizerConfig(object):
                     assert self.is_quoted(opt_value), "%s value must be quoted" % opt_name
                 # add a sanity check for suppression files
                 if opt_name == "suppressions":
-                    opt_value = os.path.abspath(os.path.expanduser(opt_value))
-                    if not os.path.isfile(opt_value):
-                        raise IOError("Suppressions file %r does not exist" % opt_value)
+                    sup_file = os.path.abspath(os.path.expanduser(opt_value.strip("'\"")))
+                    if not os.path.isfile(sup_file):
+                        raise IOError("Suppressions file %r does not exist" % sup_file)
+                    opt_value = "'%s'" % sup_file
                 self._options[opt_name] = opt_value
             except ValueError:
                 log.warning("Malformed option in %r", key)

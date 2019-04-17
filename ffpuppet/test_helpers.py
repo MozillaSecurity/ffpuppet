@@ -243,7 +243,7 @@ class HelperTests(TestCase):  # pylint: disable=too-many-public-methods
         self.assertEqual(env["ASAN_SYMBOLIZER_PATH"], "blah")
 
         # test suppression file
-        env = {"ASAN_OPTIONS":"suppressions=%s" % self.tmpfn}
+        env = {"ASAN_OPTIONS":"suppressions='%s'" % self.tmpfn}
         configure_sanitizers(env, self.tmpdir, "blah")
         asan_opts = parse(env["ASAN_OPTIONS"])
         self.assertIn("suppressions", asan_opts)
@@ -263,7 +263,7 @@ class HelperTests(TestCase):  # pylint: disable=too-many-public-methods
         with self.assertRaisesRegex(IOError, r"Suppressions file '.+?' does not exist"):
             configure_sanitizers(env, self.tmpdir, "blah")
 
-        # bad path
+        # unquoted path containing ':'
         env = {"ASAN_OPTIONS":"strip_path_prefix=x:\\foo\\bar"}
         with self.assertRaises(AssertionError):
             configure_sanitizers(env, self.tmpdir, "blah")
