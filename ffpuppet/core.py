@@ -171,9 +171,9 @@ class FFPuppet(object):  # pylint: disable=too-many-instance-attributes
         # check for *San and Valgrind logs
         if os.path.isdir(self._logs.working_path):
             for fname in os.listdir(self._logs.working_path):
-                if fname.startswith(self._logs.LOG_ASAN_PREFIX):
+                if fname.startswith(self._logs.PREFIX_SAN):
                     yield os.path.join(self._logs.working_path, fname)
-                elif self._use_valgrind and fname.startswith(self._logs.LOG_VALGRIND_PREFIX):
+                elif self._use_valgrind and fname.startswith(self._logs.PREFIX_VALGRIND):
                     full_name = os.path.join(self._logs.working_path, fname)
                     if os.stat(full_name).st_size:
                         yield full_name
@@ -441,7 +441,7 @@ class FFPuppet(object):  # pylint: disable=too-many-instance-attributes
                 "--fair-sched=try",
                 "--gen-suppressions=all",
                 "--leak-check=no",
-                "--log-file=%s.%%p" % os.path.join(self._logs.working_path, self._logs.LOG_VALGRIND_PREFIX),
+                "--log-file=%s.%%p" % os.path.join(self._logs.working_path, self._logs.PREFIX_VALGRIND),
                 "--read-inline-info=no",
                 "--show-mismatched-frees=no",
                 "--show-possibly-lost=no",
@@ -591,7 +591,7 @@ class FFPuppet(object):  # pylint: disable=too-many-instance-attributes
             stderr.write(" ".join(cmd).encode("utf-8"))
             stderr.write(b"\n\n")
             stderr.flush()
-            sanitizer_logs = os.path.join(self._logs.working_path, self._logs.LOG_ASAN_PREFIX)
+            sanitizer_logs = os.path.join(self._logs.working_path, self._logs.PREFIX_SAN)
             plat = platform.system().lower()
             # launch the browser
             log.debug("launch command: %r", " ".join(cmd))

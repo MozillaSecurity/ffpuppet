@@ -19,9 +19,9 @@ __all__ = ("PuppetLogger")
 
 
 class PuppetLogger(object):
-    LOG_ASAN_PREFIX = "ffp_asan_%d.log" % os.getpid()
-    LOG_VALGRIND_PREFIX = "valgrind.%d"  % os.getpid()
-    LOG_BUF_SIZE = 0x10000  # buffer size used to copy logs
+    BUF_SIZE = 0x10000  # buffer size used to copy logs
+    PREFIX_SAN = "ffp_asan_%d.log" % os.getpid()
+    PREFIX_VALGRIND = "valgrind.%d"  % os.getpid()
     META_FILE = "log_metadata.json"
 
     def __init__(self):
@@ -122,7 +122,7 @@ class PuppetLogger(object):
             else:
                 cpyfp = open(target_file, "wb")
             try:
-                shutil.copyfileobj(in_fp, cpyfp, self.LOG_BUF_SIZE)
+                shutil.copyfileobj(in_fp, cpyfp, self.BUF_SIZE)
             finally:
                 cpyfp.close()
         return target_file
