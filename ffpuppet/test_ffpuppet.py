@@ -533,7 +533,7 @@ class PuppetTests(TestCase):  # pylint: disable=too-many-public-methods
         self.addCleanup(ffp.clean_up)
         ffp.launch(TESTFF_BIN)
         test_logs = list()
-        asan_prefix = os.path.join(ffp._logs.working_path, ffp._logs.LOG_ASAN_PREFIX)
+        asan_prefix = os.path.join(ffp._logs.working_path, ffp._logs.PREFIX_SAN)
         for i in range(3):
             test_logs.append(".".join([asan_prefix, str(i)]))
         # small log with nothing interesting
@@ -567,8 +567,7 @@ class PuppetTests(TestCase):  # pylint: disable=too-many-public-methods
             with open(os.path.join(self.logs, fname), "r") as log_fp:
                 self.assertIn(log_fp.readline(), ["BAD LOG\n", "GOOD LOG\n", "SHORT LOG\n"])
         ffp.clean_up()
-        for t_log in test_logs:
-            self.assertFalse(os.path.isfile(t_log))
+        self.assertFalse(any(os.path.isfile(f) for f in test_logs))
 
     def test_25(self):
         "test multiple minidumps"
@@ -738,9 +737,9 @@ class PuppetTests(TestCase):  # pylint: disable=too-many-public-methods
         ffp.launch()
         self.assertFalse(list(ffp._crashreports()))
 
-        san_log = "%s.1" % ffp._logs.LOG_ASAN_PREFIX
-        vg1_log = "%s.1" % ffp._logs.LOG_VALGRIND_PREFIX
-        vg2_log = "%s.2" % ffp._logs.LOG_VALGRIND_PREFIX
+        san_log = "%s.1" % ffp._logs.PREFIX_SAN
+        vg1_log = "%s.1" % ffp._logs.PREFIX_VALGRIND
+        vg2_log = "%s.2" % ffp._logs.PREFIX_VALGRIND
         with open(os.path.join(ffp._logs.working_path, san_log), "w") as ofp:
             ofp.write("test\n")
         with open(os.path.join(ffp._logs.working_path, vg1_log), "w") as ofp:
