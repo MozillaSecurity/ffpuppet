@@ -17,12 +17,15 @@ log = logging.getLogger("ffpuppet")  # pylint: disable=invalid-name
 
 __author__ = "Tyson Smith"
 
-def dump_to_console(log_dir, show_warning, log_quota=0x8000):
+def dump_to_console(log_dir, save_path, log_quota=0x8000):
     """
     Read and merge log files and format for output on the console
 
     @type log_dir: String
     @param log_dir: directory to scan for logs
+
+    @type save_path: String
+    @param save_path: directory full logs are saved to
 
     @type log_quota: int
     @param log_quota: maximum number of bytes to read per log
@@ -65,9 +68,12 @@ def dump_to_console(log_dir, show_warning, log_quota=0x8000):
                 out_fp.write("\n===\n")
                 # using decode() is a workaround for python 3.4
                 out_fp.write(log_fp.read().decode("ascii", errors="ignore"))
-        if show_warning and tailed:
+        if tailed:
             out_fp.write("\n===\n")
-            out_fp.write("=== To capture complete logs use '--log'")
+            if save_path is None:
+                out_fp.write("=== To capture complete logs use '--log'")
+            else:
+                out_fp.write("=== Full logs available here %r" % save_path)
             out_fp.write("\n===\n")
         out_fp.seek(0)
         return out_fp.read()
@@ -147,8 +153,11 @@ def parse_args(argv=None):
 
     # NOTE: mutually_exclusive_group will fail if no arguments are added
     # so sum() enabled debuggers instead
-    if sum((args.gdb, args.rr, args.valgrind)) > 1:
-        parser.error("Only a singe debugger can be enabled")
+    use_gdb = getattr(args, "gdb", False)
+    use_rr = getattr(args, "rr", False)
+    use_valgrind = getattr(args, "valgrind", False)
+    if sum((use_gdb, use_rr, use_valgrind)) > 1:
+        parser.error("Only a single debugger can be enabled")
 
     return args
 
@@ -167,10 +176,10 @@ def main(argv=None):  # pylint: disable=missing-docstring
 
     ffp = FFPuppet(
         use_profile=args.profile,
-        use_valgrind=args.valgrind,
-        use_xvfb=args.xvfb,
-        use_gdb=args.gdb,
-        use_rr=args.rr)
+        use_valgrind=getattr(args, "valgrind", False),
+        use_xvfb=getattr(args, "xvfb", False),
+        use_gdb=getattr(args, "gdb", False),
+        use_rr=getattr(args, "rr", False))
     for a_token in args.abort_token:
         ffp.add_abort_token(a_token)
 
@@ -201,7 +210,7 @@ def main(argv=None):  # pylint: disable=missing-docstring
             log_dir = tempfile.mkdtemp(prefix="ffp_log_")
             try:
                 ffp.save_logs(log_dir)
-                log.info("Dumping browser log...\n%s", dump_to_console(log_dir, (args.log is None)))
+                log.info("Dumping browser log...\n%s", dump_to_console(log_dir, args.log))
             finally:
                 if os.path.isdir(log_dir):
                     shutil.rmtree(log_dir)
