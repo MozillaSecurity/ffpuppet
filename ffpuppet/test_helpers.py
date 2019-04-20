@@ -286,6 +286,7 @@ class HelperTests(TestCase):  # pylint: disable=too-many-public-methods
         self.assertIn("LSAN_OPTIONS", env)
         self.assertIn("UBSAN_OPTIONS", env)
         self.assertIn("RUST_BACKTRACE", env)
+        self.assertIn("MOZ_CRASHREPORTER", env)
 
     def test_06(self):
         "test prepare_environment() using some predefined environment variables"
@@ -303,10 +304,15 @@ class HelperTests(TestCase):  # pylint: disable=too-many-public-methods
         self.assertIn("UBSAN_OPTIONS", env)
         self.assertIn("TEST_VAR", env)
         self.assertEqual(env["TEST_VAR"], "123")
+        self.assertIn("MOZ_CRASHREPORTER", env)
         self.assertIn("MOZ_GDB_SLEEP", env)
         self.assertEqual(env["MOZ_GDB_SLEEP"], "2")
         self.assertNotIn("RUST_BACKTRACE", env)
         self.assertNotIn("TEST_FAKE", env)
+        # MOZ_CRASHREPORTER should not be added if MOZ_CRASHREPORTER_DISABLE is set
+        pre = {"MOZ_CRASHREPORTER_DISABLE": "1"}
+        env = prepare_environment("", "blah", pre)
+        self.assertNotIn("MOZ_CRASHREPORTER", env)
 
     def test_07(self):
         "test wait_on_files()"
