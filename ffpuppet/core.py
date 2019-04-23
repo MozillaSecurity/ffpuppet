@@ -58,7 +58,6 @@ class FFPuppet(object):  # pylint: disable=too-many-instance-attributes
         self.profile = None  # path to profile
         self.reason = self.RC_CLOSED  # why the target process was terminated
 
-
         plat = platform.system().lower()
         if use_valgrind:
             assert not (use_gdb or use_rr), "only a single debugger can be enabled"
@@ -86,12 +85,12 @@ class FFPuppet(object):  # pylint: disable=too-many-instance-attributes
         if use_rr:
             assert not (use_gdb or use_valgrind), "only a single debugger can be enabled"
             if not plat.startswith("linux"):
-                raise EnvironmentError("RR is only supported on Linux")
+                raise EnvironmentError("rr is only supported on Linux")
             try:
                 with open(os.devnull, "w") as null_fp:
                     subprocess.check_call(["rr", "--version"], stdout=null_fp, stderr=null_fp)
             except OSError:
-                raise EnvironmentError("Please install RR")
+                raise EnvironmentError("Please install rr")
 
         if use_xvfb:
             if not plat.startswith("linux"):
