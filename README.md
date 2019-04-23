@@ -58,10 +58,11 @@ Once installed FFPuppet can be run using the following command:
     python -m ffpuppet
 
 ```
-usage: __main__.py [-h] [-a ABORT_TOKEN] [-d] [-e EXTENSION] [-g] [-l LOG]
+usage: __main__.py [-h] [-a ABORT_TOKEN] [-d] [-e EXTENSION] [-l LOG]
                    [--log-limit LOG_LIMIT] [-m MEMORY]
                    [--poll-interval POLL_INTERVAL] [-p PREFS] [-P PROFILE]
-                   [--rr] [-t TIMEOUT] [-u URL] [--valgrind] [-v] [--xvfb]
+                   [-t TIMEOUT] [-u URL] [-v] [--xvfb] [--gdb] [--rr]
+                   [--valgrind]
                    binary
 
 Firefox launcher/wrapper
@@ -81,7 +82,6 @@ optional arguments:
   -e EXTENSION, --extension EXTENSION
                         Use the fuzzPriv extension. Specify the path to the
                         xpi or the directory containing the unpacked extension.
-  -g, --gdb             Use GDB (Linux only)
   -l LOG, --log LOG     Location to save log files
   --log-limit LOG_LIMIT
                         Log file size limit in MBs (default: no limit)
@@ -95,14 +95,17 @@ optional arguments:
                         Profile to use. This is non-destructive. A copy of the
                         target profile will be used. (default: new temporary
                         profile is created)
-  --rr                  Use RR (Linux only)
   -t TIMEOUT, --timeout TIMEOUT
                         Number of seconds to wait for the browser to become
                         responsive after launching. (default: 300)
   -u URL, --url URL     Server URL or path to local file to load.
-  --valgrind            Use Valgrind (Linux only)
   -v, --verbose         Output includes debug prints
   --xvfb                Use Xvfb (Linux only)
+
+Available Debuggers:
+  --gdb                 Use GDB (Linux only)
+  --rr                  Use rr (Linux only)
+  --valgrind            Use Valgrind (Linux only)
 ```
 
 ##### Replaying a test case

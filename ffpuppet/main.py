@@ -130,17 +130,17 @@ def parse_args(argv=None):
             "--xvfb", action="store_true",
             help="Use Xvfb")
 
-    dbg_group = parser.add_argument_group("Supported Debuggers")
+    dbg_group = parser.add_argument_group("Available Debuggers")
     if sys.platform.startswith("linux"):
         dbg_group.add_argument(
             "--gdb", action="store_true",
             help="Use GDB")
         dbg_group.add_argument(
+            "--rr", action="store_true",
+            help="Use rr")
+        dbg_group.add_argument(
             "--valgrind", action="store_true",
             help="Use Valgrind")
-        dbg_group.add_argument(
-            "--rr", action="store_true",
-            help="Use RR")
 
     args = parser.parse_args(argv)
     if args.extension is not None:
