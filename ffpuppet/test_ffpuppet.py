@@ -646,20 +646,20 @@ class PuppetTests(TestCase):  # pylint: disable=too-many-public-methods
         self.assertIsNone(ffp.wait(timeout=0))
 
     def test_28(self):
-        "test launching with RR"
+        "test launching with rr"
         if not PLAT.startswith("linux"):
-            with self.assertRaisesRegex(EnvironmentError, "RR is only supported on Linux"):
+            with self.assertRaisesRegex(EnvironmentError, "rr is only supported on Linux"):
                 FFPuppet(use_rr=True)
             return
         try:
             # TODO: this can hang if ptrace is blocked by seccomp  # pylint: disable=fixme
             proc = subprocess.Popen(["rr", "check"], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         except OSError:
-            self.skipTest("RR not installed")
+            self.skipTest("rr not installed")
         _, stderr = proc.communicate()
         proc.wait()
         if b"Unable to open performance counter" in stderr:
-            self.skipTest("This machine doesn't support performance counters needed by RR")
+            self.skipTest("This machine doesn't support performance counters needed by rr")
         ffp = FFPuppet(use_rr=True)
         self.addCleanup(ffp.clean_up)
         rr_dir = tempfile.mkdtemp(prefix="test_ffp_rr")
@@ -673,7 +673,7 @@ class PuppetTests(TestCase):  # pylint: disable=too-many-public-methods
         ffp.save_logs(self.logs)
         with open(os.path.join(self.logs, "log_stderr.txt"), "rb") as log_fp:
             log_data = log_fp.read()
-        # verify RR ran and executed the script
+        # verify rr ran and executed the script
         self.assertIn(b"rr record", log_data)
         self.assertIn(b"[ffpuppet] Reason code:", log_data)
 
