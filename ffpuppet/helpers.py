@@ -436,7 +436,7 @@ def onerror(func, path, _exc_info):
 
 def prepare_environment(target_dir, sanitizer_log, env_mod=None):
     """
-    Get the string environment that is used when launching the browser.
+    Get environment that can be used when launching the browser.
 
     @type target_dir: String
     @param target_dir: Path to the directory containing the Firefox binary
@@ -453,43 +453,55 @@ def prepare_environment(target_dir, sanitizer_log, env_mod=None):
     @rtype: dict
     @return: A dict representing the string environment
     """
+    base = dict()
     env = dict(os.environ)
 
     # https://developer.gimp.org/api/2.0/glib/glib-running.html#G_SLICE
-    env["G_SLICE"] = "always-malloc"
-    env["MOZ_AUTOMATION"] = "1"
-    env["MOZ_CC_RUN_DURING_SHUTDOWN"] = "1"
-    if ((env_mod is None or "MOZ_CRASHREPORTER_DISABLE" not in env_mod)
-            and "MOZ_CRASHREPORTER_DISABLE" not in env):
-        env["MOZ_CRASHREPORTER"] = "1"
-        env["MOZ_CRASHREPORTER_NO_REPORT"] = "1"
-    env["MOZ_DISABLE_CONTENT_SANDBOX"] = "1"
-    env["MOZ_DISABLE_GMP_SANDBOX"] = "1"
-    env["MOZ_DISABLE_GPU_SANDBOX"] = "1"
-    env["MOZ_DISABLE_NPAPI_SANDBOX"] = "1"
-    env["MOZ_DISABLE_PDFIUM_SANDBOX"] = "1"
-    env["MOZ_DISABLE_RDD_SANDBOX"] = "1"
-    env["MOZ_DISABLE_VR_SANDBOX"] = "1"
-    env["MOZ_GDB_SLEEP"] = "0"
-    env["XRE_NO_WINDOWS_CRASH_DIALOG"] = "1"
-    env["XPCOM_DEBUG_BREAK"] = "warn"
+    base["G_SLICE"] = "always-malloc"
+    base["MOZ_AUTOMATION"] = "1"
+    base["MOZ_CC_RUN_DURING_SHUTDOWN"] = "1"
+    base["MOZ_CRASHREPORTER"] = "1"
+    base["MOZ_CRASHREPORTER_NO_REPORT"] = "1"
+    base["MOZ_DISABLE_CONTENT_SANDBOX"] = "1"
+    base["MOZ_DISABLE_GMP_SANDBOX"] = "1"
+    base["MOZ_DISABLE_GPU_SANDBOX"] = "1"
+    base["MOZ_DISABLE_NPAPI_SANDBOX"] = "1"
+    base["MOZ_DISABLE_PDFIUM_SANDBOX"] = "1"
+    base["MOZ_DISABLE_RDD_SANDBOX"] = "1"
+    base["MOZ_DISABLE_VR_SANDBOX"] = "1"
+    base["MOZ_GDB_SLEEP"] = "0"
     # https://bugzilla.mozilla.org/show_bug.cgi?id=1305151
     # skia assertions are easily hit and mostly due to precision, disable them.
-    if "MOZ_SKIA_DISABLE_ASSERTS" not in env:
-        env["MOZ_SKIA_DISABLE_ASSERTS"] = "1"
+    base["MOZ_SKIA_DISABLE_ASSERTS"] = "1"
+    base["RUST_BACKTRACE"] = "full"
+    base["XPCOM_DEBUG_BREAK"] = "warn"
+    base["XRE_NO_WINDOWS_CRASH_DIALOG"] = "1"
 
-    if "RUST_BACKTRACE" not in env:
-        env["RUST_BACKTRACE"] = "full"
-
-    # merge env_mod
     if env_mod is not None:
         assert isinstance(env_mod, dict)
-        for env_name, env_value in env_mod.items():
-            if env_value is not None:
-                assert isinstance(env_value, str)
-                env[env_name] = env_value
-            elif env_name in env:
+        base.update(env_mod)
+
+    # environment variable to skip if previously set in environ
+    optional = (
+        "_RR_TRACE_DIR", "MOZ_CRASHREPORTER", "MOZ_CRASHREPORTER_NO_REPORT",
+        "MOZ_CRASHREPORTER_SHUTDOWN", "MOZ_SKIA_DISABLE_ASSERTS", "RUST_BACKTRACE")
+    # merge presets and modifications
+    for env_name, env_value in base.items():
+        if env_value is None:
+            if env_name in env:
+                log.debug("removing env var %r", env_name)
                 del env[env_name]
+            continue
+        assert isinstance(env_value, str)
+        if env_name in optional and env_name in env:
+            log.debug("skipping optional env var %r", env_name)
+            continue
+        env[env_name] = env_value
+
+    if env.get("MOZ_CRASHREPORTER_DISABLE") == "1":
+        env.pop("MOZ_CRASHREPORTER", None)
+        env.pop("MOZ_CRASHREPORTER_NO_REPORT", None)
+        env.pop("MOZ_CRASHREPORTER_SHUTDOWN", None)
 
     configure_sanitizers(env, target_dir, sanitizer_log)
 

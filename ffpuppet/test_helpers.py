@@ -292,11 +292,22 @@ class HelperTests(TestCase):  # pylint: disable=too-many-public-methods
         "test prepare_environment() using some predefined environment variables"
         pre = {
             "LSAN_OPTIONS": "lopt=newopt",
-            "RUST_BACKTRACE":None,  # remove
+            "MOZ_GDB_SLEEP":"2",  # update default
+            "MOZ_SKIA_DISABLE_ASSERTS": "1",  # existing optional
+            "RUST_BACKTRACE":None,  # remove default
             "TEST_FAKE":None,  # remove non existing entry
-            "TEST_VAR":"123",  # add
-            "MOZ_GDB_SLEEP":"2"}  # update
-        env = prepare_environment("", "blah", pre)
+            "TEST_VAR":"123",  # add non existing entry
+            "TEST_EXISTING_OVERWRITE":"1",
+            "TEST_EXISTING_REMOVE":None}
+        try:
+            os.environ["MOZ_SKIA_DISABLE_ASSERTS"] = "0"
+            os.environ["TEST_EXISTING_OVERWRITE"] = "0"
+            os.environ["TEST_EXISTING_REMOVE"] = "1"
+            env = prepare_environment("", "blah", pre)
+        finally:
+            os.environ.pop("MOZ_SKIA_DISABLE_ASSERTS")
+            os.environ.pop("TEST_EXISTING_OVERWRITE")
+            os.environ.pop("TEST_EXISTING_REMOVE")
         self.assertIn("ASAN_OPTIONS", env)
         self.assertIn("LSAN_OPTIONS", env)
         self.assertIn("lopt=newopt", env["LSAN_OPTIONS"].split(":"))
@@ -309,6 +320,9 @@ class HelperTests(TestCase):  # pylint: disable=too-many-public-methods
         self.assertEqual(env["MOZ_GDB_SLEEP"], "2")
         self.assertNotIn("RUST_BACKTRACE", env)
         self.assertNotIn("TEST_FAKE", env)
+        self.assertNotIn("TEST_EXISTING_REMOVE", env)
+        self.assertEqual(env["MOZ_SKIA_DISABLE_ASSERTS"], "0")
+        self.assertEqual(env["TEST_EXISTING_OVERWRITE"], "1")
         # MOZ_CRASHREPORTER should not be added if MOZ_CRASHREPORTER_DISABLE is set
         pre = {"MOZ_CRASHREPORTER_DISABLE": "1"}
         env = prepare_environment("", "blah", pre)
