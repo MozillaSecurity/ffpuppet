@@ -221,3 +221,17 @@ class PuppetLoggerTests(unittest.TestCase):
             self.assertIsNotNone(plog.working_path)
         plog.clean_up()
         self.assertFalse(os.path.isfile(fname))
+
+    def test_08(self):
+        "test add_path()"
+        plog = PuppetLogger()
+        self.addCleanup(plog.clean_up)
+        path = plog.add_path("test")
+        self.assertTrue(os.path.isdir(path))
+        simple_file = os.path.join(path, "simple.txt")
+        with open(simple_file, "w") as o_fp:
+            o_fp.write("test")
+        plog.close()
+        plog.save_logs(self.tmpdir)
+        self.assertIn("test", os.listdir(self.tmpdir))
+        self.assertIn("simple.txt", os.listdir(os.path.join(self.tmpdir, "test")))

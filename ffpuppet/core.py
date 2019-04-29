@@ -32,7 +32,7 @@ from .puppet_logger import PuppetLogger
 log = logging.getLogger("ffpuppet")  # pylint: disable=invalid-name
 
 __author__ = "Tyson Smith"
-__all__ = ("FFPuppet")
+__all__ = ("FFPuppet",)
 
 
 class FFPuppet(object):  # pylint: disable=too-many-instance-attributes
@@ -575,11 +575,16 @@ class FFPuppet(object):  # pylint: disable=too-many-instance-attributes
             # clean up existing log files
             self._logs.reset()
 
-            cmd = self.build_launch_cmd(
-                bin_path,
-                additional_args=launch_args)
+            cmd = self.build_launch_cmd(bin_path, additional_args=launch_args)
 
-            if self._use_valgrind:
+            if self._use_rr:
+                if env_mod is None:
+                    env_mod = dict()
+                self._logs.add_path(self._logs.PATH_RR)
+                env_mod["_RR_TRACE_DIR"] = os.path.join(
+                    self._logs.working_path,
+                    self._logs.PATH_RR)
+            elif self._use_valgrind:
                 if env_mod is None:
                     env_mod = dict()
                 # https://developer.gimp.org/api/2.0/glib/glib-running.html#G_DEBUG

@@ -15,14 +15,15 @@ log = logging.getLogger("puppet_logger")  # pylint: disable=invalid-name
 __author__ = "Tyson Smith"
 __credits__ = ["Tyson Smith"]
 
-__all__ = ("PuppetLogger")
+__all__ = ("PuppetLogger",)
 
 
 class PuppetLogger(object):
     BUF_SIZE = 0x10000  # buffer size used to copy logs
-    PREFIX_SAN = "ffp_asan_%d.log" % os.getpid()
-    PREFIX_VALGRIND = "valgrind.%d"  % os.getpid()
     META_FILE = "log_metadata.json"
+    PATH_RR = "rr_traces"
+    PREFIX_SAN = "ffp_asan_%d.log" % os.getpid()
+    PREFIX_VALGRIND = "valgrind.%d" % os.getpid()
 
     def __init__(self):
         self._logs = dict()
@@ -50,6 +51,23 @@ class PuppetLogger(object):
             logfp = PuppetLogger.open_unique(base_dir=self.working_path)
         self._logs[log_id] = logfp
         return logfp
+
+
+    def add_path(self, name):
+        """
+        Add a directory that can be used as temporary storage for miscellaneous
+        items such as additional debugger output.
+
+        @type name: String
+        @param name: name of path to create.
+
+        @rtype: String
+        @return: path of newly created directory
+        """
+        assert not self.closed
+        path = os.path.join(self.working_path, name)
+        os.mkdir(path)
+        return path
 
 
     def available_logs(self):
@@ -253,6 +271,12 @@ class PuppetLogger(object):
                 meta_map[out_name] = {field: getattr(file_stat, field)
                                       for field in dir(os.stat_result) if field.startswith("st_")}
             shutil.copy2(log_fp.name, os.path.join(log_path, out_name))
+
+        for path in os.listdir(self.working_path):
+            full_path = os.path.join(self.working_path, path)
+            if not os.path.isdir(full_path):
+                continue
+            shutil.copytree(full_path, os.path.join(log_path, path))
 
         if meta_map is not None:
             with open(os.path.join(log_path, self.META_FILE), "w") as json_fp:
