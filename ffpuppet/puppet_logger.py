@@ -286,7 +286,7 @@ class PuppetLogger(object):
                 try:
                     subprocess.check_output(["rr", "pack", trace_path])
                     self._rr_packed = True
-                except subprocess.CalledProcessError:  # pragma: no cover
+                except subprocess.CalledProcessError:
                     log.warning("Error calling 'rr pack %s'", trace_path)
 
             for path in os.listdir(self.working_path):

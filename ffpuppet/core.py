@@ -77,9 +77,8 @@ class FFPuppet(object):  # pylint: disable=too-many-instance-attributes
             if not plat.startswith("linux"):
                 raise EnvironmentError("GDB is only supported on Linux")
             try:
-                with open(os.devnull, "w") as null_fp:
-                    subprocess.call(["gdb", "--version"], stdout=null_fp, stderr=null_fp)
-            except OSError:
+                subprocess.check_output(["gdb", "--version"])
+            except subprocess.CalledProcessError:
                 raise EnvironmentError("Please install GDB")
 
         if use_rr:
@@ -87,9 +86,8 @@ class FFPuppet(object):  # pylint: disable=too-many-instance-attributes
             if not plat.startswith("linux"):
                 raise EnvironmentError("rr is only supported on Linux")
             try:
-                with open(os.devnull, "w") as null_fp:
-                    subprocess.check_call(["rr", "--version"], stdout=null_fp, stderr=null_fp)
-            except OSError:
+                subprocess.check_output(["rr", "--version"])
+            except subprocess.CalledProcessError:
                 raise EnvironmentError("Please install rr")
 
         if use_xvfb:
