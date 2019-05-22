@@ -159,6 +159,9 @@ def parse_args(argv=None):
     if sum((use_gdb, use_rr, use_valgrind)) > 1:
         parser.error("Only a single debugger can be enabled")
 
+    if use_rr and args.log is None:
+        parser.error("--rr must be used with -l/--log")
+
     return args
 
 
@@ -183,8 +186,6 @@ def main(argv=None):  # pylint: disable=missing-docstring
     for a_token in args.abort_token:
         ffp.add_abort_token(a_token)
 
-    if args.log is None and getattr(args, "rr", False):
-        log.warning("rr trace will not be saved. Use --log.")
     try:
         log.info("Launching Firefox...")
         ffp.launch(
