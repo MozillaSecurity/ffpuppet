@@ -203,26 +203,29 @@ class FFPuppet(object):  # pylint: disable=too-many-instance-attributes
         return self._logs.log_length(log_id)
 
 
-    def save_logs(self, log_path, meta=False):
+    def save_logs(self, dest, logs_only=False, meta=False):
         """
-        The browser logs will be saved to log_path.
+        The browser logs will be saved to dest.
         This should only be called after close().
 
-        @type log_path: String
-        @param log_path: File to create to contain log data. Existing files will be overwritten.
+        @type dest: String
+        @param dest: Destination path for log data. Existing files will be overwritten.
+
+        @type logs_only: bool
+        @param logs_only: Do not include other data, including debugger output files.
 
         @type meta: bool
-        @param meta: Output JSON file containing log file meta data
+        @param meta: Output JSON file containing log file meta data.
 
         @rtype: None
         @return: None
         """
 
-        log.debug("save_logs() called, log_path=%r, meta=%r", log_path, meta)
+        log.debug("save_logs() called, dest=%r, logs_only=%r, meta=%r", dest, logs_only, meta)
         assert self._launches > -1, "clean_up() has been called"
         assert self._logs.closed, "Logs are still in use. Call close() first!"
 
-        self._logs.save_logs(log_path, meta=meta)
+        self._logs.save_logs(dest, logs_only=logs_only, meta=meta)
 
 
     def clean_up(self):
@@ -580,10 +583,7 @@ class FFPuppet(object):  # pylint: disable=too-many-instance-attributes
             if self._use_rr:
                 if env_mod is None:
                     env_mod = dict()
-                self._logs.add_path(self._logs.PATH_RR)
-                env_mod["_RR_TRACE_DIR"] = os.path.join(
-                    self._logs.working_path,
-                    self._logs.PATH_RR)
+                env_mod["_RR_TRACE_DIR"] = self._logs.add_path(self._logs.PATH_RR)
             elif self._use_valgrind:
                 if env_mod is None:
                     env_mod = dict()

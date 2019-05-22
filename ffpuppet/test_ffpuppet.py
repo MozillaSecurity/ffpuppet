@@ -653,13 +653,10 @@ class PuppetTests(TestCase):  # pylint: disable=too-many-public-methods
             return
         try:
             # TODO: this can hang if ptrace is blocked by seccomp  # pylint: disable=fixme
-            proc = subprocess.Popen(["rr", "check"], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            proc = subprocess.Popen(["rr", "record", "echo"])
         except OSError:
             self.skipTest("rr not installed")
-        _, stderr = proc.communicate()
-        proc.wait()
-        if b"Unable to open performance counter" in stderr:
-            self.skipTest("This machine doesn't support performance counters needed by rr")
+        assert proc.wait() == 0, "'rr record echo' returned %r" % (proc.returncode,)
         ffp = FFPuppet(use_rr=True)
         self.addCleanup(ffp.clean_up)
         rr_dir = tempfile.mkdtemp(prefix="test_ffp_rr")

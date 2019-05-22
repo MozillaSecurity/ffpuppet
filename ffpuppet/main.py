@@ -34,7 +34,7 @@ def dump_to_console(log_dir, save_path, log_quota=0x8000):
     @return: Merged log data to be displayed on the console
     """
 
-    logs = os.listdir(log_dir)
+    logs = list(x for x in os.listdir(log_dir) if os.path.isfile(os.path.join(log_dir, x)))
     if not logs:
         return ""
     logs.sort()
@@ -183,6 +183,8 @@ def main(argv=None):  # pylint: disable=missing-docstring
     for a_token in args.abort_token:
         ffp.add_abort_token(a_token)
 
+    if args.log is None and getattr(args, "rr", False):
+        log.warning("rr trace will not be saved. Use --log.")
     try:
         log.info("Launching Firefox...")
         ffp.launch(
@@ -209,7 +211,7 @@ def main(argv=None):  # pylint: disable=missing-docstring
         if args.dump:
             log_dir = tempfile.mkdtemp(prefix="ffp_log_")
             try:
-                ffp.save_logs(log_dir)
+                ffp.save_logs(log_dir, logs_only=args.log is None)
                 log.info("Dumping browser log...\n%s", dump_to_console(log_dir, args.log))
             finally:
                 if os.path.isdir(log_dir):

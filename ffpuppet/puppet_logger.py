@@ -6,6 +6,7 @@ import json
 import logging
 import os
 import shutil
+import subprocess
 import tempfile
 
 from .helpers import onerror, wait_on_files
@@ -21,12 +22,13 @@ __all__ = ("PuppetLogger",)
 class PuppetLogger(object):
     BUF_SIZE = 0x10000  # buffer size used to copy logs
     META_FILE = "log_metadata.json"
-    PATH_RR = "rr_traces"
+    PATH_RR = "rr-traces"
     PREFIX_SAN = "ffp_asan_%d.log" % os.getpid()
     PREFIX_VALGRIND = "valgrind.%d" % os.getpid()
 
     def __init__(self):
         self._logs = dict()
+        self._rr_packed = False
         self.closed = True
         self.working_path = None
         self.reset()
@@ -66,6 +68,7 @@ class PuppetLogger(object):
         """
         assert not self.closed
         path = os.path.join(self.working_path, name)
+        log.debug("adding path %r as %r", name, path)
         os.mkdir(path)
         return path
 
@@ -240,29 +243,33 @@ class PuppetLogger(object):
         """
         self.clean_up()
         self.closed = False
+        self._rr_packed = False
         self.working_path = os.path.realpath(tempfile.mkdtemp(prefix="ffplogs_"))
 
 
-    def save_logs(self, log_path, meta=False):
+    def save_logs(self, dest, logs_only=False, meta=False):
         """
-        The browser logs will be saved to log_path.
-        This should only be called after close().
+        The browser logs will be saved to dest.
+        This should only be called after close() has been called.
 
-        @type log_path: String
-        @param log_path: Directory to copy log files to. Existing files will be overwritten.
+        @type dest: String
+        @param dest: Destination path for log data. Existing files will be overwritten.
+
+        @type logs_only: bool
+        @param logs_only: Do not include other data, including debugger output files.
 
         @type meta: bool
-        @param meta: Output JSON file containing log file meta data
+        @param meta: Output JSON file containing log file meta data.
 
         @rtype: None
         @return: None
         """
         assert self.closed, "save_logs() cannot be called before calling close()"
         meta_map = dict() if meta else None
-        # copy log to location specified by log_path
-        if not os.path.isdir(log_path):
-            os.makedirs(log_path)
-        log_path = os.path.abspath(log_path)
+        # copy log to location specified by dest
+        if not os.path.isdir(dest):
+            os.makedirs(dest)
+        dest = os.path.abspath(dest)
 
         for log_id, log_fp in self._logs.items():
             out_name = "log_%s.txt" % log_id
@@ -270,14 +277,24 @@ class PuppetLogger(object):
                 file_stat = os.stat(log_fp.name)
                 meta_map[out_name] = {field: getattr(file_stat, field)
                                       for field in dir(os.stat_result) if field.startswith("st_")}
-            shutil.copy2(log_fp.name, os.path.join(log_path, out_name))
+            shutil.copy2(log_fp.name, os.path.join(dest, out_name))
 
-        for path in os.listdir(self.working_path):
-            full_path = os.path.join(self.working_path, path)
-            if not os.path.isdir(full_path):
-                continue
-            shutil.copytree(full_path, os.path.join(log_path, path))
+        if not logs_only:
+            if not self._rr_packed and self.PATH_RR in os.listdir(self.working_path):
+                trace_path = os.path.join(self.working_path, self.PATH_RR, "latest-trace")
+                log.debug("packing rr trace")
+                try:
+                    subprocess.check_output(["rr", "pack", trace_path])
+                    self._rr_packed = True
+                except subprocess.CalledProcessError:  # pragma: no cover
+                    log.warning("Error calling 'rr pack %s'", trace_path)
+
+            for path in os.listdir(self.working_path):
+                full_path = os.path.join(self.working_path, path)
+                if not os.path.isdir(full_path):
+                    continue
+                shutil.copytree(full_path, os.path.join(dest, path), symlinks=True)
 
         if meta_map is not None:
-            with open(os.path.join(log_path, self.META_FILE), "w") as json_fp:
+            with open(os.path.join(dest, self.META_FILE), "w") as json_fp:
                 json.dump(meta_map, json_fp, indent=2, sort_keys=True)
