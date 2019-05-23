@@ -67,10 +67,10 @@ class FFPuppet(object):  # pylint: disable=too-many-instance-attributes
                 match = re.match(
                     b"valgrind-(?P<ver>\\d+\\.\\d+)",
                     subprocess.check_output(["valgrind", "--version"]))
-                if not match or float(match.group("ver")) < FFPuppet.VALGRIND_MIN_VERSION:
-                    raise EnvironmentError("Valgrind >= %0.2f is required" % FFPuppet.VALGRIND_MIN_VERSION)
-            except (IndexError, OSError):
+            except OSError:
                 raise EnvironmentError("Please install Valgrind")
+            if not match or float(match.group("ver")) < FFPuppet.VALGRIND_MIN_VERSION:
+                raise EnvironmentError("Valgrind >= %0.2f is required" % FFPuppet.VALGRIND_MIN_VERSION)
 
         if use_gdb:
             assert not (use_rr or use_valgrind), "only a single debugger can be enabled"
