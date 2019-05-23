@@ -183,6 +183,7 @@ class PuppetLoggerTests(unittest.TestCase):
         self.addCleanup(plog.clean_up)
         os.makedirs(os.path.join(plog.working_path, plog.PATH_RR))
         plog.close()
+        plog.save_logs(self.tmpdir)
 
     def test_06(self):
         "test log that does not have a file on disk"
