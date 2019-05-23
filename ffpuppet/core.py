@@ -69,7 +69,7 @@ class FFPuppet(object):  # pylint: disable=too-many-instance-attributes
                     subprocess.check_output(["valgrind", "--version"]))
                 if not match or float(match.group("ver")) < FFPuppet.VALGRIND_MIN_VERSION:
                     raise EnvironmentError("Valgrind >= %0.2f is required" % FFPuppet.VALGRIND_MIN_VERSION)
-            except (IndexError, subprocess.CalledProcessError):
+            except (IndexError, OSError):
                 raise EnvironmentError("Please install Valgrind")
 
         if use_gdb:
@@ -78,7 +78,7 @@ class FFPuppet(object):  # pylint: disable=too-many-instance-attributes
                 raise EnvironmentError("GDB is only supported on Linux")
             try:
                 subprocess.check_output(["gdb", "--version"])
-            except subprocess.CalledProcessError:
+            except OSError:
                 raise EnvironmentError("Please install GDB")
 
         if use_rr:
@@ -87,7 +87,7 @@ class FFPuppet(object):  # pylint: disable=too-many-instance-attributes
                 raise EnvironmentError("rr is only supported on Linux")
             try:
                 subprocess.check_output(["rr", "--version"])
-            except subprocess.CalledProcessError:
+            except OSError:
                 raise EnvironmentError("Please install rr")
 
         if use_xvfb:
