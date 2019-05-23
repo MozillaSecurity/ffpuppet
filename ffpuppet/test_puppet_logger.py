@@ -178,6 +178,14 @@ class PuppetLoggerTests(unittest.TestCase):
         self.assertEqual(os.stat(plog.get_fp("test_3").name).st_size, 500 * 1234)
 
     def test_05(self):
+        "test saving logs with empty rr trace directory"
+        plog = PuppetLogger()
+        self.addCleanup(plog.clean_up)
+        os.makedirs(os.path.join(plog.working_path, plog.PATH_RR))
+        plog.close()
+        plog.save_logs(self.tmpdir)
+
+    def test_06(self):
         "test log that does not have a file on disk"
         plog = PuppetLogger()
         self.addCleanup(plog.clean_up)
@@ -186,7 +194,7 @@ class PuppetLoggerTests(unittest.TestCase):
             with self.assertRaises(IOError):
                 plog.get_fp("test")
 
-    def test_06(self):
+    def test_07(self):
         "test clean_up() with inaccessible directory"
         plog = PuppetLogger()
         self.addCleanup(plog.clean_up, ignore_errors=True)
@@ -207,7 +215,7 @@ class PuppetLoggerTests(unittest.TestCase):
             shutil.rmtree(old_working_path)
 
     @unittest.skipIf(not sys.platform.startswith("win"), "Only supported on Windows")
-    def test_07(self):
+    def test_08(self):
         "test clean_up() with in-use file"
         plog = PuppetLogger()
         self.addCleanup(plog.clean_up, ignore_errors=True)
@@ -221,3 +229,17 @@ class PuppetLoggerTests(unittest.TestCase):
             self.assertIsNotNone(plog.working_path)
         plog.clean_up()
         self.assertFalse(os.path.isfile(fname))
+
+    def test_09(self):
+        "test add_path()"
+        plog = PuppetLogger()
+        self.addCleanup(plog.clean_up)
+        path = plog.add_path("test")
+        self.assertTrue(os.path.isdir(path))
+        simple_file = os.path.join(path, "simple.txt")
+        with open(simple_file, "w") as o_fp:
+            o_fp.write("test")
+        plog.close()
+        plog.save_logs(self.tmpdir)
+        self.assertIn("test", os.listdir(self.tmpdir))
+        self.assertIn("simple.txt", os.listdir(os.path.join(self.tmpdir, "test")))

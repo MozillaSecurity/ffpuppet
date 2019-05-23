@@ -34,7 +34,7 @@ def dump_to_console(log_dir, save_path, log_quota=0x8000):
     @return: Merged log data to be displayed on the console
     """
 
-    logs = os.listdir(log_dir)
+    logs = list(x for x in os.listdir(log_dir) if os.path.isfile(os.path.join(log_dir, x)))
     if not logs:
         return ""
     logs.sort()
@@ -159,6 +159,9 @@ def parse_args(argv=None):
     if sum((use_gdb, use_rr, use_valgrind)) > 1:
         parser.error("Only a single debugger can be enabled")
 
+    if use_rr and args.log is None:
+        parser.error("--rr must be used with -l/--log")
+
     return args
 
 
@@ -209,7 +212,7 @@ def main(argv=None):  # pylint: disable=missing-docstring
         if args.dump:
             log_dir = tempfile.mkdtemp(prefix="ffp_log_")
             try:
-                ffp.save_logs(log_dir)
+                ffp.save_logs(log_dir, logs_only=args.log is None)
                 log.info("Dumping browser log...\n%s", dump_to_console(log_dir, args.log))
             finally:
                 if os.path.isdir(log_dir):

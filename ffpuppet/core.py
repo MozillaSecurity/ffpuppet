@@ -32,7 +32,7 @@ from .puppet_logger import PuppetLogger
 log = logging.getLogger("ffpuppet")  # pylint: disable=invalid-name
 
 __author__ = "Tyson Smith"
-__all__ = ("FFPuppet")
+__all__ = ("FFPuppet",)
 
 
 class FFPuppet(object):  # pylint: disable=too-many-instance-attributes
@@ -67,18 +67,17 @@ class FFPuppet(object):  # pylint: disable=too-many-instance-attributes
                 match = re.match(
                     b"valgrind-(?P<ver>\\d+\\.\\d+)",
                     subprocess.check_output(["valgrind", "--version"]))
-                if not match or float(match.group("ver")) < FFPuppet.VALGRIND_MIN_VERSION:
-                    raise EnvironmentError("Valgrind >= %0.2f is required" % FFPuppet.VALGRIND_MIN_VERSION)
-            except (IndexError, subprocess.CalledProcessError):
+            except OSError:
                 raise EnvironmentError("Please install Valgrind")
+            if not match or float(match.group("ver")) < FFPuppet.VALGRIND_MIN_VERSION:
+                raise EnvironmentError("Valgrind >= %0.2f is required" % FFPuppet.VALGRIND_MIN_VERSION)
 
         if use_gdb:
             assert not (use_rr or use_valgrind), "only a single debugger can be enabled"
             if not plat.startswith("linux"):
                 raise EnvironmentError("GDB is only supported on Linux")
             try:
-                with open(os.devnull, "w") as null_fp:
-                    subprocess.call(["gdb", "--version"], stdout=null_fp, stderr=null_fp)
+                subprocess.check_output(["gdb", "--version"])
             except OSError:
                 raise EnvironmentError("Please install GDB")
 
@@ -87,8 +86,7 @@ class FFPuppet(object):  # pylint: disable=too-many-instance-attributes
             if not plat.startswith("linux"):
                 raise EnvironmentError("rr is only supported on Linux")
             try:
-                with open(os.devnull, "w") as null_fp:
-                    subprocess.check_call(["rr", "--version"], stdout=null_fp, stderr=null_fp)
+                subprocess.check_output(["rr", "--version"])
             except OSError:
                 raise EnvironmentError("Please install rr")
 
@@ -203,26 +201,29 @@ class FFPuppet(object):  # pylint: disable=too-many-instance-attributes
         return self._logs.log_length(log_id)
 
 
-    def save_logs(self, log_path, meta=False):
+    def save_logs(self, dest, logs_only=False, meta=False):
         """
-        The browser logs will be saved to log_path.
+        The browser logs will be saved to dest.
         This should only be called after close().
 
-        @type log_path: String
-        @param log_path: File to create to contain log data. Existing files will be overwritten.
+        @type dest: String
+        @param dest: Destination path for log data. Existing files will be overwritten.
+
+        @type logs_only: bool
+        @param logs_only: Do not include other data, including debugger output files.
 
         @type meta: bool
-        @param meta: Output JSON file containing log file meta data
+        @param meta: Output JSON file containing log file meta data.
 
         @rtype: None
         @return: None
         """
 
-        log.debug("save_logs() called, log_path=%r, meta=%r", log_path, meta)
+        log.debug("save_logs() called, dest=%r, logs_only=%r, meta=%r", dest, logs_only, meta)
         assert self._launches > -1, "clean_up() has been called"
         assert self._logs.closed, "Logs are still in use. Call close() first!"
 
-        self._logs.save_logs(log_path, meta=meta)
+        self._logs.save_logs(dest, logs_only=logs_only, meta=meta)
 
 
     def clean_up(self):
@@ -575,11 +576,13 @@ class FFPuppet(object):  # pylint: disable=too-many-instance-attributes
             # clean up existing log files
             self._logs.reset()
 
-            cmd = self.build_launch_cmd(
-                bin_path,
-                additional_args=launch_args)
+            cmd = self.build_launch_cmd(bin_path, additional_args=launch_args)
 
-            if self._use_valgrind:
+            if self._use_rr:
+                if env_mod is None:
+                    env_mod = dict()
+                env_mod["_RR_TRACE_DIR"] = self._logs.add_path(self._logs.PATH_RR)
+            elif self._use_valgrind:
                 if env_mod is None:
                     env_mod = dict()
                 # https://developer.gimp.org/api/2.0/glib/glib-running.html#G_DEBUG
