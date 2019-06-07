@@ -232,10 +232,6 @@ class HelperTests(TestCase):  # pylint: disable=too-many-public-methods
         ubsan_opts = parse(env["UBSAN_OPTIONS"])
         self.assertIn("print_stacktrace", ubsan_opts)
 
-        # test bad env
-        with self.assertRaises(AssertionError):
-            configure_sanitizers({"ASAN_OPTIONS":1}, self.tmpdir, "blah")
-
         # test previously set ASAN_SYMBOLIZER_PATH
         env = {"ASAN_SYMBOLIZER_PATH":"blah"}
         configure_sanitizers(env, "target_dir", "blah")

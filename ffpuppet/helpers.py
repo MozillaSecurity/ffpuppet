@@ -53,7 +53,6 @@ class SanitizerConfig(object):
         assert isinstance(env, dict)
         if key not in env:
             return
-        assert isinstance(env[key], str)
         assert " " not in env[key], "%s should not contain spaces, join options with ':'" % key
         for option in self.re_delim.split(env[key]):
             try:
@@ -492,7 +491,6 @@ def prepare_environment(target_dir, sanitizer_log, env_mod=None):
                 log.debug("removing env var %r", env_name)
                 del env[env_name]
             continue
-        assert isinstance(env_value, str)
         if env_name in optional and env_name in env:
             log.debug("skipping optional env var %r", env_name)
             continue
