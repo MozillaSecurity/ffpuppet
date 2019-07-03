@@ -21,6 +21,12 @@ class BrowserTimeoutError(LaunchError):
     """
 
 
+class InvalidPrefs(LaunchError):
+    """
+    Raised when an invalid prefs.js file is used
+    """
+
+
 class TerminateError(Exception):
     """
     Raised when attempts to terminate the browser fail

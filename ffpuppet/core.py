@@ -22,7 +22,7 @@ except ImportError:
     pass
 
 from .checks import CheckLogContents, CheckLogSize, CheckMemoryUsage
-from .exceptions import LaunchError, TerminateError
+from .exceptions import InvalidPrefs, LaunchError, TerminateError
 from .helpers import (
     append_prefs, Bootstrapper, create_profile, get_processes, onerror,
     prepare_environment, wait_on_files)
@@ -613,9 +613,8 @@ class FFPuppet(object):  # pylint: disable=too-many-instance-attributes
             bootstrapper.wait(self.is_healthy, timeout=launch_timeout, url=location)
         finally:
             bootstrapper.close()
-
-        if prefs_js is not None and os.path.isfile(os.path.join(self.profile, "Invalidprefs.js")):
-            raise LaunchError("%r is invalid" % prefs_js)
+            if prefs_js is not None and os.path.isfile(os.path.join(self.profile, "Invalidprefs.js")):
+                raise InvalidPrefs("%r is invalid" % prefs_js)
 
         if log_limit:
             self._checks.append(CheckLogSize(
