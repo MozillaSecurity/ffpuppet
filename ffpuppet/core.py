@@ -489,7 +489,10 @@ class FFPuppet(object):  # pylint: disable=too-many-instance-attributes
                 "--args"] + cmd
 
         elif self._use_rr:
-            cmd = ["rr", "record"] + cmd
+            cmd = [
+                "rr", "record",
+                "--disable-cpuid-features-ext", "0xdc230000,0x2c42,0xc"  # Pernosco support
+            ] + cmd
 
         return cmd
 
