@@ -98,7 +98,8 @@ def parse_args(argv=None):
              "containing the unpacked extension.")
     parser.add_argument(
         "-l", "--log",
-        help="Location to save log files")
+        help="Location to save logs. If the path exists it must be empty, if it " \
+             "does not exist it will be created.")
     parser.add_argument(
         "--log-limit", type=int,
         help="Log file size limit in MBs (default: no limit)")
@@ -161,6 +162,9 @@ def parse_args(argv=None):
 
     if use_rr and args.log is None:
         parser.error("--rr must be used with -l/--log")
+
+    if args.log is not None and os.path.isdir(args.log) and os.listdir(args.log):
+        parser.error("--log %r must be empty" % args.log)
 
     return args
 
