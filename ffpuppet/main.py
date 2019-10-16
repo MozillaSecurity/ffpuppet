@@ -190,6 +190,7 @@ def main(argv=None):  # pylint: disable=missing-docstring
     for a_token in args.abort_token:
         ffp.add_abort_token(a_token)
 
+    user_exit = False
     try:
         log.info("Launching Firefox...")
         ffp.launch(
@@ -206,19 +207,25 @@ def main(argv=None):  # pylint: disable=missing-docstring
         while ffp.is_healthy():
             time.sleep(args.poll_interval)
     except KeyboardInterrupt:
+        user_exit = True
         log.info("Ctrl+C detected.")
     finally:
         log.info("Shutting down...")
         ffp.close()
         log.info("Firefox process closed")
         if args.log is not None:
-            ffp.save_logs(args.log)
+            log.info("Saving logs to %r", os.path.abspath(args.log))
+            ffp.save_logs(args.log, logs_only=user_exit)
         if args.dump:
-            log_dir = tempfile.mkdtemp(prefix="ffp_log_")
+            log_path = args.log
             try:
-                ffp.save_logs(log_dir, logs_only=args.log is None)
-                log.info("Dumping browser log...\n%s", dump_to_console(log_dir, args.log))
+                if log_path is None:
+                    # collect logs and store in temporary path
+                    log_path = tempfile.mkdtemp(prefix="ffp_log_")
+                    ffp.save_logs(log_path, logs_only=True)
+                log.info("Displaying logs...\n%s", dump_to_console(log_path, args.log))
             finally:
-                if os.path.isdir(log_dir):
-                    shutil.rmtree(log_dir)
+                # only remove log_path if it was a temporary path
+                if args.log is None and os.path.isdir(log_path):
+                    shutil.rmtree(log_path)
         ffp.clean_up()
