@@ -12,7 +12,7 @@ import tempfile
 log = logging.getLogger("ffpuppet")  # pylint: disable=invalid-name
 
 __author__ = "Tyson Smith"
-__all__ = ("process_minidumps")
+__all__ = ("process_minidumps",)
 
 class MinidumpParser(object):
     FAILURE_DIR = None
@@ -122,10 +122,11 @@ class MinidumpParser(object):
         if not os.path.isdir(symbols_path):
             raise IOError("symbols_path does not exist: %r" % symbols_path)
         self.symbols_path = symbols_path
-
-        for count, fname in enumerate(self.dump_files, start=1):
+        dump_files = (os.path.join(self.dump_path, x) for x in self.dump_files)
+        # sort dumps by modified date since the oldest is likely the most interesting
+        # this does assume that the dumps are written sequentially
+        for count, file_path in enumerate(sorted(dump_files, key=os.path.getmtime), start=1):
             log_fp = cb_create_log("minidump_%02d" % count)
-            file_path = os.path.join(self.dump_path, fname)
             self._read_registers(file_path, log_fp)
             # create log for raw mdsw stack output if needed
             raw_fp = cb_create_log("raw_mdsw_%02d" % count) if self._include_raw else None
