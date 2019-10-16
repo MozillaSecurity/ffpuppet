@@ -265,7 +265,10 @@ class PuppetLogger(object):
         @return: None
         """
         assert self.closed, "save_logs() cannot be called before calling close()"
-        meta_map = dict() if meta else None
+        if meta:
+            meta_map = dict()
+        else:
+            meta_map = None
         # copy log to location specified by dest
         if not os.path.isdir(dest):
             os.makedirs(dest)
@@ -273,7 +276,7 @@ class PuppetLogger(object):
 
         for log_id, log_fp in self._logs.items():
             out_name = "log_%s.txt" % log_id
-            if meta_map is not None:
+            if meta:
                 file_stat = os.stat(log_fp.name)
                 meta_map[out_name] = {field: getattr(file_stat, field)
                                       for field in dir(os.stat_result) if field.startswith("st_")}
@@ -295,6 +298,6 @@ class PuppetLogger(object):
                     continue
                 shutil.copytree(full_path, os.path.join(dest, path), symlinks=True)
 
-        if meta_map is not None:
+        if meta_map:
             with open(os.path.join(dest, self.META_FILE), "w") as json_fp:
                 json.dump(meta_map, json_fp, indent=2, sort_keys=True)
