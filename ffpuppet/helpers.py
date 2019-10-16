@@ -254,7 +254,7 @@ def configure_sanitizers(env, target_dir, log_path):
     asan_config.add("malloc_context_size", "20")
     asan_config.add("sleep_before_dying", "0")
     asan_config.add("strict_init_order", "true")
-    #asan_config.add("strict_string_checks", "true") # breaks old builds (esr52)
+    asan_config.add("strict_string_checks", "true") # breaks old builds (esr52)
     asan_config.add("symbolize", "true")
     env["ASAN_OPTIONS"] = asan_config.options
 
