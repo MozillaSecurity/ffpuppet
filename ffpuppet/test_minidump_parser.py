@@ -89,7 +89,7 @@ class MinidumpParserTests(unittest.TestCase):  # pylint: disable=too-many-public
         mdp = MinidumpParser(md_path)
         self.assertEqual(len(mdp.dump_files), 1)
         mdp.collect_logs(self.lgr.create, self.tmpdir)
-        internal_fp = [fp for fp in self.lgr._files.values()][0]
+        internal_fp = tuple(self.lgr._files.values())[0]
         internal_fp.flush()
         with open(internal_fp.name, "r") as log_fp:
             self.assertTrue(log_fp.read().startswith("WARNING: minidump_stackwalk log was empty"))
