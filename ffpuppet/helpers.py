@@ -473,6 +473,7 @@ def prepare_environment(target_dir, sanitizer_log, env_mod=None):
     # skia assertions are easily hit and mostly due to precision, disable them.
     base["MOZ_SKIA_DISABLE_ASSERTS"] = "1"
     base["RUST_BACKTRACE"] = "full"
+    # https://developer.mozilla.org/en-US/docs/Mozilla/Debugging/XPCOM_DEBUG_BREAK
     base["XPCOM_DEBUG_BREAK"] = "warn"
     base["XRE_NO_WINDOWS_CRASH_DIALOG"] = "1"
 
@@ -480,10 +481,11 @@ def prepare_environment(target_dir, sanitizer_log, env_mod=None):
         assert isinstance(env_mod, dict)
         base.update(env_mod)
 
-    # environment variable to skip if previously set in environ
+    # environment variables to skip if previously set in environ
     optional = (
         "_RR_TRACE_DIR", "MOZ_CRASHREPORTER", "MOZ_CRASHREPORTER_NO_REPORT",
-        "MOZ_CRASHREPORTER_SHUTDOWN", "MOZ_SKIA_DISABLE_ASSERTS", "RUST_BACKTRACE")
+        "MOZ_CRASHREPORTER_SHUTDOWN", "MOZ_SKIA_DISABLE_ASSERTS",
+        "RUST_BACKTRACE", "XPCOM_DEBUG_BREAK")
     # merge presets and modifications
     for env_name, env_value in base.items():
         if env_value is None:
