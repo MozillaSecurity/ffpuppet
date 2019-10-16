@@ -398,7 +398,7 @@ def get_processes(pid, recursive=True):
     """
     try:
         procs = [psutil.Process(pid)]
-    except psutil.NoSuchProcess:
+    except (psutil.AccessDenied, psutil.NoSuchProcess):
         return list()
     if not recursive:
         return procs
@@ -554,7 +554,7 @@ def wait_on_files(wait_files, poll_rate=0.25, timeout=60):
         if wait_files.intersection({true_path(x.path) for x in proc.info["open_files"]}):
             try:
                 procs.append(psutil.Process(proc.info["pid"]))
-            except psutil.NoSuchProcess:  # pragma: no cover
+            except (psutil.AccessDenied, psutil.NoSuchProcess):  # pragma: no cover
                 pass
     # only check previously blocking processes
     while procs:
