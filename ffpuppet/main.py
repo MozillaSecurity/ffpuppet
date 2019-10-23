@@ -121,6 +121,10 @@ def parse_args(argv=None):
         help="Number of seconds to wait for the browser to become " \
              "responsive after launching. (default: %(default)s)")
     parser.add_argument(
+        "-w", "--running-timeout", type=float,
+        help="Number of seconds to wait for the browser to execute " \
+             "before terminating. (default: no time limit)")
+    parser.add_argument(
         "-u", "--url",
         help="Server URL or path to local file to load.")
     parser.add_argument(
@@ -200,7 +204,8 @@ def main(argv=None):  # pylint: disable=missing-docstring
             log_limit=args.log_limit * 1024 * 1024 if args.log_limit else 0,
             memory_limit=args.memory * 1024 * 1024 if args.memory else 0,
             prefs_js=args.prefs,
-            extension=args.extension)
+            extension=args.extension,
+            running_timeout=args.running_timeout)
         if args.prefs is not None and os.path.isfile(args.prefs):
             check_prefs(os.path.join(ffp.profile, "prefs.js"), args.prefs)
         log.info("Running Firefox (pid: %d)...", ffp.get_pid())

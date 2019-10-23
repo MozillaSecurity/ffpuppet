@@ -3,6 +3,7 @@
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
 import os
+import time
 
 from psutil import AccessDenied, NoSuchProcess
 
@@ -139,3 +140,35 @@ class CheckMemoryUsage(Check):
                 msg.append("-> PID %6d: %s\n" % (pid, format(usage, "14,")))
             self.message = "".join(msg)
         return self.message is not None
+
+class CheckRunningTimeout(Check):
+    """
+    CheckRunningTimeout is used to check if the browser has been running longer
+    than a particular amount of time.
+    """
+    def __init__(self, timeout):
+        super(CheckRunningTimeout, self).__init__()
+        self._timeout, self._start, self._stop = timeout, None, None
+        self.start()
+
+    def start(self):
+        self._start = time.time()
+        return time.time() - self._start
+
+    def stop(self):
+        self._stop = time.time()
+        return self._stop - self._start
+
+    def check(self):
+        """
+        Check the current duration and compare it with the timeout that
+        was specified.
+
+        @rtype: bool
+        @return: True if the amount of time that we've been running is longer
+        than self.timeout otherwise False.
+        """
+        if time.time() - self._start < self._timeout:
+            return False
+        self.stop()
+        return True

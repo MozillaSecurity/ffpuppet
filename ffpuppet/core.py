@@ -21,7 +21,7 @@ try:
 except ImportError:
     pass
 
-from .checks import CheckLogContents, CheckLogSize, CheckMemoryUsage
+from .checks import CheckLogContents, CheckLogSize, CheckMemoryUsage, CheckRunningTimeout
 from .exceptions import InvalidPrefs, LaunchError, TerminateError
 from .helpers import (
     append_prefs, Bootstrapper, create_profile, get_processes, onerror,
@@ -498,7 +498,7 @@ class FFPuppet(object):  # pylint: disable=too-many-instance-attributes
 
 
     def launch(self, bin_path, env_mod=None, launch_timeout=300, location=None, log_limit=0,
-               memory_limit=0, prefs_js=None, extension=None):
+               memory_limit=0, prefs_js=None, extension=None, running_timeout=0.0):
         """
         Launch a new browser process.
 
@@ -530,6 +530,9 @@ class FFPuppet(object):  # pylint: disable=too-many-instance-attributes
 
         @type extension: String, or list of Strings
         @param extension: Path to an extension (e.g. DOMFuzz fuzzPriv extension) to be installed.
+
+        @type running_timeout: float
+        @param running_timeout: Timeout in seconds for running the browser
 
         @rtype: None
         @return: None
@@ -630,6 +633,8 @@ class FFPuppet(object):  # pylint: disable=too-many-instance-attributes
             self._checks.append(CheckLogContents(
                 [self._logs.get_fp("stderr").name, self._logs.get_fp("stdout").name],
                 self._abort_tokens))
+        if running_timeout:
+            self._checks.append(CheckRunningTimeout(running_timeout))
 
         self._launches += 1
 
