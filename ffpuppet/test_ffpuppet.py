@@ -126,7 +126,7 @@ class PuppetTests(TestCase):  # pylint: disable=too-many-public-methods
         ffp.launch(TESTFF_BIN, location=self.tsrv.get_addr())
         self.assertEqual(len(ffp._checks), 0)
         self.assertEqual(ffp.launches, 1)
-        self.assertIsNone(ffp.wait(timeout=0))
+        self.assertFalse(ffp.wait(timeout=0))
         self.assertTrue(ffp.is_running())
         self.assertTrue(ffp.is_healthy())
         self.assertIsNone(ffp.reason)
@@ -135,7 +135,7 @@ class PuppetTests(TestCase):  # pylint: disable=too-many-public-methods
         self.assertIsNone(ffp._proc)
         self.assertFalse(ffp.is_running())
         self.assertFalse(ffp.is_healthy())
-        self.assertIsNone(ffp.wait(timeout=10))
+        self.assertTrue(ffp.wait(timeout=10))
 
     def test_02(self):
         "test crash on start"
@@ -234,18 +234,19 @@ class PuppetTests(TestCase):  # pylint: disable=too-many-public-methods
         "test wait()"
         ffp = FFPuppet()
         self.addCleanup(ffp.clean_up)
-        self.assertIsNone(ffp.wait())
+        self.assertTrue(ffp.wait())
         with open(self.tmpfn, "w") as prefs:
             prefs.write("//fftest_exit_code_0\n")
         ffp.launch(TESTFF_BIN, location=self.tsrv.get_addr(), prefs_js=self.tmpfn)
-        self.assertIsNotNone(ffp.wait(timeout=10))
+        self.assertTrue(ffp.wait(timeout=10))
         ffp.close()
         self.assertEqual(ffp.reason, ffp.RC_EXITED)
         ffp.launch(TESTFF_BIN, location=self.tsrv.get_addr())
         self.assertTrue(ffp.is_running())
-        self.assertIsNone(ffp.wait(timeout=0))
+        self.assertFalse(ffp.wait(timeout=0))
         ffp.close()
         self.assertEqual(ffp.reason, ffp.RC_CLOSED)
+        self.assertTrue(ffp.wait(timeout=0))
 
     def test_08(self):
         "test clone_log()"
@@ -613,7 +614,7 @@ class PuppetTests(TestCase):  # pylint: disable=too-many-public-methods
         self.addCleanup(ffp.clean_up)
         ffp.launch(TESTFF_BIN, prefs_js=self.tmpfn, location=self.tsrv.get_addr())
         self.assertTrue(ffp.is_running())
-        self.assertIsNone(ffp.wait(timeout=0))
+        self.assertFalse(ffp.wait(timeout=0))
         c_procs = Process(ffp.get_pid()).children()
         self.assertGreater(len(c_procs), 0)
         # terminate one of the child processes
@@ -621,7 +622,7 @@ class PuppetTests(TestCase):  # pylint: disable=too-many-public-methods
         self.assertTrue(ffp.is_running())
         ffp.close()
         self.assertFalse(ffp.is_running())
-        self.assertIsNone(ffp.wait(timeout=0))
+        self.assertTrue(ffp.wait(timeout=0))
 
     def test_27(self):
         "test multiprocess (target terminated)"
@@ -643,7 +644,7 @@ class PuppetTests(TestCase):  # pylint: disable=too-many-public-methods
         self.assertFalse(wait_procs(procs, timeout=10)[1])
         ffp.close()
         self.assertFalse(ffp.is_running())
-        self.assertIsNone(ffp.wait(timeout=0))
+        self.assertTrue(ffp.wait(timeout=0))
 
     def test_28(self):
         "test launching with rr"

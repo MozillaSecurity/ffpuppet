@@ -331,7 +331,7 @@ class FFPuppet(object):  # pylint: disable=too-many-instance-attributes
                 crash_reports = new_reports
 
             # terminate the browser process if needed
-            if self.wait(timeout=0) is None:
+            if not self.wait(timeout=0):
                 log.debug("browser needs to be terminated")
                 self._terminate(self._proc.pid)
                 # wait for reports triggered by the call to _terminate()
@@ -649,7 +649,7 @@ class FFPuppet(object):  # pylint: disable=too-many-instance-attributes
 
     def wait(self, timeout=None):
         """
-        Wait for process and children to terminate. This call will block until the process exits
+        Wait for process and children to terminate. This call will block until the processes exit
         unless a timeout is specified. If a timeout of zero or greater is specified the call will
         only block until the timeout expires.
 
@@ -657,19 +657,12 @@ class FFPuppet(object):  # pylint: disable=too-many-instance-attributes
         @param timeout: maximum amount of time to wait for process to terminate
                         or None (wait indefinitely)
 
-        @rtype: int or None
-        @return: exit code of process if it exits and None if timeout expired or the process does
-                 not exist
+        @rtype: bool
+        @return: True if processes exit before timeout expires otherwise False
         """
         assert timeout is None or timeout >= 0
-        try:
-            # check if the parent process is running before performing lookup
-            if self._proc.poll() is not None:
-                return self._proc.returncode
-            if not psutil.wait_procs(get_processes(self._proc.pid), timeout=timeout)[1]:
-                return self._proc.poll()
-            log.debug("wait(timeout=%0.2f) timed out", timeout)
-        except AttributeError:
-            # if close() called in parallel self._proc is set to None
-            pass
-        return None
+        pid = self.get_pid()
+        if pid is None or not psutil.wait_procs(get_processes(pid), timeout=timeout)[1]:
+            return True
+        log.debug("wait(timeout=%0.2f) timed out", timeout)
+        return False
