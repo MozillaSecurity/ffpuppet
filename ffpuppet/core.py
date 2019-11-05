@@ -143,6 +143,22 @@ class FFPuppet(object):  # pylint: disable=too-many-instance-attributes
         return self._logs.clone_log(log_id, offset=offset, target_file=target_file)
 
 
+    def cpu_usage(self):
+        """
+        Collect percentage of CPU usage per process.
+
+        @rtype: Yields a tuple for each process
+        @return: PID of the process and the CPU usage as a percentage.
+        """
+        pid = self.get_pid()
+        if pid is not None:
+            for proc in get_processes(pid):
+                try:
+                    yield proc.pid, proc.cpu_percent(interval=0.1)
+                except (psutil.AccessDenied, psutil.NoSuchProcess):  # pragma: no cover
+                    continue
+
+
     def is_healthy(self):
         """
         Verify the browser is in a known good state by performing a series

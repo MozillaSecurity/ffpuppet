@@ -798,3 +798,18 @@ class PuppetTests(TestCase):  # pylint: disable=too-many-public-methods
         finally:
             os.environ.pop("VALGRIND_SUP_PATH")
         ffp._use_valgrind = False
+
+    def test_33(self):
+        "test cpu_usage()"
+        ffp = FFPuppet()
+        self.addCleanup(ffp.clean_up)
+        self.assertEqual(len(tuple(ffp.cpu_usage())), 0)
+        ffp.launch(TESTFF_BIN, location=self.tsrv.get_addr())
+        usage = tuple(ffp.cpu_usage())
+        self.assertEqual(len(usage), 1)
+        self.assertEqual(len(usage[0]), 2)
+        self.assertEqual(usage[0][0], ffp.get_pid())
+        self.assertLessEqual(usage[0][1], 100)
+        self.assertGreaterEqual(usage[0][1], 0)
+        ffp.close()
+        self.assertTrue(ffp.wait(timeout=10))
