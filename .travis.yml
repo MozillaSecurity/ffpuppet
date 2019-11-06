@@ -18,13 +18,6 @@ matrix:
       osx_image: xcode11.2  # Python 3.7.4 running on macOS 10.14.4
       language: shell       # 'language: python' is an error on Travis CI macOS
     - os: windows
-      language: sh
-      python: 2.7
-      before_install:
-        - choco install python2
-        - export PATH="/c/Python27:/c/Python27/Scripts:$PATH"
-        - python -m pip install --upgrade pip wheel
-    - os: windows
       python: 2.7
       language: shell
       before_install:
