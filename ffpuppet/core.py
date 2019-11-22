@@ -386,7 +386,12 @@ class FFPuppet(object):  # pylint: disable=too-many-instance-attributes
         self._checks = list()
         # remove temporary profile directory if necessary
         if self.profile is not None and os.path.isdir(self.profile):
-            shutil.rmtree(self.profile, onerror=onerror)
+            try:
+                shutil.rmtree(self.profile, onerror=onerror)
+            except OSError:
+                log.error("Failed to remove profile %r", self.profile)
+                if not force_close:
+                    raise
             self.profile = None
         log.debug("exit reason code %r", r_code)
         if self.reason is None:
