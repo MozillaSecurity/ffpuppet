@@ -337,7 +337,7 @@ class FFPuppet(object):  # pylint: disable=too-many-instance-attributes
                 # wait until all open files are closed (except stdout & stderr)
                 report_wait = 300 if self._use_rr else 90
                 if not wait_on_files(crash_reports, timeout=report_wait):
-                    log.warning("wait_on_files() Timed out")
+                    log.warning("wait_on_files(timeout=%d) Timed out", report_wait)
                     break
                 new_reports = set(self._crashreports())
                 # verify no new reports have appeared
@@ -362,24 +362,32 @@ class FFPuppet(object):  # pylint: disable=too-many-instance-attributes
             log.debug("browser process was 'None'")
 
         if not force_close:
-            log.debug("reviewing %d check(s)", len(self._checks))
-            for check in self._checks:
-                if check.message is not None:
-                    r_code = self.RC_WORKER
-                    check.dump_log(dst_fp=self._logs.add_log("ffp_worker_%s" % check.name))
-
-            # collect logs (excluding minidumps)
-            for fname in self._crashreports(skip_md=True):
-                self._logs.add_log(os.path.basename(fname), open(fname, "rb"))
-            # check for minidumps in the profile and dump them if possible
-            if self.profile is not None:
-                process_minidumps(
-                    os.path.join(self.profile, "minidumps"),
-                    os.path.join(self._last_bin_path, "symbols"),
-                    self._logs.add_log)
-            if self._logs.get_fp("stderr"):
-                self._logs.get_fp("stderr").write(
-                    ("[ffpuppet] Reason code: %s\n" % r_code).encode("utf-8"))
+            if self._logs.closed:
+                # This should not happen while everything is working as expected.
+                # This is here to prevent additional unexpected issues.
+                # Since this should never happen in normal operation this assert
+                # will help verify that.
+                # If '_proc' is not None this is the first call to close()
+                # in this situation the PuppetLogger should still be available.
+                assert self._proc is None, "PuppetLogger is closed!"
+            else:
+                log.debug("reviewing %d check(s)", len(self._checks))
+                for check in self._checks:
+                    if check.message is not None:
+                        r_code = self.RC_WORKER
+                        check.dump_log(dst_fp=self._logs.add_log("ffp_worker_%s" % check.name))
+                # collect logs (excluding minidumps)
+                for fname in self._crashreports(skip_md=True):
+                    self._logs.add_log(os.path.basename(fname), open(fname, "rb"))
+                # check for minidumps in the profile and dump them if possible
+                if self.profile is not None:
+                    process_minidumps(
+                        os.path.join(self.profile, "minidumps"),
+                        os.path.join(self._last_bin_path, "symbols"),
+                        self._logs.add_log)
+                if self._logs.get_fp("stderr"):
+                    self._logs.get_fp("stderr").write(
+                        ("[ffpuppet] Reason code: %s\n" % r_code).encode("utf-8"))
 
         self._proc = None
         self._logs.close()
