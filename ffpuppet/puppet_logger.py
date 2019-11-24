@@ -26,7 +26,8 @@ class PuppetLogger(object):
     PREFIX_SAN = "ffp_asan_%d.log" % os.getpid()
     PREFIX_VALGRIND = "valgrind.%d" % os.getpid()
 
-    def __init__(self):
+    def __init__(self, base_path=None):
+        self._base = base_path
         self._logs = dict()
         self._rr_packed = False
         self.closed = True
@@ -244,7 +245,7 @@ class PuppetLogger(object):
         self.clean_up()
         self.closed = False
         self._rr_packed = False
-        self.working_path = os.path.realpath(tempfile.mkdtemp(prefix="ffplogs_"))
+        self.working_path = os.path.realpath(tempfile.mkdtemp(prefix="ffplogs_", dir=self._base))
 
 
     def save_logs(self, dest, logs_only=False, meta=False):
