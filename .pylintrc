@@ -1,8 +1,18 @@
 [MASTER]
-ignore=ffpuppet/testff.py,ffpuppet/testmdsw.py
+ignore=
+	ffpuppet/testff.py,
+	ffpuppet/testmdsw.py
 
 [MESSAGES CONTROL]
-disable=duplicate-code,missing-docstring,too-many-arguments,too-many-branches,too-many-locals,too-many-statements,useless-object-inheritance
+disable=
+	duplicate-code,
+	missing-docstring,
+	too-many-arguments,
+	too-many-branches,
+	too-many-instance-attributes,
+	too-many-locals,
+	too-many-statements,
+	useless-object-inheritance
 
 [FORMAT]
 max-line-length=120

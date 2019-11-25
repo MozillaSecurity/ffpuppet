@@ -76,7 +76,7 @@ def test_minidump_parser_03(tmp_path):
 
 def test_minidump_parser_04(tmp_path):
     """test MinidumpParser._read_stacktrace()"""
-    def fake_call_mdsw(_, out_fp, extra_flags=None):
+    def fake_call_mdsw(_, out_fp, extra_flags=None):  # pylint: disable=unused-argument
         out_fp.write(b"OS|Linux|0.0.0 sys info...\n")
         out_fp.write(b"CPU|amd64|more info|8\n")
         out_fp.write(b"GPU|||\n")
