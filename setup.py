@@ -14,6 +14,12 @@ if __name__ == "__main__":
         entry_points={
             "console_scripts": ["ffpuppet = ffpuppet.main:main"]
         },
+        extra_requires=[
+            "pytest",
+            "pytest-cov",
+            "pytest-mock"
+            "pytest-pylint"
+        ],
         install_requires=[
             "psutil >= 4.4.0",
             "xvfbwrapper >= 0.2.9; sys_platform == 'linux' or sys_platform == 'linux2'"

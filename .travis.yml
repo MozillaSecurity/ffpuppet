@@ -43,7 +43,7 @@ before_install:
 install:
   - pip install -e .
 before_script:
-  - pip install --upgrade pytest pytest-pylint pytest-cov codecov
+  - pip install --upgrade pytest pytest-mock pytest-pylint pytest-cov codecov
 script:
   - pytest
 after_success:
