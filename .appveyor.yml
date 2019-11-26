@@ -2,17 +2,17 @@ environment:
     DEBUG: "1"
     matrix:
         - PYTHON: "C:\\Python27"
-        - PYTHON: "C:\\Python35"
         - PYTHON: "C:\\Python36"
         - PYTHON: "C:\\Python37"
+        - PYTHON: "C:\\Python38"
         - PYTHON: "C:\\Python27-x64"
-        - PYTHON: "C:\\Python35-x64"
         - PYTHON: "C:\\Python36-x64"
         - PYTHON: "C:\\Python37-x64"
+        - PYTHON: "C:\\Python38-x64"
 install:
     - "%PYTHON%\\python.exe -m pip install --upgrade setuptools pip"
+    - "%PYTHON%\\python.exe -m pip install --upgrade pytest pytest-mock pytest-cov pytest-pylint"
     - "%PYTHON%\\python.exe -m pip install -e ."
-    - "%PYTHON%\\python.exe -m pip install --upgrade pylint pytest pytest-pylint pytest-cov"
 build: off
 test_script:
     - "%PYTHON%\\python.exe -m pytest"
