@@ -24,7 +24,7 @@ except ImportError:
 
 from psutil import AccessDenied, NoSuchProcess, Process, wait_procs
 
-from .core import  FFPuppet
+from .core import FFPuppet
 from .exceptions import BrowserTimeoutError, BrowserTerminatedError, LaunchError
 from .helpers import get_processes, onerror
 from .minidump_parser import MinidumpParser
