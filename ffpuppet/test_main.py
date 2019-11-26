@@ -3,113 +3,85 @@
 # This Source Code Form is subject to the terms of the Mozilla Public
 # License, v. 2.0. If a copy of the MPL was not distributed with this file,
 # You can obtain one at http://mozilla.org/MPL/2.0/.
-# pylint: disable=missing-docstring
 
-import logging
-import os
-import shutil
-import signal
-import subprocess
-import sys
-import tempfile
-import unittest
+import pytest
 
-import ffpuppet
-from .main import dump_to_console, main
-
-logging.basicConfig(level=logging.DEBUG if bool(os.getenv("DEBUG")) else logging.INFO)
-log = logging.getLogger("ffp_test")  # pylint: disable=invalid-name
-
-CWD = os.path.realpath(os.path.dirname(__file__))
-PLAT = sys.platform.lower()
-
-TESTFF_BIN = os.path.join(CWD, "resources", "testff.py")
-TESTMDSW_BIN = os.path.join(CWD, "resources", "testmdsw.py")
-
-ffpuppet.FFPuppet.MDSW_BIN = TESTMDSW_BIN
-ffpuppet.FFPuppet.MDSW_MAX_STACK = 8
+from .main import dump_to_console, main, parse_args
 
 
-class MainTests(unittest.TestCase):
+def test_main_01(mocker, tmp_path):
+    """test main() with FFPuppet exit"""
+    fake_ffp = mocker.patch("ffpuppet.main.FFPuppet", autospec=True)
+    fake_ffp.return_value.get_pid.return_value = 12345
+    fake_ffp.return_value.is_healthy.return_value = False
+    fake_ffp.return_value.profile = str(tmp_path)
+    out_logs = tmp_path / "logs"
+    out_logs.mkdir()
+    prefs = tmp_path / "prefs.js"
+    prefs.touch()
+    main(["fake_bin", "-d", "-l", str(out_logs), "-p", str(prefs)])
+    assert fake_ffp.return_value.add_abort_token.call_count == 0
+    assert fake_ffp.return_value.get_pid.call_count == 1
+    assert fake_ffp.return_value.is_healthy.call_count == 1
+    assert fake_ffp.return_value.close.call_count == 1
+    assert fake_ffp.return_value.save_logs.call_count == 1
+    assert fake_ffp.return_value.clean_up.call_count == 1
 
-    def setUp(self):
-        self.tmpdir = tempfile.mkdtemp(prefix="ffp_test")
+def test_main_02(mocker, tmp_path):
+    """test main() with user exit"""
+    fake_ffp = mocker.patch("ffpuppet.main.FFPuppet", autospec=True)
+    fake_ffp.return_value.get_pid.return_value = 12345
+    fake_ffp.return_value.profile = str(tmp_path)
+    fake_time = mocker.patch("ffpuppet.main.time", autospec=True)
+    fake_time.sleep.side_effect = KeyboardInterrupt
+    out_logs = tmp_path / "logs"
+    out_logs.mkdir()
+    main(["fake_bin", "-d", "-a", "token", "-v"])
+    assert fake_ffp.return_value.add_abort_token.call_count == 1
+    assert fake_ffp.return_value.get_pid.call_count == 1
+    assert fake_ffp.return_value.is_healthy.call_count == 1
+    assert fake_ffp.return_value.close.call_count == 1
+    assert fake_ffp.return_value.save_logs.call_count == 1
+    assert fake_ffp.return_value.clean_up.call_count == 1
 
-    def tearDown(self):
-        if os.path.isdir(self.tmpdir):
-            shutil.rmtree(self.tmpdir)
+def test_parse_args_01(tmp_path):
+    """test parse_args()"""
+    with pytest.raises(SystemExit):
+        parse_args(["-h"])
+    with pytest.raises(SystemExit):
+        parse_args(["fake_bin", "-p", str(tmp_path / "missing")])
+    with pytest.raises(SystemExit):
+        parse_args(["fake_bin", "-e", str(tmp_path / "missing")])
+    with pytest.raises(SystemExit):
+        parse_args(["fake_bin", "--gdb", "--valgrind"])
+    with pytest.raises(SystemExit):
+        parse_args(["fake_bin", "--rr"])
+    (tmp_path / "junk.log").touch()
+    with pytest.raises(SystemExit):
+        parse_args(["fake_bin", "--log", str(tmp_path)])
+    assert parse_args(["fake_bin"])
 
-    def test_01(self):
-        "test calling main with '-h' and invalid input"
-        with self.assertRaises(SystemExit):
-            main(["-h"])
-
-        with self.assertRaises(SystemExit):
-            main([TESTFF_BIN, "-p", "/missing/prefs/file"])
-
-        with self.assertRaises(SystemExit):
-            main([TESTFF_BIN, "-e", "/missing/ext/file"])
-
-        with self.assertRaises(SystemExit):
-            main([TESTFF_BIN, "--gdb", "--valgrind"])
-
-        with self.assertRaises(SystemExit):
-            main([TESTFF_BIN, "--rr"])
-
-    def test_02(self):
-        "test calling main with test binary/script"
-        out_logs = os.path.join(self.tmpdir, "logs")
-        prefs = os.path.join(self.tmpdir, "pref.js")
-        with open(prefs, "w") as prefs_fp:
-            prefs_fp.write("//fftest_exit_code_0\n")
-        main([TESTFF_BIN, "-d", "-l", out_logs, "-p", prefs])
-        self.assertTrue(os.path.isdir(out_logs))
-        self.assertGreater(len(os.listdir(out_logs)), 0)
-
-    def test_03(self):
-        "test calling main with test binary/script"
-        prefs = os.path.join(self.tmpdir, "pref.js")
-        with open(prefs, "w") as prefs_fp:
-            prefs_fp.write("//fftest_big_log\n")
-        main([TESTFF_BIN, "-v", "-d", "-p", prefs, "--log-limit", "1", "-a", "blah_test"])
-
-    @unittest.skipIf(PLAT.startswith('win'), "This test is unsupported on Windows")
-    def test_04(self):
-        "test sending SIGINT"
-        prefs = os.path.join(self.tmpdir, "pref.js")
-        with open(prefs, "w") as prefs_fp:
-            # spam logs
-            prefs_fp.write("//fftest_big_log\n")
-        out_logs = os.path.join(self.tmpdir, "logs")
-        with tempfile.TemporaryFile() as console:
-            proc = subprocess.Popen(
-                [sys.executable, "-m", "ffpuppet", TESTFF_BIN, "-d", "-p", prefs, "-l", out_logs],
-                cwd=os.path.split(os.path.split(ffpuppet.__file__)[0])[0],
-                stderr=console,
-                stdout=console)
-            while proc.poll() is None:
-                console.seek(0)
-                output = console.read()
-                if b"Running Firefox" in output:
-                    break
-            # verify we are in a good state otherwise display console output
-            self.assertIn(b"Running Firefox", output)
-            self.assertIsNone(proc.poll())
-            proc.send_signal(signal.SIGINT)
-            self.assertIsNotNone(proc.wait())
-            console.seek(0)
-            output = console.read()
-        self.assertIn(b"Ctrl+C detected", output)
-        self.assertIn(b"Firefox process closed", output)
-        self.assertTrue(os.path.isdir(out_logs))
-        self.assertGreater(len(os.listdir(out_logs)), 0)
-
-    def test_05(self):
-        "test dump_to_console()"
-        # call with no logs
-        dump_to_console(self.tmpdir, False)
-        # call with dummy logs
-        with open(os.path.join(self.tmpdir, "log_stdout.txt"), "w") as log_fp:
-            for _ in range(1024):
-                log_fp.write("test")
-        dump_to_console(self.tmpdir, True, log_quota=100)
+def test_dump_to_console_01(tmp_path):
+    """test dump_to_console()"""
+    # call with no logs
+    assert not dump_to_console(str(tmp_path), False)
+    # call with dummy logs
+    (tmp_path / "log_stderr.txt").write_bytes(b"dummy-stderr")
+    (tmp_path / "log_stdout.txt").write_bytes(b"dummy-stdout")
+    output = dump_to_console(str(tmp_path), "/fake/save/path")
+    assert "Full logs available here" not in output
+    assert "Dumping 'log_stderr.txt'" in output
+    assert "dummy-stderr" in output
+    assert "Dumping 'log_stdout.txt'" in output
+    assert "dummy-stdout" in output
+    # truncate log
+    with (tmp_path / "log_stdout.txt").open("wb") as log_fp:
+        log_fp.write(b"dummy-stdout")
+        for _ in range(1024):
+            log_fp.write(b"test")
+    output = dump_to_console(str(tmp_path), "/fake/save/path", log_quota=100)
+    assert "Full logs available here" in output
+    assert "Dumping 'log_stderr.txt'" in output
+    assert "dummy-stderr" in output
+    assert "Dumping 'log_stdout.txt'" in output
+    assert "dummy-stdout" not in output

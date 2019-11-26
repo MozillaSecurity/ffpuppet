@@ -73,7 +73,7 @@ def dump_to_console(log_dir, save_path, log_quota=0x8000):
             if save_path is None:
                 out_fp.write("=== To capture complete logs use '--log'")
             else:
-                out_fp.write("=== Full logs available here %r" % save_path)
+                out_fp.write("=== Full logs available here %r" % (os.path.abspath(save_path),))
             out_fp.write("\n===\n")
         out_fp.seek(0)
         return out_fp.read()
