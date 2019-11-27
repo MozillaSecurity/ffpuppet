@@ -604,6 +604,11 @@ class FFPuppet(object):  # pylint: disable=too-many-instance-attributes
             append_prefs(self.profile, prefs)
 
             launch_args = [bootstrapper.location]
+            is_windows = platform.system() == "Windows"
+            if is_windows:
+                # disable launcher process
+                launch_args.append("-no-deelevate")
+                launch_args.append("-wait-for-browser")
 
             # clean up existing log files
             self._logs.reset()
@@ -630,13 +635,12 @@ class FFPuppet(object):  # pylint: disable=too-many-instance-attributes
             stderr.write(b"\n\n")
             stderr.flush()
             sanitizer_logs = os.path.join(self._logs.working_path, self._logs.PREFIX_SAN)
-            plat = platform.system().lower()
             # launch the browser
             log.debug("launch command: %r", " ".join(cmd))
             self._proc = subprocess.Popen(
                 cmd,
                 bufsize=0,  # unbuffered (for log scanners)
-                creationflags=subprocess.CREATE_NEW_PROCESS_GROUP if plat == "windows" else 0,
+                creationflags=subprocess.CREATE_NEW_PROCESS_GROUP if is_windows else 0,
                 env=prepare_environment(self._last_bin_path, sanitizer_logs, env_mod=env_mod),
                 shell=False,
                 stderr=stderr,

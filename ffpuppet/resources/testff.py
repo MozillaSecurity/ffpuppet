@@ -4,6 +4,7 @@
 
 from multiprocessing import Event, Process
 import os
+import platform
 import sys
 import time
 try:
@@ -22,10 +23,13 @@ def dummy_process(is_alive, parent_done):
 
 
 def main(parent_done):
+    os_name = platform.system()
     profile = url = None
     while len(sys.argv) > 1:
         arg = sys.argv.pop(1)
         if arg in ('-no-remote',):
+            pass
+        elif os_name == "Windows" and arg in ('-no-deelevate', '-wait-for-browser'):
             pass
         elif arg.startswith('http://'):
             url = arg
