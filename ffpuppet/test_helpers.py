@@ -323,7 +323,8 @@ def test_helpers_10():
             bts.wait(lambda: True, timeout=0.1)
         with pytest.raises(BrowserTerminatedError):
             bts.wait(lambda: False)
-        def _fake_browser(port, error=False, timeout=False, payload_size=5120):
+        is_done = threading.Event()
+        def _fake_browser(port, error=False, timeout=None, payload_size=5120):
             conn = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             # 50 x 0.1 = 5 seconds
             conn.settimeout(0.1)
@@ -332,6 +333,7 @@ def test_helpers_10():
             while True:
                 try:
                     conn.connect(("127.0.0.1", port))
+                    # prevent test hangs
                     conn.settimeout(10)
                 except socket.timeout:
                     attempts -= 1
@@ -342,12 +344,12 @@ def test_helpers_10():
                 break
             # send request and receive response
             try:
-                if timeout:
+                if timeout is not None:
+                    # 30s should be longer than our set timeout
+                    timeout.wait(30)
                     return
                 conn.sendall(b"A" * payload_size)
-                # don't send sentinel when multiple of 'buf_size' (test hang code)
-                if payload_size % 4096 != 0:
-                    conn.send(b"")
+                conn.send(b"")
                 if error:
                     conn.shutdown(socket.SHUT_RDWR)
                     return
@@ -368,37 +370,30 @@ def test_helpers_10():
             bts.wait(browser_thread.is_alive, timeout=10, url="http://localhost/")
         finally:
             browser_thread.join()
-        # test filling buffer
-        browser_thread = threading.Thread(
-            target=_fake_browser,
-            args=(bts.port,),
-            kwargs={'payload_size': 8192})
-        try:
-            browser_thread.start()
-            bts.wait(lambda: True, timeout=10)
-        finally:
-            browser_thread.join()
         # callback failure
         browser_thread = threading.Thread(
             target=_fake_browser,
             args=(bts.port,),
-            kwargs={'timeout': True})
+            kwargs={"timeout": is_done})
         try:
             browser_thread.start()
             with pytest.raises(BrowserTerminatedError):
                 bts.wait(lambda: False, timeout=10)
         finally:
+            is_done.set()
             browser_thread.join()
         # timeout waiting for connection data
+        is_done.clear()
         browser_thread = threading.Thread(
             target=_fake_browser,
             args=(bts.port,),
-            kwargs={'timeout': True})
+            kwargs={"timeout": is_done})
         try:
             browser_thread.start()
             with pytest.raises(BrowserTimeoutError):
                 bts.wait(lambda: True, timeout=0.25)
         finally:
+            is_done.set()
             browser_thread.join()
         # exhaust port range
         init_soc = socket.socket(socket.AF_INET, socket.SOCK_STREAM)

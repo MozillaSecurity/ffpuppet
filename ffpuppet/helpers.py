@@ -131,35 +131,32 @@ class Bootstrapper(object):
                 try:
                     conn, _ = self._socket.accept()
                 except socket.timeout:
-                    if time.time() >= time_limit:
-                        raise BrowserTimeoutError("Launching browser timed out (%ds)" % timeout)
-                    if not cb_continue():
-                        raise BrowserTerminatedError("Failure during browser startup")
-                    # browser is alive but we have not received a connection
                     conn = None
+                if not cb_continue():
+                    raise BrowserTerminatedError("Failure during browser startup")
+                if conn is None and time.time() >= time_limit:
+                    raise BrowserTimeoutError("Launching browser timed out (%ds)" % timeout)
 
-            log.debug("waiting to receive browser request")
+            log.debug("waiting to receive browser request...")
             buf_size = 4096
-            received = False
-            conn.settimeout(0.5)
+            conn.settimeout(1)
             while True:
                 try:
                     request = conn.recv(buf_size)
                 except socket.timeout:
                     request = None
-                if request or received:
-                    if request is None:
-                        log.debug("timeout waiting for more request data")
-                        break
-                    if len(request) < buf_size:
-                        break
-                    # handle receiving exactly 'buf_size' amount of data
-                    received = True
-                    continue
                 if not cb_continue():
                     raise BrowserTerminatedError("Failure waiting for request")
-                if time.time() >= time_limit:
-                    raise BrowserTimeoutError("Timed out (%ds) waiting for request" % timeout)
+                if request is None:
+                    if time.time() >= time_limit:
+                        raise BrowserTimeoutError("Timed out (%ds) waiting for request" % timeout)
+                    continue
+                if not request:
+                    log.warning("Empty request received from browser during bootstrap!")
+                elif len(request) == buf_size:
+                    # maybe there is more to read...
+                    continue
+                break
 
             log.debug("sending response (redirect %r)", url)
             if url is None:
