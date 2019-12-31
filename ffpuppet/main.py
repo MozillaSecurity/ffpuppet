@@ -212,7 +212,7 @@ def main(argv=None):  # pylint: disable=missing-docstring
     finally:
         log.info("Shutting down...")
         ffp.close()
-        log.info("Firefox process closed")
+        log.info("Firefox process is closed. (Reason: %r)", ffp.reason)
         if args.log is not None:
             log.info("Saving logs to %r", os.path.abspath(args.log))
             ffp.save_logs(args.log, logs_only=user_exit)

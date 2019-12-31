@@ -15,6 +15,7 @@ def test_main_01(mocker, tmp_path):
     fake_ffp.return_value.get_pid.return_value = 12345
     fake_ffp.return_value.is_healthy.return_value = False
     fake_ffp.return_value.profile = str(tmp_path)
+    fake_ffp.return_value.reason = "EXITED"
     out_logs = tmp_path / "logs"
     out_logs.mkdir()
     prefs = tmp_path / "prefs.js"
@@ -32,6 +33,7 @@ def test_main_02(mocker, tmp_path):
     fake_ffp = mocker.patch("ffpuppet.main.FFPuppet", autospec=True)
     fake_ffp.return_value.get_pid.return_value = 12345
     fake_ffp.return_value.profile = str(tmp_path)
+    fake_ffp.return_value.reason = "CLOSED"
     fake_time = mocker.patch("ffpuppet.main.time", autospec=True)
     fake_time.sleep.side_effect = KeyboardInterrupt
     out_logs = tmp_path / "logs"
