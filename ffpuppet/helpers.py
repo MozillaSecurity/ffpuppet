@@ -251,7 +251,7 @@ def configure_sanitizers(env, target_dir, log_path):
     asan_config.add("malloc_context_size", "20")
     asan_config.add("sleep_before_dying", "0")
     asan_config.add("strict_init_order", "true")
-    asan_config.add("strict_string_checks", "true") # breaks old builds (esr52)
+    asan_config.add("strict_string_checks", "true")  # breaks old builds (esr52)
     asan_config.add("symbolize", "true")
     env["ASAN_OPTIONS"] = asan_config.options
 
@@ -262,6 +262,12 @@ def configure_sanitizers(env, target_dir, log_path):
     lsan_config.add("max_leaks", "1")
     lsan_config.add("print_suppressions", "false")
     env["LSAN_OPTIONS"] = lsan_config.options
+
+    # setup Thread Sanitizer options if not set manually
+    tsan_config = SanitizerConfig()
+    tsan_config.load_options(env, "TSAN_OPTIONS")
+    tsan_config.add("halt_on_error", "1")
+    env["TSAN_OPTIONS"] = tsan_config.options
 
     # setup Undefined Behavior Sanitizer options if not set manually
     ubsan_config = SanitizerConfig()
