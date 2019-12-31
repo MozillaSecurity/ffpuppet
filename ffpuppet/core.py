@@ -601,6 +601,10 @@ class FFPuppet(object):  # pylint: disable=too-many-instance-attributes
                 "capability.policy.policynames": "'localfilelinks'",
                 "capability.policy.localfilelinks.sites": "'%s'" % bootstrapper.location,
                 "capability.policy.localfilelinks.checkloaduri.enabled": "'allAccess'"}
+            if self._use_rr or self._use_valgrind:
+                # when the browser is running slowly socket reads can fail if this is > 0
+                prefs["network.http.speculative-parallel-limit"] = "0"
+
             append_prefs(self.profile, prefs)
 
             launch_args = [bootstrapper.location]
