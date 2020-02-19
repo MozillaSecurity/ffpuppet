@@ -189,7 +189,23 @@ class FFPuppet(object):  # pylint: disable=too-many-instance-attributes
         if os.path.isdir(self._logs.working_path):
             for fname in os.listdir(self._logs.working_path):
                 if fname.startswith(self._logs.PREFIX_SAN):
-                    yield os.path.join(self._logs.working_path, fname)
+                    full_name = os.path.join(self._logs.working_path, fname)
+                    if full_name in self._logs.ignored:
+                        continue
+                    # add Sanitizer logs with only benign warnings to ignore list
+                    with open(full_name, "rb") as log_fp:
+                        for line in log_fp:
+                            line = line.strip()
+                            if not line:
+                                continue
+                            # frequently emitted by TSan
+                            if line.endswith(b"==WARNING: Symbolizer buffer too small"):
+                                continue
+                            break
+                        else:
+                            self._logs.ignored.append(full_name)
+                            continue
+                    yield full_name
                 elif self._use_valgrind and fname.startswith(self._logs.PREFIX_VALGRIND):
                     full_name = os.path.join(self._logs.working_path, fname)
                     if os.stat(full_name).st_size:

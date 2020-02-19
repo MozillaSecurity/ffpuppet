@@ -743,9 +743,14 @@ class PuppetTests(TestCase):  # pylint: disable=too-many-public-methods
         ffp.launch()
         self.assertFalse(list(ffp._crashreports()))
 
-        san_log = "%s.1" % ffp._logs.PREFIX_SAN
+        ign_log = "%s.1" % ffp._logs.PREFIX_SAN
+        san_log = "%s.2" % ffp._logs.PREFIX_SAN
         vg1_log = "%s.1" % ffp._logs.PREFIX_VALGRIND
         vg2_log = "%s.2" % ffp._logs.PREFIX_VALGRIND
+
+        with open(os.path.join(ffp._logs.working_path, ign_log), "w") as ofp:
+            ofp.write("==123==WARNING: Symbolizer buffer too small\n")
+            ofp.write("==123==WARNING: Symbolizer buffer too small\n\n")
         with open(os.path.join(ffp._logs.working_path, san_log), "w") as ofp:
             ofp.write("test\n")
         with open(os.path.join(ffp._logs.working_path, vg1_log), "w") as ofp:

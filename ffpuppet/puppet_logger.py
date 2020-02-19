@@ -31,6 +31,7 @@ class PuppetLogger(object):
         self._logs = dict()
         self._rr_packed = False
         self.closed = True
+        self.ignored = list()
         self.working_path = None
         self.reset()
 
