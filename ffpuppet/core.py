@@ -100,6 +100,14 @@ class FFPuppet(object):  # pylint: disable=too-many-instance-attributes
             self._xvfb.start()
 
 
+    def __enter__(self):
+        return self
+
+
+    def __exit__(self, *exc):
+        self.clean_up()
+
+
     def add_abort_token(self, token):
         """
         Add a token that when present in the browser log will have the browser process terminated.
