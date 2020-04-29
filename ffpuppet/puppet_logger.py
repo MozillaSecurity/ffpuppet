@@ -38,6 +38,14 @@ class PuppetLogger(object):
         self.reset()
 
 
+    def __enter__(self):
+        return self
+
+
+    def __exit__(self, *exc):
+        self.clean_up()
+
+
     def add_log(self, log_id, logfp=None):
         """
         Add a log file to the log manager.
