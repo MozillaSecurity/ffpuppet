@@ -130,7 +130,7 @@ def test_ffpuppet_03(tmp_path):
         duration = time.time() - start
         ffp.close()
         assert ffp.reason == ffp.RC_CLOSED
-        assert duration > ffp.LAUNCH_TIMEOUT_MIN
+        assert duration >= ffp.LAUNCH_TIMEOUT_MIN
         assert duration < 30
 
 def test_ffpuppet_04(tmp_path):
