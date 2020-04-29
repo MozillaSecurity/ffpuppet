@@ -42,7 +42,7 @@ def test_minidump_parser_02(mocker, tmp_path):
     assert callback.return_value.tell.call_count == 1
     assert callback.return_value.write.call_count == 1
 
-def test_minidump_parser_03(tmp_path):
+def test_minidump_parser_03(mocker, tmp_path):
     """test MinidumpParser._read_registers()"""
     def fake_call_mdsw(_, out_fp):
         out_fp.write(b"Crash reason:  SIGSEGV\n")
@@ -62,8 +62,8 @@ def test_minidump_parser_03(tmp_path):
         out_fp.write(b"    Found by: given as instruction pointer in context\n")
         out_fp.write(b" 1  libxul.so + 0x1f4361c]\n\n")
         out_fp.seek(0)
+    mocker.patch.object(MinidumpParser, '_call_mdsw', side_effect=fake_call_mdsw)
     mdp = MinidumpParser(str(tmp_path))
-    mdp._call_mdsw = fake_call_mdsw
     md_lines = list()
     with tempfile.TemporaryFile() as log_fp:
         mdp._read_registers("fake.dmp", log_fp)
@@ -74,7 +74,7 @@ def test_minidump_parser_03(tmp_path):
             md_lines.append(line)
     assert len(md_lines) == 9   # only register info should be in here
 
-def test_minidump_parser_04(tmp_path):
+def test_minidump_parser_04(mocker, tmp_path):
     """test MinidumpParser._read_stacktrace()"""
     def fake_call_mdsw(_, out_fp, extra_flags=None):  # pylint: disable=unused-argument
         out_fp.write(b"OS|Linux|0.0.0 sys info...\n")
@@ -99,9 +99,9 @@ def test_minidump_parser_04(tmp_path):
         out_fp.write(b"2|1|libpthread-2.23.so||||0x76ba\n")
         out_fp.write(b"2|3|libc-2.23.so||||0x1073dd\n\n")
         out_fp.seek(0)
+    mocker.patch.object(MinidumpParser, '_call_mdsw', side_effect=fake_call_mdsw)
     mdp = MinidumpParser(str(tmp_path))
     MinidumpParser.MDSW_MAX_STACK = 7
-    mdp._call_mdsw = fake_call_mdsw
     with tempfile.TemporaryFile() as log_fp:
         mdp._read_stacktrace("fake.dmp", log_fp)
         log_fp.seek(0)
@@ -145,16 +145,20 @@ def test_minidump_parser_05(mocker, tmp_path):
 def test_minidump_parser_06(mocker, tmp_path):
     """test MinidumpParser._call_mdsw()"""
     fake_subproc = mocker.patch("ffpuppet.minidump_parser.subprocess", autospec=True)
+    working = (tmp_path / "fake_tmpd")
+    working.mkdir()
+    mocker.patch("ffpuppet.minidump_parser.tempfile.mkdtemp", return_value=str(working))
     fake_subproc.call.return_value = 0
-    mdp = MinidumpParser(str(tmp_path))
+    dmp_path = (tmp_path / "dmps")
+    dmp_path.mkdir()
+    mdp = MinidumpParser(str(dmp_path))
     fake_file = mocker.mock_open()
-    dmp_file = tmp_path / "test.dmp"
+    dmp_file = dmp_path / "test.dmp"
     dmp_file.touch()
     mdp._call_mdsw(str(dmp_file), fake_file())
     # test minidump_stackwalk failures
     fake_subproc.call.call_count = 0
     fake_file.return_value.seek.call_count = 0
-    mdp.FAILURE_DIR = str(tmp_path)
     mdp._record_failures = True
     mdp.symbols_path = "sympath"
     fake_subproc.call.return_value = 1

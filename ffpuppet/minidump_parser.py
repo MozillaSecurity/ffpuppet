@@ -15,28 +15,30 @@ __author__ = "Tyson Smith"
 __all__ = ("process_minidumps",)
 
 class MinidumpParser(object):
-    FAILURE_DIR = None
     MDSW_BIN = "minidump_stackwalk"
     MDSW_MAX_STACK = 150
 
+    __slots__ = ("dump_files", "dump_path", "symbols_path", "_failures",
+                 "_include_raw", "_record_failures")
+
     def __init__(self, scan_path, record_failures=True):
         if not os.path.isdir(scan_path):
-            raise IOError("scan_path does not exist: %r" % scan_path)
+            raise IOError("scan_path does not exist: %r" % (scan_path,))
+        self.dump_files = {fname for fname in os.listdir(scan_path) if fname.endswith(".dmp")}
         self.dump_path = scan_path
-        self.dump_files = {fname for fname in os.listdir(self.dump_path) if fname.endswith(".dmp")}
         self.symbols_path = None
-        self._include_raw = os.environ.get("FFP_DEBUG_MDSW") is not None
-        self._record_failures = record_failures  # mdsw failure reporting
         self._failures = set()  # mdsw failures that have been recorded
+        self._include_raw = os.getenv("FFP_DEBUG_MDSW") is not None
+        self._record_failures = record_failures  # mdsw failure reporting
 
 
     def _call_mdsw(self, dump_file, out_fp, extra_flags=None):
         # if a python script is passed use 'sys.executable' as the binary
         # this is used by the test framework
-        if MinidumpParser.MDSW_BIN.endswith(".py"):
-            cmd = [sys.executable, MinidumpParser.MDSW_BIN]
-        else:
-            cmd = [MinidumpParser.MDSW_BIN]  # pragma: no cover
+        if self.MDSW_BIN.endswith(".py"):
+            cmd = [sys.executable, self.MDSW_BIN]
+        else:  # pragma: no cover
+            cmd = [self.MDSW_BIN]
         if extra_flags is None:
             extra_flags = list()
         cmd += extra_flags
@@ -49,7 +51,7 @@ class MinidumpParser(object):
             if ret_val != 0:
                 log.warning("%r returned %r", " ".join(cmd), ret_val)
                 if self._record_failures and os.path.basename(dump_file) not in self._failures:
-                    report_dir = tempfile.mkdtemp(prefix="mdsw_err_", dir=self.FAILURE_DIR)
+                    report_dir = tempfile.mkdtemp(prefix="mdsw_err_")
                     shutil.copy(dump_file, report_dir)
                     with open(os.path.join(report_dir, "mdsw_cmd.txt"), "wb") as log_fp:
                         log_fp.write((" ".join(cmd)).encode("ascii"))
@@ -96,7 +98,7 @@ class MinidumpParser(object):
             line_count = 0  # lines added to the log so far
             for line in out_fp:  # pylint: disable=not-an-iterable
                 if b"|" not in line or line.startswith(b"Module|"):
-                    continue # ignore line
+                    continue  # ignore line
 
                 # check if this is a stack entry (starts with '#|')
                 try:
@@ -112,15 +114,15 @@ class MinidumpParser(object):
 
                 log_fp.write(line)
                 line_count += 1
-                if line_count >= MinidumpParser.MDSW_MAX_STACK:
-                    log.warning("MDSW_MAX_STACK (%d) limit reached", MinidumpParser.MDSW_MAX_STACK)
+                if line_count >= self.MDSW_MAX_STACK:
+                    log.warning("MDSW_MAX_STACK (%d) limit reached", self.MDSW_MAX_STACK)
                     log_fp.write(b"WARNING: Hit line output limit!")
                     break
 
 
     def collect_logs(self, cb_create_log, symbols_path):
         if not os.path.isdir(symbols_path):
-            raise IOError("symbols_path does not exist: %r" % symbols_path)
+            raise IOError("symbols_path does not exist: %r" % (symbols_path,))
         self.symbols_path = symbols_path
         dump_files = (os.path.join(self.dump_path, x) for x in self.dump_files)
         # sort dumps by modified date since the oldest is likely the most interesting
@@ -136,15 +138,15 @@ class MinidumpParser(object):
                 log_fp.write(b"WARNING: minidump_stackwalk log was empty\n")
 
 
-    @staticmethod
-    def mdsw_available():
+    @classmethod
+    def mdsw_available(cls):
+        # if a python script is passed use 'sys.executable' as the binary
+        # this is used by the test framework
+        if cls.MDSW_BIN.endswith(".py"):
+            cmd = [sys.executable, cls.MDSW_BIN]
+        else:  # pragma: no cover
+            cmd = [cls.MDSW_BIN]
         try:
-            # if a python script is passed use 'sys.executable' as the binary
-            # this is used by the test framework
-            if MinidumpParser.MDSW_BIN.endswith(".py"):
-                cmd = [sys.executable, MinidumpParser.MDSW_BIN]
-            else:
-                cmd = [MinidumpParser.MDSW_BIN]
             with open(os.devnull, "w") as null_fp:
                 subprocess.call(cmd, stdout=null_fp, stderr=null_fp)
         except OSError:
