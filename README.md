@@ -8,6 +8,8 @@ FFPuppet
 
 FFPuppet is a python module that automates browser process related tasks to aid in fuzzing. Happy bug hunting!
 
+Are you [fuzzing](https://firefox-source-docs.mozilla.org/tools/fuzzing/index.html) the browser? [Grizzly](https://github.com/MozillaSecurity/grizzly) can help.
+
 Installation
 ------------
 
@@ -42,12 +44,12 @@ If you are looking for builds to use with FFPuppet here are a few options.
 ##### Taskcluster
 
 Taskcluster has a collection of many different build types for multiple platforms and branches.
-An index of the latest mozilla-central builds can be found [here](https://tools.taskcluster.net/index/gecko.v2.mozilla-central.latest.firefox).
-Or you can use [fuzzfetch](https://github.com/MozillaSecurity/fuzzfetch) which is very helpful in automation.
+An index of the latest mozilla-central builds can be found [here](https://firefox-ci-tc.services.mozilla.com/tasks/index/gecko.v2.mozilla-central.latest.firefox/).
+Or you can use [fuzzfetch](https://github.com/MozillaSecurity/fuzzfetch) (recommended) which is very helpful in automation.
 
 ##### Build your own
 
-If you would like to compile your own build instructions can be found [here](https://developer.mozilla.org/en-US/docs/Mozilla/Developer_guide/Build_Instructions/Simple_Firefox_build)
+If you would like to compile your own build instructions can be found [here](https://developer.mozilla.org/en-US/docs/Mozilla/Developer_guide/Build_Instructions/Simple_Firefox_build).
 
 
 Usage
@@ -116,4 +118,4 @@ This will open the provided test case file in Firefox using the provided prefs.j
 
 ##### Prefs.js files
 
-prefs.js files that can be used for fuzzing or other automated testing can be found in the [fuzzdata](https://github.com/MozillaSecurity/fuzzdata/tree/master/settings/firefox) repository.
+prefs.js files that can be used for fuzzing or other automated testing can be generated with [PrefPicker](https://github.com/MozillaSecurity/prefpicker).
