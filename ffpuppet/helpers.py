@@ -75,6 +75,7 @@ class SanitizerConfig(object):
 
 
 class Bootstrapper(object):
+    BUF_SIZE = 4096  # receive buffer size
     PORT_MAX = 0xFFFF  # bootstrap range
     PORT_MIN = 0x2000  # bootstrap range
     PORT_RETRIES = 100  # number of attempts to find an available port
@@ -91,12 +92,12 @@ class Bootstrapper(object):
             try:
                 self._socket.bind(("127.0.0.1", random.randint(self.PORT_MIN, self.PORT_MAX)))
                 self._socket.listen(5)
-                break
             except socket.error as soc_e:
                 if soc_e.errno in (errno.EADDRINUSE, 10013):
                     # Address already in use
                     continue
                 raise soc_e  # pragma: no cover
+            break
         else:
             self._socket.close()
             raise LaunchError("Could not find available port")
@@ -122,39 +123,40 @@ class Bootstrapper(object):
 
     def wait(self, cb_continue, timeout=60, url=None):
         assert self._socket is not None
-        conn = None
         start_time = time.time()
         time_limit = start_time + timeout
         try:
-            # wait for browser connection
-            while conn is None:
+            conn = None
+            log.debug("waiting for browser connection...")
+            while True:
                 try:
                     conn, _ = self._socket.accept()
                 except socket.timeout:
-                    conn = None
-                if not cb_continue():
-                    raise BrowserTerminatedError("Failure during browser startup")
-                if conn is None and time.time() >= time_limit:
-                    raise BrowserTimeoutError("Launching browser timed out (%ds)" % timeout)
+                    if not cb_continue():
+                        raise BrowserTerminatedError("Failure waiting for browser connection")
+                    if time.time() >= time_limit:
+                        raise BrowserTimeoutError("Launching browser timed out (%ds)" % timeout)
+                    continue
+                break
 
-            log.debug("waiting to receive browser request...")
-            buf_size = 4096
             conn.settimeout(1)
+            received = False
+            log.debug("waiting to receive browser request...")
             while True:
                 try:
-                    request = conn.recv(buf_size)
+                    request = conn.recv(self.BUF_SIZE)
                 except socket.timeout:
-                    request = None
-                if not cb_continue():
-                    raise BrowserTerminatedError("Failure waiting for request")
-                if request is None:
+                    if not cb_continue():
+                        raise BrowserTerminatedError("Failure waiting for request")
                     if time.time() >= time_limit:
                         raise BrowserTimeoutError("Timed out (%ds) waiting for request" % timeout)
-                    continue
-                if not request:
+                    if not received:
+                        continue
+                if not received and not request:
                     log.warning("Empty request received from browser during bootstrap!")
-                elif len(request) == buf_size:
+                elif len(request) == self.BUF_SIZE:
                     # maybe there is more to read...
+                    received = True
                     continue
                 break
 
@@ -167,6 +169,8 @@ class Bootstrapper(object):
                        "Connection: close\r\n\r\n" % url
             conn.settimeout(max(int(time_limit - time.time()), 1))
             conn.sendall(resp.encode("ascii"))
+            if not cb_continue():
+                raise BrowserTerminatedError("Failure during browser startup")
             log.debug("bootstrap complete (%0.2fs)", (time.time() - start_time))
 
         except socket.error as soc_e:
