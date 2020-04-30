@@ -21,10 +21,11 @@ try:
 except ImportError:
     pass
 
+from .bootstrapper import Bootstrapper
 from .checks import CheckLogContents, CheckLogSize, CheckMemoryUsage
 from .exceptions import InvalidPrefs, LaunchError, TerminateError
 from .helpers import (
-    append_prefs, Bootstrapper, create_profile, get_processes, onerror,
+    append_prefs, create_profile, get_processes, onerror,
     prepare_environment, wait_on_files)
 from .minidump_parser import process_minidumps
 from .puppet_logger import PuppetLogger
