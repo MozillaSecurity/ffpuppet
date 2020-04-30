@@ -111,7 +111,7 @@ def test_ffpuppet_02(tmp_path):
     with FFPuppet() as ffp:
         prefs = (tmp_path / "prefs.js")
         prefs.write_bytes(b"//fftest_startup_crash\n")
-        with pytest.raises(BrowserTerminatedError, match="Failure during browser startup"):
+        with pytest.raises(BrowserTerminatedError, match="Failure waiting for browser connection"):
             ffp.launch(TESTFF_BIN, prefs_js=str(prefs))
         ffp.close()
         assert not ffp.is_running()  # process should be gone
@@ -366,7 +366,7 @@ def test_ffpuppet_17(tmp_path):
     with FFPuppet(use_gdb=True) as ffp:
         bin_path = str(check_output(["which", "echo"]).strip().decode("ascii"))
         # launch will fail b/c 'echo' will exit right away but that's fine
-        with pytest.raises(LaunchError, match="Failure during browser startup"):
+        with pytest.raises(LaunchError, match="Failure waiting for browser connection"):
             ffp.launch(bin_path)
         ffp.close()
         logs = (tmp_path / "logs")
@@ -401,7 +401,7 @@ def test_ffpuppet_19(tmp_path):
         with FFPuppet(use_valgrind=True) as ffp:
             bin_path = str(check_output(["which", "echo"]).strip().decode("ascii"))
             # launch will fail b/c 'echo' will exit right away but that's fine
-            with pytest.raises(LaunchError, match="Failure during browser startup"):
+            with pytest.raises(LaunchError, match="Failure waiting for browser connection"):
                 ffp.launch(bin_path)
             ffp.close()
             ffp.save_logs(str(tmp_path / "logs"))
