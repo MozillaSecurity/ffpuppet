@@ -23,9 +23,11 @@ class Bootstrapper(object):
     PORT_MIN = 0x2000  # bootstrap range
     PORT_RETRIES = 100  # number of attempts to find an available port
 
+    __slots__ = ("_socket",)
+
     def __init__(self, poll_wait=0.25):
         self._socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        if platform.system().lower().startswith("windows"):
+        if platform.system().startswith("Windows"):
             self._socket.setsockopt(
                 socket.SOL_SOCKET,
                 socket.SO_EXCLUSIVEADDRUSE,  # pylint: disable=no-member
@@ -44,6 +46,12 @@ class Bootstrapper(object):
         else:
             self._socket.close()
             raise LaunchError("Could not find available port")
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        self.close()
 
     def close(self):
         if self._socket is not None:
@@ -74,7 +82,7 @@ class Bootstrapper(object):
                     if not cb_continue():
                         raise BrowserTerminatedError("Failure waiting for browser connection")
                     if time.time() >= time_limit:
-                        raise BrowserTimeoutError("Launching browser timed out (%ds)" % timeout)
+                        raise BrowserTimeoutError("Timeout waiting for browser connection")
                     continue
                 break
             conn.settimeout(1)
@@ -87,7 +95,7 @@ class Bootstrapper(object):
                     if not cb_continue():
                         raise BrowserTerminatedError("Failure waiting for request")
                     if time.time() >= time_limit:
-                        raise BrowserTimeoutError("Timed out (%ds) waiting for request" % timeout)
+                        raise BrowserTimeoutError("Timeout waiting for request")
                     if not received:
                         continue
                 if not received and not request:
@@ -97,7 +105,7 @@ class Bootstrapper(object):
                     received = True
                     continue
                 break
-            log.debug("sending response (redirect %r)", url)
+            # build response
             if url is None:
                 resp = "HTTP/1.1 204 No Content\r\nConnection: close\r\n\r\n"
             else:
@@ -105,17 +113,20 @@ class Bootstrapper(object):
                        "Location: %s\r\n" \
                        "Connection: close\r\n\r\n" % url
             conn.settimeout(max(int(time_limit - time.time()), 1))
-            conn.sendall(resp.encode("ascii"))
+            log.debug("sending response (redirect %r)", url)
+            try:
+                conn.sendall(resp.encode("ascii"))
+            except socket.timeout:
+                resp_timeout = True
+            else:
+                resp_timeout = False
             if not cb_continue():
                 raise BrowserTerminatedError("Failure during browser startup")
-            log.debug("bootstrap complete (%0.2fs)", (time.time() - start_time))
-
-        except socket.error as soc_e:
-            raise LaunchError("Failed to launch browser: %s" % soc_e)
-
-        except socket.timeout:
-            raise BrowserTimeoutError("Connection timed out (%ds)" % timeout)
-
+            if resp_timeout:
+                raise BrowserTimeoutError("Timeout sending response")
+            log.debug("bootstrap complete (%0.2fs)", time.time() - start_time)
+        except socket.error as soc_e:  # pragma: no cover
+            raise LaunchError("Error attempting to launch browser: %s" % soc_e)
         finally:
             if conn is not None:
                 conn.close()

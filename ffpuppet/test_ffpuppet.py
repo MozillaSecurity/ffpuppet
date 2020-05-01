@@ -125,7 +125,7 @@ def test_ffpuppet_03(tmp_path):
         prefs = (tmp_path / "prefs.js")
         prefs.write_bytes(b"//fftest_startup_hang\n")
         start = time.time()
-        with pytest.raises(BrowserTimeoutError, match="Launching browser timed out"):
+        with pytest.raises(BrowserTimeoutError, match="Timeout waiting for browser connection"):
             ffp.launch(TESTFF_BIN, prefs_js=str(prefs), launch_timeout=1)
         duration = time.time() - start
         ffp.close()
