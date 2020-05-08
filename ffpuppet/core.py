@@ -371,8 +371,7 @@ class FFPuppet(object):  # pylint: disable=too-many-instance-attributes
                 log.debug("more reports have appeared")
                 crash_reports = new_reports
 
-            # terminate the browser process if needed
-            if not self.wait(timeout=0):
+            if self.is_running():
                 log.debug("browser needs to be terminated")
                 self._terminate(self._proc.pid)
                 # wait for reports triggered by the call to _terminate()
@@ -387,7 +386,7 @@ class FFPuppet(object):  # pylint: disable=too-many-instance-attributes
             log.debug("browser process was 'None'")
 
         if not force_close:
-            if self._logs.closed:
+            if self._logs.closed:  # pragma: no cover
                 # This should not happen while everything is working as expected.
                 # This is here to prevent additional unexpected issues.
                 # Since this should never happen in normal operation this assert
@@ -421,7 +420,7 @@ class FFPuppet(object):  # pylint: disable=too-many-instance-attributes
         if self.profile is not None and os.path.isdir(self.profile):
             try:
                 shutil.rmtree(self.profile, onerror=onerror)
-            except OSError:
+            except OSError:  # pragma: no cover
                 log.error("Failed to remove profile %r", self.profile)
                 if not force_close:
                     raise
