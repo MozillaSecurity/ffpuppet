@@ -1,14 +1,14 @@
 dist: bionic
-sudo: false
 cache: pip
 language: python
+os: linux
 python:
   - 2.7
   - 3.5
   - 3.6
   - 3.7
   - 3.8
-matrix:
+jobs:
   include:
     - os: osx
       python: 2.7
@@ -51,10 +51,11 @@ after_success:
 deploy:
   provider: pypi
   distributions: sdist bdist_wheel
-  user: mozillasecurity
+  username: mozillasecurity
   password:
     secure: jCG9YTWqSMMsbDEuIgLov4ke4r/zEzZSugi+Nkw28WCplaM0Q9PXuwfYpajXECBp3osZd7LAiLAVA8eNUELotFJz2dRLBQPbKa7rqVfKsFSMkZ1bHC5pfckJ2pAKDFx4ty5sB0MnxZKeYMWiXF8GvySne8n/j9LLv6ihF0nM/u7VOG9jFIYGd5uG4RFISbVA4eHZ7jkdKqBPO85+TrgOW4CldsVyRntw0Iuixt5oW+gE9TU8WS1HhvDblDk5+Qu4AgUYPfs2N0C6aox615OuK6BTWaX6VdJcAJpNchkgrtaHgwNXoBze1q63SOW9AiqnbgROwThQ6le24v34oBZ1MK/6NE7723HkYWfqsvVQlugvO6KCMKy6LChLV21jqFuiO023jzLajnvq91Qz/STY/plXPgf7AYRCOjUgarqXqpt4Fhue+lsUmRUus66YgYMRFqYfQVuW2n/BZtuCUGKsOOB2YHB6+17FzRcABF48+60MCDrR1tgAO5VwQH1e7EDxcuaM0Wd3fIcWa0EVe2k1IXlCneJTVOS610ZaRCOdKCoZG5LgO6oobY4l64vCW8sjVVPDYsfjWrtY5DXeGlwD3qhz0ddRD62usfGgGMPUTlDvL6kpJhhuItZ+cjJ0f4/b+cX9tH7WbB1uBvF+PYS4xoLR/cQW31OOxMk1LoV17ns=
   on:
+    branch: master
     tags: true
     os: linux
-    python: 2.7
+    python: 3.8
