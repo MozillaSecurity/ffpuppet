@@ -277,6 +277,7 @@ class PuppetLogger(object):
         @return: None
         """
         assert self.closed, "save_logs() cannot be called before calling close()"
+        assert self.working_path is not None
         if meta:
             meta_map = dict()
         else:
@@ -295,14 +296,14 @@ class PuppetLogger(object):
             shutil.copy2(log_fp.name, os.path.join(dest, out_name))
 
         if not logs_only:
-            if not self._rr_packed and self.PATH_RR in os.listdir(self.working_path):
-                trace_path = os.path.join(self.working_path, self.PATH_RR, "latest-trace")
+            rr_trace = os.path.join(self.working_path, self.PATH_RR, "latest-trace")
+            if not self._rr_packed and os.path.isdir(rr_trace):
                 log.debug("packing rr trace")
                 try:
-                    subprocess.check_output(["rr", "pack", trace_path])
+                    subprocess.check_output(["rr", "pack", rr_trace], stderr=subprocess.STDOUT)
                     self._rr_packed = True
                 except (OSError, subprocess.CalledProcessError):
-                    log.warning("Error calling 'rr pack %s'", trace_path)
+                    log.warning("Error calling 'rr pack %s'", rr_trace)
 
             for path in os.listdir(self.working_path):
                 full_path = os.path.join(self.working_path, path)

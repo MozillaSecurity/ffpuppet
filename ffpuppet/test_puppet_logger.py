@@ -172,7 +172,7 @@ def test_puppet_logger_07(mocker, tmp_path):
     """test PuppetLogger.save_logs() rr trace directory"""
     fake_ck = mocker.patch("ffpuppet.puppet_logger.subprocess.check_output", autospec=True)
     with PuppetLogger(base_path=str(tmp_path)) as plog:
-        os.makedirs(os.path.join(plog.working_path, plog.PATH_RR))
+        os.makedirs(os.path.join(plog.working_path, plog.PATH_RR, "latest-trace"))
         plog.close()
         # call to rr failed
         fake_ck.side_effect = OSError
