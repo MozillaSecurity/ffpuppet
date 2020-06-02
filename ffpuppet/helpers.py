@@ -351,7 +351,10 @@ def prepare_environment(target_dir, sanitizer_log, env_mod=None):
     base["G_SLICE"] = "always-malloc"
     base["MOZ_AUTOMATION"] = "1"
     base["MOZ_CC_RUN_DURING_SHUTDOWN"] = "1"
+    # https://firefox-source-docs.mozilla.org/toolkit/crashreporter/crashreporter/ ...
+    # index.html#environment-variables-affecting-crash-reporting
     base["MOZ_CRASHREPORTER"] = "1"
+    base["MOZ_CRASHREPORTER_NO_DELETE_DUMP"] = "1"
     base["MOZ_CRASHREPORTER_NO_REPORT"] = "1"
     base["MOZ_DISABLE_CONTENT_SANDBOX"] = "1"
     base["MOZ_DISABLE_GMP_SANDBOX"] = "1"
@@ -375,9 +378,9 @@ def prepare_environment(target_dir, sanitizer_log, env_mod=None):
 
     # environment variables to skip if previously set in environ
     optional = (
-        "_RR_TRACE_DIR", "MOZ_CRASHREPORTER", "MOZ_CRASHREPORTER_NO_REPORT",
-        "MOZ_CRASHREPORTER_SHUTDOWN", "MOZ_SKIA_DISABLE_ASSERTS",
-        "RUST_BACKTRACE", "XPCOM_DEBUG_BREAK")
+        "_RR_TRACE_DIR", "MOZ_CRASHREPORTER", "MOZ_CRASHREPORTER_NO_DELETE_DUMP",
+        "MOZ_CRASHREPORTER_NO_REPORT", "MOZ_CRASHREPORTER_SHUTDOWN",
+        "MOZ_SKIA_DISABLE_ASSERTS", "RUST_BACKTRACE", "XPCOM_DEBUG_BREAK")
     # merge presets and modifications
     for env_name, env_value in base.items():
         if env_value is None:
@@ -392,6 +395,7 @@ def prepare_environment(target_dir, sanitizer_log, env_mod=None):
 
     if env.get("MOZ_CRASHREPORTER_DISABLE") == "1":
         env.pop("MOZ_CRASHREPORTER", None)
+        env.pop("MOZ_CRASHREPORTER_NO_DELETE_DUMP", None)
         env.pop("MOZ_CRASHREPORTER_NO_REPORT", None)
         env.pop("MOZ_CRASHREPORTER_SHUTDOWN", None)
 
