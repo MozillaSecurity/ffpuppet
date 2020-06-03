@@ -86,60 +86,65 @@ def parse_args(argv=None):
         "INFO": logging.INFO,
         "DEBUG": logging.DEBUG}
 
-    parser = argparse.ArgumentParser(description="Firefox launcher/wrapper")
+    parser = argparse.ArgumentParser(
+        description="FFPuppet - Firefox process launcher and log collector. Happy bug hunting!")
     parser.add_argument(
         "binary",
         help="Firefox binary to launch")
-    parser.add_argument(
-        "-a", "--abort-token", action="append", default=list(),
-        help="Scan the log for the given value and close browser on detection. " \
-             "For example '-a ###!!! ASSERTION:' would be used to detect soft assertions.")
     parser.add_argument(
         "-d", "--dump", action="store_true",
         help="Display browser logs on process exit. This is only meant to provide a " \
              "summary of the logs. To collect full logs use '--log'.")
     parser.add_argument(
-        "-e", "--extension", action="append",
-        help="Use the fuzzPriv extension. Specify the path to the xpi or the directory " \
-             "containing the unpacked extension.")
-    parser.add_argument(
-        "-l", "--log",
-        help="Location to save logs. If the path exists it must be empty, if it " \
-             "does not exist it will be created.")
-    parser.add_argument(
         "--log-level", default="INFO",
         help="Configure console logging. Options: %s (default: %%(default)s)" %
         ", ".join(k for k, v in sorted(log_level_map.items(), key=lambda x: x[1])))
-    parser.add_argument(
-        "--log-limit", type=int, default=0,
-        help="Browser log file size limit in MBs (default: %(default)s, no limit)")
-    parser.add_argument(
-        "-m", "--memory", type=int, default=0,
-        help="Browser process memory limit in MBs (default: %(default)s, no limit)")
-    parser.add_argument(
-        "--poll-interval", type=float, default=0.5,
-        help="Delay between checks for results (default: %(default)s)")
-    parser.add_argument(
+
+    cfg_group = parser.add_argument_group("Browser Configuration")
+    cfg_group.add_argument(
+        "-e", "--extension", action="append",
+        help="Install extensions. Specify the path to the xpi or the directory " \
+             "containing the unpacked extension.")
+    cfg_group.add_argument(
         "-p", "--prefs",
         help="Custom prefs.js file to use (default: profile default)")
-    parser.add_argument(
+    cfg_group.add_argument(
         "-P", "--profile",
         help="Profile to use. This is non-destructive. A copy of the target profile " \
              "will be used. (default: temporary profile)")
-    parser.add_argument(
-        "-t", "--timeout", type=int, default=300,
-        help="Number of seconds to wait for the browser to become " \
-             "responsive after launching. (default: %(default)s)")
-    parser.add_argument(
+    cfg_group.add_argument(
         "-u", "--url",
         help="Server URL or path to local file to load.")
     if sys.platform.startswith("linux"):
-        parser.add_argument(
+        cfg_group.add_argument(
             "--xvfb", action="store_true",
             help="Use Xvfb")
 
-    dbg_group = parser.add_argument_group("Available Debuggers")
+    report_group = parser.add_argument_group("Issue Detection & Reporting")
+    report_group.add_argument(
+        "-a", "--abort-token", action="append", default=list(),
+        help="Scan the browser logs for the given value and close browser if detected. " \
+             "For example '-a ###!!! ASSERTION:' would be used to detect soft assertions.")
+    report_group.add_argument(
+        "-l", "--log",
+        help="Location to save logs. If the path exists it must be empty, if it " \
+             "does not exist it will be created.")
+    report_group.add_argument(
+        "--log-limit", type=int, default=0,
+        help="Browser log file size limit in MBs (default: %(default)s, no limit)")
+    report_group.add_argument(
+        "-m", "--memory", type=int, default=0,
+        help="Browser process memory limit in MBs (default: %(default)s, no limit)")
+    report_group.add_argument(
+        "--poll-interval", type=float, default=0.5,
+        help="Delay between checks for results (default: %(default)s)")
+    report_group.add_argument(
+        "-t", "--timeout", type=int, default=300,
+        help="Number of seconds to wait for the browser to become " \
+             "responsive after launching. (default: %(default)s)")
+
     if sys.platform.startswith("linux"):
+        dbg_group = parser.add_argument_group("Available Debuggers")
         dbg_group.add_argument(
             "--gdb", action="store_true",
             help="Use GDB")
