@@ -59,6 +59,12 @@ def test_parse_args_01(tmp_path):
         parse_args(["fake_bin"])
     fake_bin = (tmp_path / "fake.bin")
     fake_bin.touch()
+    # invalid log-limit
+    with pytest.raises(SystemExit):
+        parse_args([str(fake_bin), "--log-limit", "-1"])
+    # invalid memory limit
+    with pytest.raises(SystemExit):
+        parse_args([str(fake_bin), "--memory", "-1"])
     # missing prefs
     with pytest.raises(SystemExit):
         parse_args([str(fake_bin), "-p", str(tmp_path / "missing")])

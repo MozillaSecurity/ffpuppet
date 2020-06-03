@@ -89,7 +89,7 @@ def parse_args(argv=None):
     parser = argparse.ArgumentParser(description="Firefox launcher/wrapper")
     parser.add_argument(
         "binary",
-        help="Firefox binary to execute")
+        help="Firefox binary to launch")
     parser.add_argument(
         "-a", "--abort-token", action="append", default=list(),
         help="Scan the log for the given value and close browser on detection. " \
@@ -111,11 +111,11 @@ def parse_args(argv=None):
         help="Configure console logging. Options: %s (default: %%(default)s)" %
         ", ".join(k for k, v in sorted(log_level_map.items(), key=lambda x: x[1])))
     parser.add_argument(
-        "--log-limit", type=int,
-        help="Log file size limit in MBs (default: no limit)")
+        "--log-limit", type=int, default=0,
+        help="Browser log file size limit in MBs (default: %(default)s, no limit)")
     parser.add_argument(
-        "-m", "--memory", type=int,
-        help="Process memory limit in MBs (default: no limit)")
+        "-m", "--memory", type=int, default=0,
+        help="Browser process memory limit in MBs (default: %(default)s, no limit)")
     parser.add_argument(
         "--poll-interval", type=float, default=0.5,
         help="Delay between checks for results (default: %(default)s)")
@@ -125,7 +125,7 @@ def parse_args(argv=None):
     parser.add_argument(
         "-P", "--profile",
         help="Profile to use. This is non-destructive. A copy of the target profile " \
-             "will be used. (default: new temporary profile is created)")
+             "will be used. (default: temporary profile)")
     parser.add_argument(
         "-t", "--timeout", type=int, default=300,
         help="Number of seconds to wait for the browser to become " \
@@ -152,17 +152,25 @@ def parse_args(argv=None):
 
     args = parser.parse_args(argv)
 
-    # sanity check
+    # sanity checks
     if not os.path.isfile(args.binary):
         parser.error("Invalid browser binary %r" % args.binary)
     if args.extension is not None:
         for ext in args.extension:
             if not os.path.exists(ext):
-                parser.error("%r does not exist" % ext)
+                parser.error("Extension %r does not exist" % ext)
+    if args.log and os.path.isdir(args.log) and os.listdir(args.log):
+        parser.error("--log %r must be empty" % args.log)
     log_level = log_level_map.get(args.log_level.upper(), None)
     if log_level is None:
         parser.error("Invalid log-level %r" % args.log_level)
     args.log_level = log_level
+    if args.log_limit < 0:
+        parser.error("--log-limit must be >= 0")
+    args.log_limit *= 1048576
+    if args.memory < 0:
+        parser.error("--memory must be >= 0")
+    args.memory *= 1048576
     if args.prefs is not None and not os.path.isfile(args.prefs):
         parser.error("file not found %r" % args.prefs)
     # NOTE: mutually_exclusive_group will fail if no arguments are added
@@ -174,8 +182,6 @@ def parse_args(argv=None):
         parser.error("Only a single debugger can be enabled")
     if use_rr and args.log is None:
         parser.error("--rr must be used with -l/--log")
-    if args.log is not None and os.path.isdir(args.log) and os.listdir(args.log):
-        parser.error("--log %r must be empty" % args.log)
 
     return args
 
@@ -208,8 +214,8 @@ def main(argv=None):  # pylint: disable=missing-docstring
             args.binary,
             location=args.url,
             launch_timeout=args.timeout,
-            log_limit=args.log_limit * 1024 * 1024 if args.log_limit else 0,
-            memory_limit=args.memory * 1024 * 1024 if args.memory else 0,
+            log_limit=args.log_limit,
+            memory_limit=args.memory,
             prefs_js=args.prefs,
             extension=args.extension)
         if args.prefs is not None and os.path.isfile(args.prefs):
