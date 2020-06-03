@@ -20,7 +20,9 @@ def test_main_01(mocker, tmp_path):
     out_logs.mkdir()
     prefs = tmp_path / "prefs.js"
     prefs.touch()
-    main(["fake_bin", "-d", "-l", str(out_logs), "-p", str(prefs)])
+    fake_bin = (tmp_path / "fake.bin")
+    fake_bin.touch()
+    main([str(fake_bin), "-d", "-l", str(out_logs), "-p", str(prefs)])
     assert fake_ffp.return_value.add_abort_token.call_count == 0
     assert fake_ffp.return_value.get_pid.call_count == 1
     assert fake_ffp.return_value.is_healthy.call_count == 1
@@ -38,7 +40,9 @@ def test_main_02(mocker, tmp_path):
     fake_time.sleep.side_effect = KeyboardInterrupt
     out_logs = tmp_path / "logs"
     out_logs.mkdir()
-    main(["fake_bin", "-d", "-a", "token", "--log-level", "DEBUG"])
+    fake_bin = (tmp_path / "fake.bin")
+    fake_bin.touch()
+    main([str(fake_bin), "-d", "-a", "token", "--log-level", "DEBUG"])
     assert fake_ffp.return_value.add_abort_token.call_count == 1
     assert fake_ffp.return_value.get_pid.call_count == 1
     assert fake_ffp.return_value.is_healthy.call_count == 1
@@ -50,21 +54,32 @@ def test_parse_args_01(tmp_path):
     """test parse_args()"""
     with pytest.raises(SystemExit):
         parse_args(["-h"])
+    # invalid/missing binary
     with pytest.raises(SystemExit):
-        parse_args(["fake_bin", "-p", str(tmp_path / "missing")])
+        parse_args(["fake_bin"])
+    fake_bin = (tmp_path / "fake.bin")
+    fake_bin.touch()
+    # missing prefs
     with pytest.raises(SystemExit):
-        parse_args(["fake_bin", "-e", str(tmp_path / "missing")])
+        parse_args([str(fake_bin), "-p", str(tmp_path / "missing")])
+    # missing extension
     with pytest.raises(SystemExit):
-        parse_args(["fake_bin", "--gdb", "--valgrind"])
+        parse_args([str(fake_bin), "-e", str(tmp_path / "missing")])
+    # multiple debuggers
     with pytest.raises(SystemExit):
-        parse_args(["fake_bin", "--rr"])
+        parse_args([str(fake_bin), "--gdb", "--valgrind"])
+    # rr without -l
+    with pytest.raises(SystemExit):
+        parse_args([str(fake_bin), "--rr"])
+    # non empty log path
     (tmp_path / "junk.log").touch()
     with pytest.raises(SystemExit):
-        parse_args(["fake_bin", "--log", str(tmp_path)])
+        parse_args([str(fake_bin), "--log", str(tmp_path)])
     # invalid log level
     with pytest.raises(SystemExit):
-        parse_args(["fake_bin", "--log-level", "bad"])
-    assert parse_args(["fake_bin"])
+        parse_args([str(fake_bin), "--log-level", "bad"])
+    # success
+    assert parse_args([str(fake_bin)])
 
 def test_dump_to_console_01(tmp_path):
     """test dump_to_console()"""
