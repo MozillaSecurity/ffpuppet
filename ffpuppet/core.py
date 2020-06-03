@@ -587,8 +587,9 @@ class FFPuppet(object):  # pylint: disable=too-many-instance-attributes
         @rtype: None
         @return: None
         """
-
         assert self._launches > -1, "clean_up() has been called"
+        assert log_limit >= 0
+        assert memory_limit >= 0
         if self._proc is not None:
             raise LaunchError("Process is already running")
 
@@ -606,8 +607,6 @@ class FFPuppet(object):  # pylint: disable=too-many-instance-attributes
                 raise IOError("Cannot find %r" % location)
 
         self.reason = None
-        log_limit = max(log_limit, 0)
-        memory_limit = max(memory_limit, 0)
         launch_timeout = max(launch_timeout, self.LAUNCH_TIMEOUT_MIN)
         log.debug("launch timeout: %d", launch_timeout)
 
