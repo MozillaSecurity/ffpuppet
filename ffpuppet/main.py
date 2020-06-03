@@ -153,6 +153,8 @@ def parse_args(argv=None):
     args = parser.parse_args(argv)
 
     # sanity check
+    if not os.path.isfile(args.binary):
+        parser.error("Invalid browser binary %r" % args.binary)
     if args.extension is not None:
         for ext in args.extension:
             if not os.path.exists(ext):
