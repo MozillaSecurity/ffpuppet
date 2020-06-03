@@ -80,6 +80,12 @@ def dump_to_console(log_dir, save_path, log_quota=0x8000):
 
 
 def parse_args(argv=None):
+    log_level_map = {
+        "ERROR": logging.ERROR,
+        "WARN": logging.WARNING,
+        "INFO": logging.INFO,
+        "DEBUG": logging.DEBUG}
+
     parser = argparse.ArgumentParser(description="Firefox launcher/wrapper")
     parser.add_argument(
         "binary",
@@ -100,6 +106,10 @@ def parse_args(argv=None):
         "-l", "--log",
         help="Location to save logs. If the path exists it must be empty, if it " \
              "does not exist it will be created.")
+    parser.add_argument(
+        "--log-level", default="INFO",
+        help="Configure console logging. Options: %s (default: %%(default)s)" %
+        ", ".join(k for k, v in sorted(log_level_map.items(), key=lambda x: x[1])))
     parser.add_argument(
         "--log-limit", type=int,
         help="Log file size limit in MBs (default: no limit)")
@@ -123,9 +133,6 @@ def parse_args(argv=None):
     parser.add_argument(
         "-u", "--url",
         help="Server URL or path to local file to load.")
-    parser.add_argument(
-        "-v", "--verbose", action="store_true",
-        help="Output includes debug prints")
     if sys.platform.startswith("linux"):
         parser.add_argument(
             "--xvfb", action="store_true",
@@ -144,14 +151,18 @@ def parse_args(argv=None):
             help="Use Valgrind")
 
     args = parser.parse_args(argv)
+
+    # sanity check
     if args.extension is not None:
         for ext in args.extension:
             if not os.path.exists(ext):
                 parser.error("%r does not exist" % ext)
-
+    log_level = log_level_map.get(args.log_level.upper(), None)
+    if log_level is None:
+        parser.error("Invalid log-level %r" % args.log_level)
+    args.log_level = log_level
     if args.prefs is not None and not os.path.isfile(args.prefs):
         parser.error("file not found %r" % args.prefs)
-
     # NOTE: mutually_exclusive_group will fail if no arguments are added
     # so sum() enabled debuggers instead
     use_gdb = getattr(args, "gdb", False)
@@ -159,10 +170,8 @@ def parse_args(argv=None):
     use_valgrind = getattr(args, "valgrind", False)
     if sum((use_gdb, use_rr, use_valgrind)) > 1:
         parser.error("Only a single debugger can be enabled")
-
     if use_rr and args.log is None:
         parser.error("--rr must be used with -l/--log")
-
     if args.log is not None and os.path.isdir(args.log) and os.listdir(args.log):
         parser.error("--log %r must be empty" % args.log)
 
@@ -171,15 +180,15 @@ def parse_args(argv=None):
 
 def main(argv=None):  # pylint: disable=missing-docstring
     args = parse_args(argv)
-
     # set output verbosity
-    if args.verbose or bool(os.getenv("DEBUG")):
-        log_level = logging.DEBUG
+    if args.log_level == logging.DEBUG:
         log_fmt = "%(levelname).1s %(name)s [%(asctime)s] %(message)s"
     else:
-        log_level = logging.INFO
         log_fmt = "[%(asctime)s] %(message)s"
-    logging.basicConfig(format=log_fmt, datefmt="%Y-%m-%d %H:%M:%S", level=log_level)
+    logging.basicConfig(
+        format=log_fmt,
+        datefmt="%Y-%m-%d %H:%M:%S",
+        level=args.log_level)
 
     ffp = FFPuppet(
         use_profile=args.profile,
