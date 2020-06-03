@@ -38,7 +38,7 @@ def test_main_02(mocker, tmp_path):
     fake_time.sleep.side_effect = KeyboardInterrupt
     out_logs = tmp_path / "logs"
     out_logs.mkdir()
-    main(["fake_bin", "-d", "-a", "token", "-v"])
+    main(["fake_bin", "-d", "-a", "token", "--log-level", "DEBUG"])
     assert fake_ffp.return_value.add_abort_token.call_count == 1
     assert fake_ffp.return_value.get_pid.call_count == 1
     assert fake_ffp.return_value.is_healthy.call_count == 1
@@ -61,6 +61,9 @@ def test_parse_args_01(tmp_path):
     (tmp_path / "junk.log").touch()
     with pytest.raises(SystemExit):
         parse_args(["fake_bin", "--log", str(tmp_path)])
+    # invalid log level
+    with pytest.raises(SystemExit):
+        parse_args(["fake_bin", "--log-level", "bad"])
     assert parse_args(["fake_bin"])
 
 def test_dump_to_console_01(tmp_path):
