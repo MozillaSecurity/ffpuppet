@@ -109,6 +109,10 @@ def parse_args(argv=None):
         help="Scan the browser logs for the given value and close browser if detected. " \
              "For example '-a ###!!! ASSERTION:' would be used to detect soft assertions.")
     report_group.add_argument(
+        "--launch-timeout", type=int, default=300,
+        help="Number of seconds to wait for the browser to become " \
+             "responsive after launching. (default: %(default)s)")
+    report_group.add_argument(
         "-l", "--logs", default=".",
         help="Location to save browser logs. A sub-directory containing the browser logs" \
              " will be created.")
@@ -124,10 +128,6 @@ def parse_args(argv=None):
     report_group.add_argument(
         "--save-all", action="store_true",
         help="Always save logs. By default logs are saved only when an issue is detected.")
-    report_group.add_argument(
-        "-t", "--timeout", type=int, default=300,
-        help="Number of seconds to wait for the browser to become " \
-             "responsive after launching. (default: %(default)s)")
 
     if sys.platform.startswith("linux"):
         dbg_group = parser.add_argument_group("Available Debuggers")
@@ -202,7 +202,7 @@ def main(argv=None):  # pylint: disable=missing-docstring
         ffp.launch(
             args.binary,
             location=args.url,
-            launch_timeout=args.timeout,
+            launch_timeout=args.launch_timeout,
             log_limit=args.log_limit,
             memory_limit=args.memory,
             prefs_js=args.prefs,
