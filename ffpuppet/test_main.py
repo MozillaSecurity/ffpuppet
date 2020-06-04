@@ -22,7 +22,7 @@ def test_main_01(mocker, tmp_path):
     prefs.touch()
     fake_bin = (tmp_path / "fake.bin")
     fake_bin.touch()
-    main([str(fake_bin), "-d", "-l", str(out_logs), "-p", str(prefs)])
+    main([str(fake_bin), "-d", "-l", str(out_logs), "-p", str(prefs), "--save-all"])
     assert fake_ffp.return_value.add_abort_token.call_count == 0
     assert fake_ffp.return_value.get_pid.call_count == 1
     assert fake_ffp.return_value.is_healthy.call_count == 1
@@ -36,13 +36,11 @@ def test_main_02(mocker, tmp_path):
     fake_ffp.return_value.get_pid.return_value = 12345
     fake_ffp.return_value.profile = str(tmp_path)
     fake_ffp.return_value.reason = "CLOSED"
-    fake_time = mocker.patch("ffpuppet.main.time", autospec=True)
-    fake_time.sleep.side_effect = KeyboardInterrupt
-    out_logs = tmp_path / "logs"
-    out_logs.mkdir()
+    fake_sleep = mocker.patch("ffpuppet.main.time.sleep", autospec=True)
+    fake_sleep.side_effect = KeyboardInterrupt
     fake_bin = (tmp_path / "fake.bin")
     fake_bin.touch()
-    main([str(fake_bin), "-d", "-a", "token", "--log-level", "DEBUG"])
+    main([str(fake_bin), "-l", str(tmp_path), "-a", "token", "--log-level", "DEBUG"])
     assert fake_ffp.return_value.add_abort_token.call_count == 1
     assert fake_ffp.return_value.get_pid.call_count == 1
     assert fake_ffp.return_value.is_healthy.call_count == 1
@@ -74,13 +72,10 @@ def test_parse_args_01(tmp_path):
     # multiple debuggers
     with pytest.raises(SystemExit):
         parse_args([str(fake_bin), "--gdb", "--valgrind"])
-    # rr without -l
-    with pytest.raises(SystemExit):
-        parse_args([str(fake_bin), "--rr"])
-    # non empty log path
+    # invalid log path
     (tmp_path / "junk.log").touch()
     with pytest.raises(SystemExit):
-        parse_args([str(fake_bin), "--log", str(tmp_path)])
+        parse_args([str(fake_bin), "--logs", "/missing/path/"])
     # invalid log level
     with pytest.raises(SystemExit):
         parse_args([str(fake_bin), "--log-level", "bad"])
@@ -90,12 +85,11 @@ def test_parse_args_01(tmp_path):
 def test_dump_to_console_01(tmp_path):
     """test dump_to_console()"""
     # call with no logs
-    assert not dump_to_console(str(tmp_path), False)
+    assert not dump_to_console(str(tmp_path))
     # call with dummy logs
     (tmp_path / "log_stderr.txt").write_bytes(b"dummy-stderr")
     (tmp_path / "log_stdout.txt").write_bytes(b"dummy-stdout")
-    output = dump_to_console(str(tmp_path), "/fake/save/path")
-    assert "Full logs available here" not in output
+    output = dump_to_console(str(tmp_path))
     assert "Dumping 'log_stderr.txt'" in output
     assert "dummy-stderr" in output
     assert "Dumping 'log_stdout.txt'" in output
@@ -105,8 +99,7 @@ def test_dump_to_console_01(tmp_path):
         log_fp.write(b"dummy-stdout")
         for _ in range(1024):
             log_fp.write(b"test")
-    output = dump_to_console(str(tmp_path), "/fake/save/path", log_quota=100)
-    assert "Full logs available here" in output
+    output = dump_to_console(str(tmp_path), log_quota=100)
     assert "Dumping 'log_stderr.txt'" in output
     assert "dummy-stderr" in output
     assert "Dumping 'log_stdout.txt'" in output
