@@ -17,15 +17,12 @@ log = logging.getLogger("ffpuppet")  # pylint: disable=invalid-name
 
 __author__ = "Tyson Smith"
 
-def dump_to_console(log_dir, save_path, log_quota=0x8000):
+def dump_to_console(log_dir, log_quota=0x8000):
     """
     Read and merge log files and format for output on the console
 
     @type log_dir: String
     @param log_dir: directory to scan for logs
-
-    @type save_path: String
-    @param save_path: directory full logs are saved to
 
     @type log_quota: int
     @param log_quota: maximum number of bytes to read per log
@@ -37,9 +34,8 @@ def dump_to_console(log_dir, save_path, log_quota=0x8000):
     logs = list(x for x in os.listdir(log_dir) if os.path.isfile(os.path.join(log_dir, x)))
     if not logs:
         return ""
-    logs.sort()
-    # display stdout and stderr last to prevent scrolling
-    # this assumes stderr contains the relevant information
+    # display stdout and stderr last to avoid the need to scroll back
+    # this assumes stderr contains the most relevant information
     for l_order in ("log_stdout", "log_stderr"):
         found = None
         for fname in logs:
@@ -50,33 +46,21 @@ def dump_to_console(log_dir, save_path, log_quota=0x8000):
         if found and logs[-1] != found:
             logs.remove(found)
             logs.append(found)
-
-    tailed = False
     # merge logs
-    with tempfile.SpooledTemporaryFile(max_size=0x40000, mode="w+") as out_fp:
-        for fname in logs:
-            full_path = os.path.join(log_dir, fname)
-            fsize = os.stat(full_path).st_size
-            out_fp.write("\n===\n")
-            out_fp.write("=== Dumping %r (%0.2fKB)" % (fname, fsize / 1024.0))
-            with open(full_path, "rb") as log_fp:
-                # tail log if needed
-                log_fp.seek(max((fsize - log_quota), 0))
-                if log_fp.tell() > 0:
-                    tailed = True
-                    out_fp.write(" - tailed (%0.2fKB)" % (log_quota / 1024.0))
-                out_fp.write("\n===\n")
-                # using decode() is a workaround for python 3.4
-                out_fp.write(log_fp.read().decode("ascii", errors="ignore"))
-        if tailed:
-            out_fp.write("\n===\n")
-            if save_path is None:
-                out_fp.write("=== To capture complete logs use '--log'")
-            else:
-                out_fp.write("=== Full logs available here %r" % (os.path.abspath(save_path),))
-            out_fp.write("\n===\n")
-        out_fp.seek(0)
-        return out_fp.read()
+    lines = list()
+    for fname in logs:
+        full_path = os.path.join(log_dir, fname)
+        fsize = os.stat(full_path).st_size
+        lines.append("\n===\n")
+        lines.append("=== Dumping %r (%0.2fKB)" % (fname, fsize / 1024.0))
+        with open(full_path, "rb") as log_fp:
+            # tail log if needed
+            log_fp.seek(max(fsize - log_quota, 0))
+            if log_fp.tell() > 0:
+                lines.append(" - tailed (%0.2fKB)" % (log_quota / 1024.0))
+            lines.append("\n===\n")
+            lines.append(log_fp.read().decode("ascii", errors="ignore"))
+    return "".join(lines)
 
 
 def parse_args(argv=None):
@@ -92,9 +76,8 @@ def parse_args(argv=None):
         "binary",
         help="Firefox binary to launch")
     parser.add_argument(
-        "-d", "--dump", action="store_true",
-        help="Display browser logs on process exit. This is only meant to provide a " \
-             "summary of the logs. To collect full logs use '--log'.")
+        "-d", "--display-logs", action="store_true",
+        help="Display summary of browser logs on process exit.")
     parser.add_argument(
         "--log-level", default="INFO",
         help="Configure console logging. Options: %s (default: %%(default)s)" %
@@ -126,18 +109,21 @@ def parse_args(argv=None):
         help="Scan the browser logs for the given value and close browser if detected. " \
              "For example '-a ###!!! ASSERTION:' would be used to detect soft assertions.")
     report_group.add_argument(
-        "-l", "--log",
-        help="Location to save logs. If the path exists it must be empty, if it " \
-             "does not exist it will be created.")
+        "-l", "--logs", default=".",
+        help="Location to save browser logs. A sub-directory containing the browser logs" \
+             " will be created.")
     report_group.add_argument(
         "--log-limit", type=int, default=0,
         help="Browser log file size limit in MBs (default: %(default)s, no limit)")
     report_group.add_argument(
         "-m", "--memory", type=int, default=0,
-        help="Browser process memory limit in MBs (default: %(default)s, no limit)")
+        help="Browser memory limit in MBs (default: %(default)s, no limit)")
     report_group.add_argument(
         "--poll-interval", type=float, default=0.5,
         help="Delay between checks for results (default: %(default)s)")
+    report_group.add_argument(
+        "--save-all", action="store_true",
+        help="Always save logs. By default logs are saved only when an issue is detected.")
     report_group.add_argument(
         "-t", "--timeout", type=int, default=300,
         help="Number of seconds to wait for the browser to become " \
@@ -164,8 +150,8 @@ def parse_args(argv=None):
         for ext in args.extension:
             if not os.path.exists(ext):
                 parser.error("Extension %r does not exist" % ext)
-    if args.log and os.path.isdir(args.log) and os.listdir(args.log):
-        parser.error("--log %r must be empty" % args.log)
+    if not os.path.isdir(args.logs):
+        parser.error("Log output directory is invalid %r" % args.logs)
     log_level = log_level_map.get(args.log_level.upper(), None)
     if log_level is None:
         parser.error("Invalid log-level %r" % args.log_level)
@@ -185,8 +171,6 @@ def parse_args(argv=None):
     use_valgrind = getattr(args, "valgrind", False)
     if sum((use_gdb, use_rr, use_valgrind)) > 1:
         parser.error("Only a single debugger can be enabled")
-    if use_rr and args.log is None:
-        parser.error("--rr must be used with -l/--log")
 
     return args
 
@@ -223,7 +207,7 @@ def main(argv=None):  # pylint: disable=missing-docstring
             memory_limit=args.memory,
             prefs_js=args.prefs,
             extension=args.extension)
-        if args.prefs is not None and os.path.isfile(args.prefs):
+        if args.prefs and os.path.isfile(args.prefs):
             check_prefs(os.path.join(ffp.profile, "prefs.js"), args.prefs)
         log.info("Running Firefox (pid: %d)...", ffp.get_pid())
         while ffp.is_healthy():
@@ -235,19 +219,15 @@ def main(argv=None):  # pylint: disable=missing-docstring
         log.info("Shutting down...")
         ffp.close()
         log.info("Firefox process is closed. (Reason: %r)", ffp.reason)
-        if args.log is not None:
-            log.info("Saving logs to %r", os.path.abspath(args.log))
-            ffp.save_logs(args.log, logs_only=user_exit)
-        if args.dump:
-            log_path = args.log
-            try:
-                if log_path is None:
-                    # collect logs and store in temporary path
-                    log_path = tempfile.mkdtemp(prefix="ffp_log_")
-                    ffp.save_logs(log_path, logs_only=True)
-                log.info("Displaying logs...\n%s", dump_to_console(log_path, args.log))
-            finally:
-                # only remove log_path if it was a temporary path
-                if args.log is None and os.path.isdir(log_path):
-                    shutil.rmtree(log_path)
+        log_path = tempfile.mkdtemp(
+            prefix=time.strftime("%Y%m%d-%H%M%S_", time.localtime()),
+            suffix="_ffp_logs",
+            dir=args.logs)
+        ffp.save_logs(log_path, logs_only=user_exit)
+        if args.display_logs:
+            log.info("Displaying logs...%s", dump_to_console(log_path))
+        if ffp.reason == ffp.RC_ALERT or args.save_all:
+            log.info("Browser logs available here %r", os.path.abspath(log_path))
+        else:
+            shutil.rmtree(log_path)
         ffp.clean_up()
