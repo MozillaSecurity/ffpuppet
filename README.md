@@ -61,49 +61,58 @@ Once installed FFPuppet can be run using the following command:
     python -m ffpuppet
 
 ```
-usage: __main__.py [-h] [-a ABORT_TOKEN] [-d] [-e EXTENSION] [-l LOG]
+usage: __main__.py [-h] [-d] [--log-level LOG_LEVEL] [-e EXTENSION] [-p PREFS]
+                   [-P PROFILE] [-u URL] [--xvfb] [-a ABORT_TOKEN]
+                   [--launch-timeout LAUNCH_TIMEOUT] [-l LOGS]
                    [--log-limit LOG_LIMIT] [-m MEMORY]
-                   [--poll-interval POLL_INTERVAL] [-p PREFS] [-P PROFILE]
-                   [-t TIMEOUT] [-u URL] [-v] [--xvfb] [--gdb] [--rr]
+                   [--poll-interval POLL_INTERVAL] [--save-all] [--gdb] [--rr]
                    [--valgrind]
                    binary
 
-Firefox launcher/wrapper
+FFPuppet - Firefox process launcher and log collector. Happy bug hunting!
 
 positional arguments:
-  binary                Firefox binary to execute
+  binary                Firefox binary to launch
 
 optional arguments:
   -h, --help            show this help message and exit
-  -a ABORT_TOKEN, --abort-token ABORT_TOKEN
-                        Scan the log for the given value and close browser on
-                        detection. For example '-a ###!!! ASSERTION:' would be
-                        used to detect soft assertions.
-  -d, --dump            Display browser logs on process exit. This is only
-                        meant to provide a summary of the logs. To collect
-                        full logs use '--log'.
+  -d, --display-logs    Display summary of browser logs on process exit.
+  --log-level LOG_LEVEL
+                        Configure console logging. Options: DEBUG, INFO, WARN,
+                        ERROR (default: INFO)
+
+Browser Configuration:
   -e EXTENSION, --extension EXTENSION
-                        Use the fuzzPriv extension. Specify the path to the
-                        xpi or the directory containing the unpacked extension.
-  -l LOG, --log LOG     Location to save log files
-  --log-limit LOG_LIMIT
-                        Log file size limit in MBs (default: no limit)
-  -m MEMORY, --memory MEMORY
-                        Process memory limit in MBs (default: no limit)
-  --poll-interval POLL_INTERVAL
-                        Delay between checks for results (default: 0.5)
+                        Install extensions. Specify the path to the xpi or the
+                        directory containing the unpacked extension.
   -p PREFS, --prefs PREFS
                         Custom prefs.js file to use (default: profile default)
   -P PROFILE, --profile PROFILE
                         Profile to use. This is non-destructive. A copy of the
-                        target profile will be used. (default: new temporary
-                        profile is created)
-  -t TIMEOUT, --timeout TIMEOUT
+                        target profile will be used. (default: temporary
+                        profile)
+  -u URL, --url URL     Server URL or path to local file to load.
+  --xvfb                Use Xvfb
+
+Issue Detection & Reporting:
+  -a ABORT_TOKEN, --abort-token ABORT_TOKEN
+                        Scan the browser logs for the given value and close
+                        browser if detected. For example '-a ###!!!
+                        ASSERTION:' would be used to detect soft assertions.
+  --launch-timeout LAUNCH_TIMEOUT
                         Number of seconds to wait for the browser to become
                         responsive after launching. (default: 300)
-  -u URL, --url URL     Server URL or path to local file to load.
-  -v, --verbose         Output includes debug prints
-  --xvfb                Use Xvfb (Linux only)
+  -l LOGS, --logs LOGS  Location to save browser logs. A sub-directory
+                        containing the browser logs will be created.
+  --log-limit LOG_LIMIT
+                        Browser log file size limit in MBs (default: 0, no
+                        limit)
+  -m MEMORY, --memory MEMORY
+                        Browser memory limit in MBs (default: 0, no limit)
+  --poll-interval POLL_INTERVAL
+                        Delay between checks for results (default: 0.5)
+  --save-all            Always save logs. By default logs are saved only when
+                        an issue is detected.
 
 Available Debuggers:
   --gdb                 Use GDB (Linux only)
