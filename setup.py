@@ -46,4 +46,4 @@ if __name__ == "__main__":
         packages=["ffpuppet"],
         package_data={"": ["cmds.gdb"]},
         url="https://github.com/MozillaSecurity/ffpuppet",
-        version="0.7.1")
+        version="0.7.2")
