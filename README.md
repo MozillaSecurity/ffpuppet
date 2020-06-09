@@ -2,12 +2,11 @@ FFPuppet
 ========
 
 [![Build Status](https://travis-ci.org/MozillaSecurity/ffpuppet.svg?branch=master)](https://travis-ci.org/MozillaSecurity/ffpuppet)
-[![Build status](https://ci.appveyor.com/api/projects/status/7r1sx0iad8wksfmw/branch/master?svg=true)](https://ci.appveyor.com/project/tysmith/ffpuppet/branch/master)
 [![codecov](https://codecov.io/gh/MozillaSecurity/ffpuppet/branch/master/graph/badge.svg)](https://codecov.io/gh/MozillaSecurity/ffpuppet)
 [![Matrix](https://img.shields.io/badge/dynamic/json?color=green&label=chat&query=%24.chunk[%3F(%40.canonical_alias%3D%3D%22%23fuzzing%3Amozilla.org%22)].num_joined_members&suffix=%20users&url=https%3A%2F%2Fmozilla.modular.im%2F_matrix%2Fclient%2Fr0%2FpublicRooms&style=flat&logo=matrix)](https://riot.im/app/#/room/#fuzzing:mozilla.org)
 [![PyPI](https://img.shields.io/pypi/v/ffpuppet)](https://pypi.org/project/ffpuppet)
 
-FFPuppet is a python module that automates browser process related tasks to aid in fuzzing. Happy bug hunting!
+FFPuppet is a Python module that automates browser process related tasks to aid in fuzzing. Happy bug hunting!
 
 Are you [fuzzing](https://firefox-source-docs.mozilla.org/tools/fuzzing/index.html) the browser? [Grizzly](https://github.com/MozillaSecurity/grizzly) can help.
 
@@ -92,7 +91,7 @@ Browser Configuration:
                         target profile will be used. (default: temporary
                         profile)
   -u URL, --url URL     Server URL or path to local file to load.
-  --xvfb                Use Xvfb
+  --xvfb                Use Xvfb (Linux only)
 
 Issue Detection & Reporting:
   -a ABORT_TOKEN, --abort-token ABORT_TOKEN
