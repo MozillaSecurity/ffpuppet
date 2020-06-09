@@ -18,7 +18,7 @@ class MinidumpParser(object):
     MDSW_BIN = "minidump_stackwalk"
     MDSW_MAX_STACK = 150
 
-    __slots__ = ("dump_files", "dump_path", "symbols_path", "_failures",
+    __slots__ = ("dump_files", "dump_path", "symbols_path",
                  "_include_raw", "_record_failures")
 
     def __init__(self, scan_path, record_failures=True):
@@ -27,7 +27,6 @@ class MinidumpParser(object):
         self.dump_files = {fname for fname in os.listdir(scan_path) if fname.endswith(".dmp")}
         self.dump_path = scan_path
         self.symbols_path = None
-        self._failures = set()  # mdsw failures that have been recorded
         self._include_raw = os.getenv("FFP_DEBUG_MDSW") is not None
         self._record_failures = record_failures  # mdsw failure reporting
 
@@ -47,10 +46,11 @@ class MinidumpParser(object):
 
         with tempfile.TemporaryFile() as err_fp:
             ret_val = subprocess.call(cmd, stdout=out_fp, stderr=err_fp)
-            # if mdsw fails save the dmp file and the logs
             if ret_val != 0:
+                # mdsw failed
                 log.warning("%r returned %r", " ".join(cmd), ret_val)
-                if self._record_failures and os.path.basename(dump_file) not in self._failures:
+                if self._record_failures:
+                    # save the dmp file and the logs
                     report_dir = tempfile.mkdtemp(prefix="mdsw_err_")
                     shutil.copy(dump_file, report_dir)
                     with open(os.path.join(report_dir, "mdsw_cmd.txt"), "wb") as log_fp:
@@ -61,9 +61,8 @@ class MinidumpParser(object):
                     out_fp.seek(0)
                     with open(os.path.join(report_dir, "mdsw_stdout.txt"), "wb") as log_fp:
                         shutil.copyfileobj(out_fp, log_fp, 0x10000)
-                    self._failures.add(os.path.basename(dump_file))
                     log.warning("mdsw failure can be found @ %r", report_dir)
-
+                    raise RuntimeError("MDSW Error")
         out_fp.seek(0)
 
 
