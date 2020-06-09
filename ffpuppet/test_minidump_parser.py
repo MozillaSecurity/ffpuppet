@@ -27,17 +27,17 @@ def test_minidump_parser_01(mocker, tmp_path):
     assert callback.call_count == 0
 
 def test_minidump_parser_02(mocker, tmp_path):
-    """test MinidumpParser() with empty minidumps"""
+    """test MinidumpParser() with empty minidumps (ignore mdsw failures)"""
     md_path = tmp_path / "minidumps"
     md_path.mkdir()
     (md_path / "not_a_dmp.txt").touch()
     (md_path / "test.dmp").touch()
-    mdp = MinidumpParser(str(md_path))
-    assert len(mdp.dump_files) == 1
     callback = mocker.mock_open()
     callback.return_value.tell.return_value = 0
     log_path = tmp_path / "logs"
     log_path.mkdir()
+    mdp = MinidumpParser(str(md_path), record_failures=False)
+    assert len(mdp.dump_files) == 1
     mdp.collect_logs(callback, str(log_path))
     assert callback.return_value.tell.call_count == 1
     assert callback.return_value.write.call_count == 1
@@ -136,6 +136,8 @@ def test_minidump_parser_05(mocker, tmp_path):
         out_fp.write(b"OS|Linux|0.0.0 sys info...\n")
         out_fp.write(b"Crash|SIGSEGV|0x7fff27aaeff8|0\n")
         out_fp.write(b"0|0|blah|foo|a/bar.c|123|0x0\n")
+    fake_subproc = mocker.patch("ffpuppet.minidump_parser.subprocess", autospec=True)
+    fake_subproc.call.return_value = 0
     mdp = MinidumpParser(str(tmp_path))
     callback = mocker.mock_open()
     callback.return_value.tell.return_value = 0
@@ -145,10 +147,10 @@ def test_minidump_parser_05(mocker, tmp_path):
 def test_minidump_parser_06(mocker, tmp_path):
     """test MinidumpParser._call_mdsw()"""
     fake_subproc = mocker.patch("ffpuppet.minidump_parser.subprocess", autospec=True)
+    fake_subproc.call.return_value = 0
     working = (tmp_path / "fake_tmpd")
     working.mkdir()
     mocker.patch("ffpuppet.minidump_parser.tempfile.mkdtemp", return_value=str(working))
-    fake_subproc.call.return_value = 0
     dmp_path = (tmp_path / "dmps")
     dmp_path.mkdir()
     mdp = MinidumpParser(str(dmp_path))
@@ -162,9 +164,11 @@ def test_minidump_parser_06(mocker, tmp_path):
     mdp._record_failures = True
     mdp.symbols_path = "sympath"
     fake_subproc.call.return_value = 1
-    mdp._call_mdsw(str(dmp_file), fake_file())
+    with pytest.raises(RuntimeError, match="MDSW Error"):
+        mdp._call_mdsw(str(dmp_file), fake_file())
     assert fake_subproc.call.call_count == 1
-    assert fake_file.return_value.seek.call_count == 2
+    assert len(tuple(working.glob("**/mdsw_*.txt"))) == 3
+    assert any(working.glob("**/test.dmp"))
 
 def test_minidump_parser_07(mocker):
     """test MinidumpParser.mdsw_available()"""
