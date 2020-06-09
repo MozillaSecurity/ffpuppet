@@ -5,6 +5,7 @@
 # pylint: disable=invalid-name,protected-access
 """ffpuppet tests"""
 import errno
+from http.server import HTTPServer, BaseHTTPRequestHandler
 import os
 import platform
 import shutil
@@ -13,10 +14,6 @@ import stat
 from subprocess import call, check_output
 import threading
 import time
-try:  # py 2-3 compatibility
-    from BaseHTTPServer import HTTPServer, BaseHTTPRequestHandler  # pylint: disable=import-error
-except ImportError:
-    from http.server import HTTPServer, BaseHTTPRequestHandler  # pylint: disable=import-error
 
 from psutil import AccessDenied, NoSuchProcess, Process, wait_procs
 import pytest
