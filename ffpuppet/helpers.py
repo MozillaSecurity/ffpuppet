@@ -113,25 +113,29 @@ def check_prefs(prof_prefs, input_prefs):
 
 
 def configure_sanitizers(env, target_dir, log_path):
+    # https://github.com/google/sanitizers/wiki/SanitizerCommonFlags
+    common_flags = (
+        ("abort_on_error", "false"),
+        ("allocator_may_return_null", "true"),
+        ("disable_coredump", "true"),
+        ("handle_abort", "true"),  # if true, abort_on_error=false to prevent hangs
+        ("handle_sigbus", "true"),  # set to be safe
+        ("handle_sigfpe", "true"),  # set to be safe
+        ("handle_sigill", "true"),  # set to be safe
+        ("symbolize", "true"))
+
     # setup Address Sanitizer options if not set manually
     # https://github.com/google/sanitizers/wiki/AddressSanitizerFlags
-    # https://github.com/google/sanitizers/wiki/SanitizerCommonFlags
     asan_config = SanitizerConfig()
     asan_config.load_options(env, "ASAN_OPTIONS")
-    asan_config.add("abort_on_error", "false")
+    for flag in common_flags:
+        asan_config.add(*flag)
     #asan_config.add("alloc_dealloc_mismatch", "false")  # different defaults per OS
-    asan_config.add("allocator_may_return_null", "true")
     asan_config.add("check_initialization_order", "true")
     #asan_config.add("detect_stack_use_after_return", "true")  # https://bugzil.la/1057551
     #asan_config.add("detect_stack_use_after_scope", "true")
     asan_config.add("detect_invalid_pointer_pairs", "1")
     asan_config.add("detect_leaks", "false")
-    asan_config.add("disable_coredump", "true")
-    # if handle_abort is true abort_on_error should be false to prevent hangs
-    asan_config.add("handle_abort", "true")
-    asan_config.add("handle_sigbus", "true")  # set to be safe
-    asan_config.add("handle_sigfpe", "true")  # set to be safe
-    asan_config.add("handle_sigill", "true")  # set to be safe
     # log_path is required for FFPuppet logging to function properly
     if "log_path" in asan_config:
         log.warning("ASAN_OPTIONS=log_path is used internally and cannot be set externally")
@@ -141,7 +145,6 @@ def configure_sanitizers(env, target_dir, log_path):
     asan_config.add("sleep_before_dying", "0")
     asan_config.add("strict_init_order", "true")
     asan_config.add("strict_string_checks", "true")  # breaks old builds (esr52)
-    asan_config.add("symbolize", "true")
     env["ASAN_OPTIONS"] = asan_config.options
 
     # setup Leak Sanitizer options if not set manually
@@ -161,6 +164,8 @@ def configure_sanitizers(env, target_dir, log_path):
     # setup Undefined Behavior Sanitizer options if not set manually
     ubsan_config = SanitizerConfig()
     ubsan_config.load_options(env, "UBSAN_OPTIONS")
+    for flag in common_flags:
+        ubsan_config.add(*flag)
     if "log_path" in ubsan_config:
         log.warning("UBSAN_OPTIONS=log_path is used internally and cannot be set externally")
     ubsan_config.add("log_path", "'%s'" % log_path, overwrite=True)
