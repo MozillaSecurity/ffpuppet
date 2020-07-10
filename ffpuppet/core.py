@@ -195,12 +195,13 @@ class FFPuppet(object):  # pylint: disable=too-many-instance-attributes
             for fname in os.listdir(self._logs.working_path):
                 if fname.startswith(self._logs.PREFIX_SAN):
                     full_name = os.path.join(self._logs.working_path, fname)
-                    if full_name in self._logs.ignored:
+                    size = self._logs.watching.get(full_name)
+                    if size is not None and size == os.stat(full_name).st_size:
                         continue
-                    # add Sanitizer logs with only benign warnings to ignore list
+                    # add logs with only benign warnings to watch list
                     with open(full_name, "rb") as log_fp:
                         for line in log_fp:
-                            line = line.strip()
+                            line = line.rstrip()
                             if not line:
                                 continue
                             # frequently emitted by TSan
@@ -208,7 +209,7 @@ class FFPuppet(object):  # pylint: disable=too-many-instance-attributes
                                 continue
                             break
                         else:
-                            self._logs.ignored.append(full_name)
+                            self._logs.watching[full_name] = log_fp.tell()
                             continue
                     yield full_name
                 elif self._use_valgrind and fname.startswith(self._logs.PREFIX_VALGRIND):
