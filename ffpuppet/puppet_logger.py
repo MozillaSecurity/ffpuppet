@@ -26,14 +26,14 @@ class PuppetLogger(object):
     PREFIX_SAN = "ffp_asan_%d.log" % os.getpid()
     PREFIX_VALGRIND = "valgrind.%d" % os.getpid()
 
-    __slots__ = ("_base", "_logs", "_rr_packed", "closed", "ignored", "working_path")
+    __slots__ = ("_base", "_logs", "_rr_packed", "closed", "watching", "working_path")
 
     def __init__(self, base_path=None):
         self._base = base_path
         self._logs = dict()
         self._rr_packed = False
         self.closed = True
-        self.ignored = list()
+        self.watching = dict()
         self.working_path = None
         self.reset()
 
