@@ -159,6 +159,9 @@ def configure_sanitizers(env, target_dir, log_path):
     tsan_config = SanitizerConfig()
     tsan_config.load_options(env, "TSAN_OPTIONS")
     tsan_config.add("halt_on_error", "1")
+    if "log_path" in tsan_config:
+        log.warning("TSAN_OPTIONS=log_path is used internally and cannot be set externally")
+    tsan_config.add("log_path", "'%s'" % log_path, overwrite=True)
     env["TSAN_OPTIONS"] = tsan_config.options
 
     # setup Undefined Behavior Sanitizer options if not set manually
