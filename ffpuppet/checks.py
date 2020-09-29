@@ -44,7 +44,7 @@ class CheckLogContents(Check):
     def __init__(self, log_files, search_tokens):
         assert log_files, "log_files is empty"
         assert search_tokens, "search_tokens is empty"
-        super(CheckLogContents, self).__init__()
+        super().__init__()
         self.logs = list()
         for log_file in log_files:
             self.logs.append({"fname": log_file, "buffer": "", "offset": 0})
@@ -81,7 +81,7 @@ class CheckLogSize(Check):
     """
     name = "log_size"
     def __init__(self, limit, stderr_file, stdout_file):
-        super(CheckLogSize, self).__init__()
+        super().__init__()
         self.limit = limit
         self.stderr_file = stderr_file
         self.stdout_file = stdout_file
@@ -107,7 +107,7 @@ class CheckMemoryUsage(Check):
     """
     name = "memory_usage"
     def __init__(self, pid, limit):
-        super(CheckMemoryUsage, self).__init__()
+        super().__init__()
         self.limit = limit
         self.pid = pid
 

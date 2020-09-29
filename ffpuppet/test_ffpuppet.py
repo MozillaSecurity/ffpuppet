@@ -633,7 +633,7 @@ def test_ffpuppet_31(tmp_path):
     """test _crashreports()"""
     class StubbedLaunch(FFPuppet):
         def __init__(self):
-            super(StubbedLaunch, self).__init__()
+            super().__init__()
             self._dbg = FFPuppet.DBG_VALGRIND
         def launch(self):  # pylint: disable=arguments-differ
             profile = (tmp_path / "profile")
