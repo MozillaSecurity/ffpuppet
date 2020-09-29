@@ -18,11 +18,13 @@ import time
 from psutil import AccessDenied, NoSuchProcess, Process, wait_procs
 import pytest
 
+from .bootstrapper import Bootstrapper
 from .core import FFPuppet
 from .exceptions import BrowserTimeoutError, BrowserTerminatedError, LaunchError
 from .helpers import get_processes
 from .minidump_parser import MinidumpParser
 
+Bootstrapper.POLL_WAIT = 0.2
 CWD = os.path.realpath(os.path.dirname(__file__))
 TESTFF_BIN = os.path.join(CWD, "resources", "testff.py")
 TESTMDSW_BIN = os.path.join(CWD, "resources", "testmdsw.py")
@@ -352,14 +354,10 @@ def test_ffpuppet_16():
         with pytest.raises(IOError, match="prefs.js file does not exist"):
             ffp.launch(TESTFF_BIN, prefs_js="missing.js")
 
-@pytest.mark.skipif(platform.system() == "Linux" and call(["which", "gdb"]),
+@pytest.mark.skipif(platform.system() != "Linux" or call(["which", "gdb"]),
                     reason="GDB not installed")
 def test_ffpuppet_17(tmp_path):
     """test launching with gdb"""
-    if platform.system() != "Linux":
-        with pytest.raises(EnvironmentError, match="GDB is only supported on Linux"):
-            FFPuppet(use_gdb=True)
-        return
     with FFPuppet(use_gdb=True) as ffp:
         bin_path = str(check_output(["which", "echo"]).strip().decode("ascii"))
         # launch will fail b/c 'echo' will exit right away but that's fine
@@ -381,19 +379,12 @@ def test_ffpuppet_18(tmp_path):
             with pytest.raises(AssertionError):
                 ffp.save_logs(str(tmp_path / "logs"))
 
-@pytest.mark.skipif(platform.system() == "Linux" and call(["which", "valgrind"]),
+@pytest.mark.skipif(platform.system() != "Linux" or call(["which", "valgrind"]),
                     reason="Valgrind not installed")
 def test_ffpuppet_19(tmp_path):
     """test launching with Valgrind"""
-    if platform.system() != "Linux":
-        with pytest.raises(EnvironmentError, match="Valgrind is only supported on Linux"):
-            FFPuppet(use_valgrind=True)
-        return
     vmv = FFPuppet.VALGRIND_MIN_VERSION
     try:
-        FFPuppet.VALGRIND_MIN_VERSION = 9999999999.99
-        with pytest.raises(EnvironmentError, match=r"Valgrind >= \d+\.\d+ is required"):
-            FFPuppet(use_valgrind=True)
         FFPuppet.VALGRIND_MIN_VERSION = 0
         with FFPuppet(use_valgrind=True) as ffp:
             bin_path = str(check_output(["which", "echo"]).strip().decode("ascii"))
@@ -577,14 +568,10 @@ def test_ffpuppet_27(tmp_path):
         assert not ffp.is_running()
         assert ffp.wait(timeout=0)
 
-@pytest.mark.skipif(platform.system() == "Linux" and call(["which", "rr"]),
+@pytest.mark.skipif(platform.system() != "Linux" or call(["which", "rr"]),
                     reason="rr not installed")
 def test_ffpuppet_28(tmp_path):
     """test launching with rr"""
-    if platform.system() != "Linux":
-        with pytest.raises(EnvironmentError, match="rr is only supported on Linux"):
-            FFPuppet(use_rr=True)
-        return
     # NOTE: this can hang if ptrace is blocked by seccomp
     if call(["rr", "record", "echo"]) != 0:
         pytest.skip("Environment not configured to run rr")
@@ -647,7 +634,7 @@ def test_ffpuppet_31(tmp_path):
     class StubbedLaunch(FFPuppet):
         def __init__(self):
             super(StubbedLaunch, self).__init__()
-            self._use_valgrind = True
+            self._dbg = FFPuppet.DBG_VALGRIND
         def launch(self):  # pylint: disable=arguments-differ
             profile = (tmp_path / "profile")
             profile.mkdir()
@@ -690,19 +677,17 @@ def test_ffpuppet_32(tmp_path):
         assert cmd[0] == "bin_path"
         assert cmd[-1] == "test"
         # GDB
-        ffp._use_gdb = True
+        ffp._dbg = FFPuppet.DBG_GDB
         cmd = ffp.build_launch_cmd("bin_path")
         assert len(cmd) > 2
         assert cmd[0] == "gdb"
-        ffp._use_gdb = False
         # RR
-        ffp._use_rr = True
+        ffp._dbg = FFPuppet.DBG_RR
         cmd = ffp.build_launch_cmd("bin_path")
         assert len(cmd) > 2
         assert cmd[0] == "rr"
-        ffp._use_rr = False
         # Valgrind
-        ffp._use_valgrind = True
+        ffp._dbg = FFPuppet.DBG_VALGRIND
         try:
             os.environ["VALGRIND_SUP_PATH"] = "blah"
             with pytest.raises(IOError):
@@ -715,7 +700,6 @@ def test_ffpuppet_32(tmp_path):
             assert cmd[0] == "valgrind"
         finally:
             os.environ.pop("VALGRIND_SUP_PATH")
-        ffp._use_valgrind = False
 
 def test_ffpuppet_33():
     """test cpu_usage()"""
@@ -731,3 +715,61 @@ def test_ffpuppet_33():
             assert usage[0][1] >= 0
         ffp.close()
         assert ffp.wait(timeout=10)
+
+def test_ffpuppet_34(mocker):
+    """test _dbg_sanity_check()"""
+    fake_plat = mocker.patch("ffpuppet.core.platform.system", autospec=True)
+    fake_chkout = mocker.patch("ffpuppet.core.subprocess.check_output", autospec=True)
+    # gdb - success
+    fake_plat.return_value = "Linux"
+    FFPuppet._dbg_sanity_check(FFPuppet.DBG_GDB)
+    assert fake_chkout.call_count == 1
+    fake_chkout.reset_mock()
+    # gdb - not installed
+    fake_chkout.side_effect = OSError
+    with pytest.raises(EnvironmentError, match="Please install GDB"):
+        FFPuppet._dbg_sanity_check(FFPuppet.DBG_GDB)
+    fake_chkout.reset_mock()
+    fake_chkout.side_effect = None
+    # gdb - unsupported OS
+    fake_plat.return_value = "Windows"
+    with pytest.raises(EnvironmentError, match="GDB is only supported on Linux"):
+        FFPuppet._dbg_sanity_check(FFPuppet.DBG_GDB)
+    # rr - success
+    fake_plat.return_value = "Linux"
+    FFPuppet._dbg_sanity_check(FFPuppet.DBG_RR)
+    assert fake_chkout.call_count == 1
+    fake_chkout.reset_mock()
+    # rr - not installed
+    fake_chkout.side_effect = OSError
+    with pytest.raises(EnvironmentError, match="Please install rr"):
+        FFPuppet._dbg_sanity_check(FFPuppet.DBG_RR)
+    fake_chkout.reset_mock()
+    fake_chkout.side_effect = None
+    # rr - unsupported OS
+    fake_plat.return_value = "Windows"
+    with pytest.raises(EnvironmentError, match="rr is only supported on Linux"):
+        FFPuppet._dbg_sanity_check(FFPuppet.DBG_RR)
+    # valgrind - success
+    fake_plat.return_value = "Linux"
+    fake_chkout.return_value = b"valgrind-%0.2f" % (FFPuppet.VALGRIND_MIN_VERSION)
+    FFPuppet._dbg_sanity_check(FFPuppet.DBG_VALGRIND)
+    assert fake_chkout.call_count == 1
+    fake_chkout.reset_mock()
+    # valgrind - old version
+    fake_plat.return_value = "Linux"
+    fake_chkout.return_value = b"valgrind-0.1"
+    with pytest.raises(EnvironmentError, match=r"Valgrind >= \d+\.\d+ is required"):
+        FFPuppet._dbg_sanity_check(FFPuppet.DBG_VALGRIND)
+    assert fake_chkout.call_count == 1
+    fake_chkout.reset_mock()
+    # valgrind - not installed
+    fake_chkout.side_effect = OSError
+    with pytest.raises(EnvironmentError, match="Please install Valgrind"):
+        FFPuppet._dbg_sanity_check(FFPuppet.DBG_VALGRIND)
+    fake_chkout.reset_mock()
+    fake_chkout.side_effect = None
+    # valgrind - unsupported OS
+    fake_plat.return_value = "Windows"
+    with pytest.raises(EnvironmentError, match="Valgrind is only supported on Linux"):
+        FFPuppet._dbg_sanity_check(FFPuppet.DBG_VALGRIND)

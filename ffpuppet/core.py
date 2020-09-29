@@ -33,6 +33,10 @@ __all__ = ("FFPuppet",)
 
 
 class FFPuppet(object):  # pylint: disable=too-many-instance-attributes
+    DBG_NONE = 0
+    DBG_GDB = 1
+    DBG_RR = 2
+    DBG_VALGRIND = 3
     LAUNCH_TIMEOUT_MIN = 10  # minimum amount of time to wait for the browser to launch
     RC_ALERT = "ALERT"  # target crashed/aborted/triggered an assertion failure etc...
     RC_CLOSED = "CLOSED"  # target was closed by call to FFPuppet close()
@@ -43,52 +47,27 @@ class FFPuppet(object):  # pylint: disable=too-many-instance-attributes
     def __init__(self, use_profile=None, use_valgrind=False, use_xvfb=False, use_gdb=False, use_rr=False):
         self._abort_tokens = set()  # tokens used to notify log scanner to kill the browser process
         self._checks = list()
+        assert sum((use_gdb, use_rr, use_valgrind)) < 2, "only a single debugger can be enabled"
+        if use_gdb:
+            self._dbg = self.DBG_GDB
+        elif use_rr:
+            self._dbg = self.DBG_RR
+        elif use_valgrind:
+            self._dbg = self.DBG_VALGRIND
+        else:
+            self._dbg = self.DBG_NONE
+        self._dbg_sanity_check(self._dbg)
         self._last_bin_path = None
         self._launches = 0  # number of successful browser launches
         self._logs = PuppetLogger()
         self._proc = None
         self._profile_template = use_profile  # profile that is used as a template
-        self._use_valgrind = use_valgrind
-        self._use_gdb = use_gdb
-        self._use_rr = use_rr
         self._xvfb = None
         self.profile = None  # path to profile
         self.reason = self.RC_CLOSED  # why the target process was terminated
 
-        plat = platform.system().lower()
-        if use_valgrind:
-            assert not (use_gdb or use_rr), "only a single debugger can be enabled"
-            if not plat.startswith("linux"):
-                raise EnvironmentError("Valgrind is only supported on Linux")
-            try:
-                match = re.match(
-                    b"valgrind-(?P<ver>\\d+\\.\\d+)",
-                    subprocess.check_output(["valgrind", "--version"]))
-            except OSError:
-                raise EnvironmentError("Please install Valgrind")
-            if not match or float(match.group("ver")) < FFPuppet.VALGRIND_MIN_VERSION:
-                raise EnvironmentError("Valgrind >= %0.2f is required" % FFPuppet.VALGRIND_MIN_VERSION)
-
-        if use_gdb:
-            assert not (use_rr or use_valgrind), "only a single debugger can be enabled"
-            if not plat.startswith("linux"):
-                raise EnvironmentError("GDB is only supported on Linux")
-            try:
-                subprocess.check_output(["gdb", "--version"])
-            except OSError:
-                raise EnvironmentError("Please install GDB")
-
-        if use_rr:
-            assert not (use_gdb or use_valgrind), "only a single debugger can be enabled"
-            if not plat.startswith("linux"):
-                raise EnvironmentError("rr is only supported on Linux")
-            try:
-                subprocess.check_output(["rr", "--version"])
-            except OSError:
-                raise EnvironmentError("Please install rr")
-
         if use_xvfb:
-            if not plat.startswith("linux"):
+            if not platform.system().lower().startswith("linux"):
                 raise EnvironmentError("Xvfb is only supported on Linux")
             try:
                 self._xvfb = xvfbwrapper.Xvfb(width=1280, height=1024)
@@ -103,6 +82,37 @@ class FFPuppet(object):  # pylint: disable=too-many-instance-attributes
 
     def __exit__(self, *exc):
         self.clean_up()
+
+
+    @classmethod
+    def _dbg_sanity_check(cls, dbg_id):
+        # sanity check debuggers
+        plat = platform.system().lower()
+        if dbg_id == cls.DBG_GDB:
+            if not plat.startswith("linux"):
+                raise EnvironmentError("GDB is only supported on Linux")
+            try:
+                subprocess.check_output(["gdb", "--version"])
+            except OSError:
+                raise EnvironmentError("Please install GDB")
+        elif dbg_id == cls.DBG_RR:
+            if not plat.startswith("linux"):
+                raise EnvironmentError("rr is only supported on Linux")
+            try:
+                subprocess.check_output(["rr", "--version"])
+            except OSError:
+                raise EnvironmentError("Please install rr")
+        elif dbg_id == cls.DBG_VALGRIND:
+            if not plat.startswith("linux"):
+                raise EnvironmentError("Valgrind is only supported on Linux")
+            try:
+                match = re.match(
+                    b"valgrind-(?P<ver>\\d+\\.\\d+)",
+                    subprocess.check_output(["valgrind", "--version"]))
+            except OSError:
+                raise EnvironmentError("Please install Valgrind")
+            if not match or float(match.group("ver")) < cls.VALGRIND_MIN_VERSION:
+                raise EnvironmentError("Valgrind >= %0.2f is required" % cls.VALGRIND_MIN_VERSION)
 
 
     def add_abort_token(self, token):
@@ -212,7 +222,7 @@ class FFPuppet(object):  # pylint: disable=too-many-instance-attributes
                             self._logs.watching[full_name] = log_fp.tell()
                             continue
                     yield full_name
-                elif self._use_valgrind and fname.startswith(self._logs.PREFIX_VALGRIND):
+                elif self._dbg == self.DBG_VALGRIND and fname.startswith(self._logs.PREFIX_VALGRIND):
                     full_name = os.path.join(self._logs.working_path, fname)
                     if os.stat(full_name).st_size:
                         yield full_name
@@ -309,7 +319,7 @@ class FFPuppet(object):  # pylint: disable=too-many-instance-attributes
             for proc in procs:
                 try:
                     proc.kill() if mode > 0 else proc.terminate()
-                except (psutil.AccessDenied, psutil.NoSuchProcess):
+                except (psutil.AccessDenied, psutil.NoSuchProcess):  # pragma: no cover
                     pass
             procs = psutil.wait_procs(procs, timeout=kill_delay)[1]
             if not procs:
@@ -357,7 +367,7 @@ class FFPuppet(object):  # pylint: disable=too-many-instance-attributes
             while crash_reports:
                 log.debug("%d crash report(s) are available", len(crash_reports))
                 # wait until all open files are closed (except stdout & stderr)
-                report_wait = 300 if self._use_rr else 90
+                report_wait = 300 if self._dbg == self.DBG_RR else 90
                 if not wait_on_files(crash_reports, timeout=report_wait):
                     log.warning("wait_on_files(timeout=%d) Timed out", report_wait)
                     break
@@ -375,7 +385,7 @@ class FFPuppet(object):  # pylint: disable=too-many-instance-attributes
                 wait_on_files(self._crashreports(), timeout=10)
 
             # check the process exit code if needed
-            if r_code == self.RC_EXITED and self._proc.poll() not in (0, -1, 1):
+            if r_code == self.RC_EXITED and self._proc.poll() not in (0, -1, 1, -2):
                 log.debug("poll() returned %r", self._proc.poll())
                 r_code = self.RC_ALERT
         else:
@@ -485,7 +495,7 @@ class FFPuppet(object):  # pylint: disable=too-many-instance-attributes
                 assert isinstance(add_arg, str), "additional arguments must be 'str'"
             cmd.extend(additional_args)
 
-        if self._use_valgrind:
+        if self._dbg == self.DBG_VALGRIND:
             valgrind_cmd = [
                 "valgrind",
                 "-q",
@@ -501,6 +511,7 @@ class FFPuppet(object):  # pylint: disable=too-many-instance-attributes
                 "--show-possibly-lost=no",
                 "--smc-check=all-non-file",
                 "--trace-children=yes",
+                "--trace-children-skip=python*",
                 "--track-origins=yes",
                 "--vex-iropt-register-updates=allregs-at-mem-access"]
 
@@ -513,7 +524,7 @@ class FFPuppet(object):  # pylint: disable=too-many-instance-attributes
 
             cmd = valgrind_cmd + cmd
 
-        elif self._use_gdb:
+        elif self._dbg == self.DBG_GDB:
             cmd = [
                 "gdb",
                 "-nx",
@@ -538,7 +549,7 @@ class FFPuppet(object):  # pylint: disable=too-many-instance-attributes
                 "-batch",
                 "--args"] + cmd
 
-        elif self._use_rr:
+        elif self._dbg == self.DBG_RR:
             cmd = [
                 "rr", "record",
                 "--disable-cpuid-features-ext", "0xdc230000,0x2c42,0xc"  # Pernosco support
@@ -622,7 +633,7 @@ class FFPuppet(object):  # pylint: disable=too-many-instance-attributes
                 "capability.policy.localfilelinks.sites": "'%s'" % bootstrapper.location,
                 "capability.policy.localfilelinks.checkloaduri.enabled": "'allAccess'",
                 "privacy.partition.network_state": "false"}
-            if self._use_rr or self._use_valgrind:
+            if self._dbg in (self.DBG_RR, self.DBG_VALGRIND):
                 # when the browser is running slowly socket reads can fail if this is > 0
                 prefs["network.http.speculative-parallel-limit"] = "0"
 
@@ -640,11 +651,11 @@ class FFPuppet(object):  # pylint: disable=too-many-instance-attributes
 
             cmd = self.build_launch_cmd(bin_path, additional_args=launch_args)
 
-            if self._use_rr:
+            if self._dbg == self.DBG_RR:
                 if env_mod is None:
                     env_mod = dict()
                 env_mod["_RR_TRACE_DIR"] = self._logs.add_path(self._logs.PATH_RR)
-            elif self._use_valgrind:
+            elif self._dbg == self.DBG_VALGRIND:
                 if env_mod is None:
                     env_mod = dict()
                 # https://developer.gimp.org/api/2.0/glib/glib-running.html#G_DEBUG
