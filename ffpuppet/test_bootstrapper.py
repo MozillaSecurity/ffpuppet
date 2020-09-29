@@ -7,7 +7,7 @@
 import socket
 import threading
 
-import pytest
+from pytest import raises
 
 from .bootstrapper import Bootstrapper
 from .exceptions import BrowserTerminatedError, BrowserTimeoutError, LaunchError
@@ -29,13 +29,13 @@ def test_bootstrapper_02(mocker):
     mocker.patch("ffpuppet.bootstrapper.socket.socket", return_value=fake_sock)
     with Bootstrapper() as bts:
         # test failure
-        with pytest.raises(BrowserTerminatedError, match="Failure waiting for browser connection"):
+        with raises(BrowserTerminatedError, match="Failure waiting for browser connection"):
             bts.wait(lambda: False)
         assert fake_sock.accept.call_count == 1
         fake_sock.reset_mock()
         # test timeout
-        mocker.patch("ffpuppet.bootstrapper.time.time", side_effect=(1, 1, 1, 2))
-        with pytest.raises(BrowserTimeoutError, match="Timeout waiting for browser connection"):
+        mocker.patch("ffpuppet.bootstrapper.time", side_effect=(1, 1, 1, 2))
+        with raises(BrowserTimeoutError, match="Timeout waiting for browser connection"):
             bts.wait(lambda: True, timeout=0.1)
         # should call accept() at least 2x for positive and negative timeout check
         assert fake_sock.accept.call_count > 1
@@ -49,14 +49,14 @@ def test_bootstrapper_03(mocker):
     mocker.patch("ffpuppet.bootstrapper.socket.socket", return_value=fake_sock)
     with Bootstrapper() as bts:
         # test failure
-        with pytest.raises(BrowserTerminatedError, match="Failure waiting for request"):
+        with raises(BrowserTerminatedError, match="Failure waiting for request"):
             bts.wait(lambda: False)
         assert fake_conn.recv.call_count == 1
         assert fake_conn.close.call_count == 1
         fake_conn.reset_mock()
         # test timeout
-        mocker.patch("ffpuppet.bootstrapper.time.time", side_effect=(1, 1, 1, 1, 2))
-        with pytest.raises(BrowserTimeoutError, match="Timeout waiting for request"):
+        mocker.patch("ffpuppet.bootstrapper.time", side_effect=(1, 1, 1, 1, 2))
+        with raises(BrowserTimeoutError, match="Timeout waiting for request"):
             bts.wait(lambda: True, timeout=0.1)
         # should call recv() at least 2x for positive and negative timeout check
         assert fake_conn.recv.call_count > 1
@@ -72,14 +72,14 @@ def test_bootstrapper_04(mocker):
     mocker.patch("ffpuppet.bootstrapper.socket.socket", return_value=fake_sock)
     with Bootstrapper() as bts:
         # test timeout
-        with pytest.raises(BrowserTimeoutError, match="Timeout sending response"):
+        with raises(BrowserTimeoutError, match="Timeout sending response"):
             bts.wait(lambda: True)
         assert fake_conn.recv.call_count == 1
         assert fake_conn.sendall.call_count == 1
         assert fake_conn.close.call_count == 1
         fake_conn.reset_mock()
         # test failure
-        with pytest.raises(BrowserTerminatedError, match="Failure during browser startup"):
+        with raises(BrowserTerminatedError, match="Failure during browser startup"):
             bts.wait(lambda: False)
         assert fake_conn.recv.call_count == 1
         assert fake_conn.sendall.call_count == 1
@@ -94,7 +94,7 @@ def test_bootstrapper_05(mocker):
     fake_sock.accept.return_value = (fake_conn, None)
     mocker.patch("ffpuppet.bootstrapper.socket.socket", return_value=fake_sock)
     with Bootstrapper() as bts:
-        with pytest.raises(BrowserTerminatedError, match="Failure during browser startup"):
+        with raises(BrowserTerminatedError, match="Failure during browser startup"):
             bts.wait(lambda: False)
     assert fake_conn.close.call_count == 1
 
@@ -157,10 +157,11 @@ def test_bootstrapper_08():
             browser_thread.join()
 
 def test_bootstrapper_09(mocker):
-    """test Bootstrapper() exhaust port range"""
+    """test Bootstrapper() hit PORT_RETRIES"""
     fake_sock = mocker.Mock(socket.socket)
     fake_sock.bind.side_effect = socket.error(10013, "TEST")
     mocker.patch("ffpuppet.bootstrapper.socket.socket", return_value=fake_sock)
-    with pytest.raises(LaunchError, match="Could not find available port"):
+    with raises(LaunchError, match="Could not find available port"):
         with Bootstrapper():
             pass
+    assert fake_sock.bind.call_count == Bootstrapper.PORT_RETRIES
