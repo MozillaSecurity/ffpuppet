@@ -95,9 +95,9 @@ class Bootstrapper(object):
                     request = conn.recv(self.BUF_SIZE)
                 except socket.timeout:
                     if not cb_continue():
-                        raise BrowserTerminatedError("Failure waiting for request")
+                        raise BrowserTerminatedError("Failure waiting for request") from None
                     if time() >= time_limit:
-                        raise BrowserTimeoutError("Timeout waiting for request")
+                        raise BrowserTimeoutError("Timeout waiting for request") from None
                     if not received:
                         continue
                 if not received and not request:
@@ -128,7 +128,7 @@ class Bootstrapper(object):
                 raise BrowserTimeoutError("Timeout sending response")
             log.debug("bootstrap complete (%0.2fs)", time() - start_time)
         except socket.error as soc_e:  # pragma: no cover
-            raise LaunchError("Error attempting to launch browser: %s" % soc_e)
+            raise LaunchError("Error attempting to launch browser: %s" % soc_e) from soc_e
         finally:
             if conn is not None:
                 conn.close()

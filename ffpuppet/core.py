@@ -72,7 +72,7 @@ class FFPuppet(object):  # pylint: disable=too-many-instance-attributes
             try:
                 self._xvfb = xvfbwrapper.Xvfb(width=1280, height=1024)
             except NameError:
-                raise EnvironmentError("Please install xvfbwrapper")
+                raise EnvironmentError("Please install xvfbwrapper") from None
             self._xvfb.start()
 
 
@@ -94,14 +94,14 @@ class FFPuppet(object):  # pylint: disable=too-many-instance-attributes
             try:
                 subprocess.check_output(["gdb", "--version"])
             except OSError:
-                raise EnvironmentError("Please install GDB")
+                raise EnvironmentError("Please install GDB") from None
         elif dbg_id == cls.DBG_RR:
             if not plat.startswith("linux"):
                 raise EnvironmentError("rr is only supported on Linux")
             try:
                 subprocess.check_output(["rr", "--version"])
             except OSError:
-                raise EnvironmentError("Please install rr")
+                raise EnvironmentError("Please install rr") from None
         elif dbg_id == cls.DBG_VALGRIND:
             if not plat.startswith("linux"):
                 raise EnvironmentError("Valgrind is only supported on Linux")
@@ -110,7 +110,7 @@ class FFPuppet(object):  # pylint: disable=too-many-instance-attributes
                     b"valgrind-(?P<ver>\\d+\\.\\d+)",
                     subprocess.check_output(["valgrind", "--version"]))
             except OSError:
-                raise EnvironmentError("Please install Valgrind")
+                raise EnvironmentError("Please install Valgrind") from None
             if not match or float(match.group("ver")) < cls.VALGRIND_MIN_VERSION:
                 raise EnvironmentError("Valgrind >= %0.2f is required" % cls.VALGRIND_MIN_VERSION)
 
