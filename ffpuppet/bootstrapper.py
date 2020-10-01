@@ -11,7 +11,7 @@ from time import time
 from .exceptions import BrowserTerminatedError, BrowserTimeoutError, LaunchError
 
 
-log = getLogger("ffpuppet")  # pylint: disable=invalid-name
+log = getLogger(__name__)  # pylint: disable=invalid-name
 
 __author__ = "Tyson Smith"
 __all__ = ("Bootstrapper",)

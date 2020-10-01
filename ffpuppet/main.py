@@ -13,7 +13,7 @@ import time
 from .core import FFPuppet
 from .helpers import check_prefs
 
-log = logging.getLogger("ffpuppet")  # pylint: disable=invalid-name
+log = logging.getLogger(__name__)  # pylint: disable=invalid-name
 
 __author__ = "Tyson Smith"
 

@@ -26,7 +26,7 @@ from .helpers import (
 from .minidump_parser import process_minidumps
 from .puppet_logger import PuppetLogger
 
-log = logging.getLogger("ffpuppet")  # pylint: disable=invalid-name
+log = logging.getLogger(__name__)  # pylint: disable=invalid-name
 
 __author__ = "Tyson Smith"
 __all__ = ("FFPuppet",)

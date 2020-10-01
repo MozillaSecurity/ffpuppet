@@ -16,7 +16,7 @@ from xml.etree import ElementTree
 import psutil
 
 
-log = logging.getLogger("ffpuppet")  # pylint: disable=invalid-name
+log = logging.getLogger(__name__)  # pylint: disable=invalid-name
 
 __author__ = "Tyson Smith"
 __all__ = ("check_prefs", "create_profile", "get_processes", "onerror",
