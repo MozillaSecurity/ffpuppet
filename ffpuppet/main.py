@@ -179,13 +179,12 @@ def main(argv=None):  # pylint: disable=missing-docstring
     args = parse_args(argv)
     # set output verbosity
     if args.log_level == logging.DEBUG:
-        log_fmt = "%(levelname).1s %(name)s [%(asctime)s] %(message)s"
+        date_fmt = None
+        log_fmt = "%(asctime)s %(levelname).1s %(name)s | %(message)s"
     else:
+        date_fmt = "%Y-%m-%d %H:%M:%S"
         log_fmt = "[%(asctime)s] %(message)s"
-    logging.basicConfig(
-        format=log_fmt,
-        datefmt="%Y-%m-%d %H:%M:%S",
-        level=args.log_level)
+    logging.basicConfig(format=log_fmt, datefmt=date_fmt, level=args.log_level)
 
     ffp = FFPuppet(
         use_profile=args.profile,
