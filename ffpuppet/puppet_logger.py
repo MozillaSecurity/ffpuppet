@@ -11,7 +11,7 @@ import tempfile
 
 from .helpers import onerror, wait_on_files
 
-log = logging.getLogger("puppet_logger")  # pylint: disable=invalid-name
+log = logging.getLogger(__name__)  # pylint: disable=invalid-name
 
 __author__ = "Tyson Smith"
 __credits__ = ["Tyson Smith"]

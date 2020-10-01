@@ -9,7 +9,7 @@ import subprocess
 import sys
 import tempfile
 
-log = logging.getLogger("ffpuppet")  # pylint: disable=invalid-name
+log = logging.getLogger(__name__)  # pylint: disable=invalid-name
 
 __author__ = "Tyson Smith"
 __all__ = ("process_minidumps",)
