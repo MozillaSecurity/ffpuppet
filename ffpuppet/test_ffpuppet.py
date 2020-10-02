@@ -629,7 +629,7 @@ def test_ffpuppet_30(tmp_path):
         ffp.close()
         assert not os.path.isdir(prof_path)
 
-def test_ffpuppet_31(tmp_path):
+def test_ffpuppet_31(mocker, tmp_path):
     """test _crashreports()"""
     class StubbedLaunch(FFPuppet):
         def __init__(self):
@@ -647,27 +647,41 @@ def test_ffpuppet_31(tmp_path):
     with StubbedLaunch() as ffp:
         ffp.launch()
         assert not any(ffp._crashreports())
+        # ignored sanitizer warnings
         ign_log = "%s.1" % (ffp._logs.PREFIX_SAN,)
-        san_log = "%s.2" % (ffp._logs.PREFIX_SAN,)
-        vg1_log = "%s.1" % (ffp._logs.PREFIX_VALGRIND,)
-        vg2_log = "%s.2" % (ffp._logs.PREFIX_VALGRIND,)
         with open(os.path.join(ffp._logs.working_path, ign_log), "w") as ofp:
-            ofp.write("==123==WARNING: Symbolizer buffer too small\n")
             ofp.write("==123==WARNING: Symbolizer buffer too small\n\n")
+            ofp.write("==123==WARNING: Symbolizer buffer too small\n\n")
+        # valid sanitizer log
+        san_log = "%s.2" % (ffp._logs.PREFIX_SAN,)
         with open(os.path.join(ffp._logs.working_path, san_log), "w") as ofp:
             ofp.write("test\n")
+        # valid Valgrind log - with error
+        vg1_log = "%s.1" % (ffp._logs.PREFIX_VALGRIND,)
         with open(os.path.join(ffp._logs.working_path, vg1_log), "w") as ofp:
             ofp.write("test\n")
+        # valid Valgrind log - without error
+        vg2_log = "%s.2" % (ffp._logs.PREFIX_VALGRIND,)
         with open(os.path.join(ffp._logs.working_path, vg2_log), "w") as ofp:
             pass
+        # nothing interesting
         with open(os.path.join(ffp._logs.working_path, "junk.log"), "w") as ofp:
             ofp.write("test\n")
+        # valid minidump
         with open(os.path.join(ffp.profile, "minidumps", "test.dmp"), "w") as ofp:
             ofp.write("test\n")
+        # nothing interesting
         with open(os.path.join(ffp.profile, "minidumps", "test.junk"), "w") as ofp:
             pass
+        assert not ffp._logs.watching
         assert len(list(ffp._crashreports())) == 3
+        assert ffp._logs.watching
         assert len(list(ffp._crashreports(skip_md=True))) == 2
+        # fail to open and scan sanitizer file
+        ffp._logs.watching.clear()
+        mocker.patch("ffpuppet.core.open", side_effect=OSError)
+        assert len(list(ffp._crashreports())) == 4
+        assert not ffp._logs.watching
 
 def test_ffpuppet_32(tmp_path):
     """test build_launch_cmd()"""
