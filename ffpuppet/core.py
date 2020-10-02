@@ -206,21 +206,26 @@ class FFPuppet(object):  # pylint: disable=too-many-instance-attributes
                 if fname.startswith(self._logs.PREFIX_SAN):
                     full_name = os.path.join(self._logs.working_path, fname)
                     size = self._logs.watching.get(full_name)
+                    # skip previously scanned files that have not been updated
                     if size is not None and size == os.stat(full_name).st_size:
                         continue
                     # add logs with only benign warnings to watch list
-                    with open(full_name, "rb") as log_fp:
-                        for line in log_fp:
-                            line = line.rstrip()
-                            if not line:
+                    try:
+                        # WARNING: cannot open files that are already open on Windows
+                        with open(full_name, "rb") as log_fp:
+                            for line in log_fp:
+                                line = line.rstrip()
+                                if not line:
+                                    continue
+                                # frequently emitted by TSan
+                                if line.endswith(b"==WARNING: Symbolizer buffer too small"):
+                                    continue
+                                break
+                            else:
+                                self._logs.watching[full_name] = log_fp.tell()
                                 continue
-                            # frequently emitted by TSan
-                            if line.endswith(b"==WARNING: Symbolizer buffer too small"):
-                                continue
-                            break
-                        else:
-                            self._logs.watching[full_name] = log_fp.tell()
-                            continue
+                    except OSError:
+                        log.debug("failed to scan log %r", full_name)
                     yield full_name
                 elif self._dbg == self.DBG_VALGRIND and fname.startswith(self._logs.PREFIX_VALGRIND):
                     full_name = os.path.join(self._logs.working_path, fname)
