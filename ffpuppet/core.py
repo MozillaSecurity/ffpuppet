@@ -363,33 +363,35 @@ class FFPuppet(object):  # pylint: disable=too-many-instance-attributes
         log.debug("close(force_close=%r) called", force_close)
         assert self._launches > -1, "clean_up() has been called"
         if self.reason is not None:
-            self._logs.close()  # make sure browser logs are also closed
+            self._logs.close()  # make sure browser logs are closed
             return
 
         if self._proc is not None:
             log.debug("browser pid: %r", self._proc.pid)
-            crash_reports = set(self._crashreports())
             # set reason code
+            crash_reports = set(self._crashreports())
             if crash_reports:
                 r_code = self.RC_ALERT
+                while True:
+                    log.debug("%d crash report(s) found", len(crash_reports))
+                    # wait until all open files are closed (except stdout & stderr)
+                    report_wait = 300 if self._dbg == self.DBG_RR else 90
+                    if not wait_on_files(crash_reports, timeout=report_wait):
+                        log.warning("wait_on_files(timeout=%d) Timed out", report_wait)
+                        break
+                    new_reports = set(self._crashreports())
+                    # verify no new reports have appeared
+                    if not new_reports - crash_reports:
+                        break
+                    log.debug("more reports have appeared")
+                    crash_reports = new_reports
             elif self.is_running():
                 r_code = self.RC_CLOSED
+            elif self._proc.poll() not in (0, -1, 1, -2):
+                r_code = self.RC_ALERT
+                log.debug("poll() returned %r", self._proc.poll())
             else:
                 r_code = self.RC_EXITED
-
-            while crash_reports:
-                log.debug("%d crash report(s) are available", len(crash_reports))
-                # wait until all open files are closed (except stdout & stderr)
-                report_wait = 300 if self._dbg == self.DBG_RR else 90
-                if not wait_on_files(crash_reports, timeout=report_wait):
-                    log.warning("wait_on_files(timeout=%d) Timed out", report_wait)
-                    break
-                new_reports = set(self._crashreports())
-                # verify no new reports have appeared
-                if not new_reports - crash_reports:
-                    break
-                log.debug("more reports have appeared")
-                crash_reports = new_reports
 
             if self.is_running():
                 log.debug("browser needs to be terminated")
@@ -397,10 +399,6 @@ class FFPuppet(object):  # pylint: disable=too-many-instance-attributes
                 # wait for reports triggered by the call to _terminate()
                 wait_on_files(self._crashreports(), timeout=10)
 
-            # check the process exit code if needed
-            if r_code == self.RC_EXITED and self._proc.poll() not in (0, -1, 1, -2):
-                log.debug("poll() returned %r", self._proc.poll())
-                r_code = self.RC_ALERT
         else:
             r_code = self.RC_CLOSED
             log.debug("browser process was 'None'")
@@ -433,20 +431,22 @@ class FFPuppet(object):  # pylint: disable=too-many-instance-attributes
                     self._logs.get_fp("stderr").write(
                         ("[ffpuppet] Reason code: %s\n" % r_code).encode("utf-8"))
 
-        self._proc = None
-        self._logs.close()
-        self._checks = list()
-        # remove temporary profile directory if necessary
-        if self.profile is not None and os.path.isdir(self.profile):
-            try:
-                shutil.rmtree(self.profile, onerror=onerror)
-            except OSError:  # pragma: no cover
-                log.error("Failed to remove profile %r", self.profile)
-                if not force_close:
-                    raise
-            self.profile = None
-        log.debug("exit reason code %r", r_code)
-        if self.reason is None:
+        try:
+            self._proc = None
+            self._logs.close()
+            self._checks = list()
+            # remove temporary profile directory if necessary
+            if self.profile is not None and os.path.isdir(self.profile):
+                try:
+                    shutil.rmtree(self.profile, onerror=onerror)
+                except OSError:  # pragma: no cover
+                    log.error("Failed to remove profile %r", self.profile)
+                    if not force_close:
+                        raise
+                finally:
+                    self.profile = None
+        finally:
+            log.debug("exit reason code %r", r_code)
             self.reason = r_code
 
 
