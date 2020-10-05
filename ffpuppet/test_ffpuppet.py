@@ -20,7 +20,7 @@ import pytest
 
 from .bootstrapper import Bootstrapper
 from .core import FFPuppet
-from .exceptions import BrowserTimeoutError, BrowserTerminatedError, LaunchError
+from .exceptions import BrowserTimeoutError, BrowserTerminatedError, LaunchError, TerminateError
 from .helpers import get_processes
 from .minidump_parser import MinidumpParser
 
@@ -787,3 +787,32 @@ def test_ffpuppet_34(mocker):
     fake_plat.return_value = "Windows"
     with pytest.raises(EnvironmentError, match="Valgrind is only supported on Linux"):
         FFPuppet._dbg_sanity_check(FFPuppet.DBG_VALGRIND)
+
+def test_ffpuppet_35(mocker):
+    """test _terminate()"""
+    procs = [
+        mocker.Mock(spec=Process, pid=123),
+        mocker.Mock(spec=Process, pid=124)
+    ]
+    mocker.patch("ffpuppet.core.get_processes", autospec=True, return_value=procs)
+    fake_wait_procs = mocker.patch("ffpuppet.core.psutil.wait_procs", autospec=True)
+    # successful call to terminate
+    fake_wait_procs.return_value = ([], [])
+    FFPuppet._terminate(1234)
+    assert sum(x.terminate.call_count for x in procs) == 2
+    assert not sum(x.kill.call_count for x in procs)
+    for proc in procs:
+        proc.reset_mock()
+    # successful call to kill
+    fake_wait_procs.return_value = None
+    fake_wait_procs.side_effect = (([], procs), ([], []))
+    FFPuppet._terminate(1234)
+    assert sum(x.terminate.call_count for x in procs) == 2
+    assert sum(x.kill.call_count for x in procs) == 2
+    for proc in procs:
+        proc.reset_mock()
+    # successful call to kill
+    fake_wait_procs.return_value = ([], procs)
+    fake_wait_procs.side_effect = None
+    with pytest.raises(TerminateError):
+        FFPuppet._terminate(1234)
