@@ -422,11 +422,10 @@ class FFPuppet(object):  # pylint: disable=too-many-instance-attributes
                 for fname in self._crashreports(skip_md=True):
                     self._logs.add_log(os.path.basename(fname), open(fname, "rb"))
                 # check for minidumps in the profile and dump them if possible
-                if self.profile is not None:
-                    process_minidumps(
-                        os.path.join(self.profile, "minidumps"),
-                        os.path.join(self._last_bin_path, "symbols"),
-                        self._logs.add_log)
+                process_minidumps(
+                    os.path.join(self.profile, "minidumps"),
+                    os.path.join(self._last_bin_path, "symbols"),
+                    self._logs.add_log)
                 if self._logs.get_fp("stderr"):
                     self._logs.get_fp("stderr").write(
                         ("[ffpuppet] Reason code: %s\n" % r_code).encode("utf-8"))
@@ -436,15 +435,14 @@ class FFPuppet(object):  # pylint: disable=too-many-instance-attributes
             self._logs.close()
             self._checks = list()
             # remove temporary profile directory if necessary
-            if self.profile is not None and os.path.isdir(self.profile):
-                try:
-                    shutil.rmtree(self.profile, onerror=onerror)
-                except OSError:  # pragma: no cover
-                    log.error("Failed to remove profile %r", self.profile)
-                    if not force_close:
-                        raise
-                finally:
-                    self.profile = None
+            try:
+                shutil.rmtree(self.profile, onerror=onerror)
+            except OSError:  # pragma: no cover
+                log.error("Failed to remove profile %r", self.profile)
+                if not force_close:
+                    raise
+            finally:
+                self.profile = None
         finally:
             log.debug("exit reason code %r", r_code)
             self.reason = r_code
@@ -627,16 +625,16 @@ class FFPuppet(object):  # pylint: disable=too-many-instance-attributes
             elif re.match(r"http(s)?://", location, re.IGNORECASE) is None:
                 raise IOError("Cannot find %r" % location)
 
-        self.reason = None
-        launch_timeout = max(launch_timeout, self.LAUNCH_TIMEOUT_MIN)
-        log.debug("launch timeout: %d", launch_timeout)
-
         # create and modify a profile
         self.profile = create_profile(
             extension=extension,
             prefs_js=prefs_js,
             template=self._profile_template)
+        log.debug("using profile %r", self.profile)
 
+        launch_timeout = max(launch_timeout, self.LAUNCH_TIMEOUT_MIN)
+        log.debug("launch timeout: %d", launch_timeout)
+        self.reason = None
         # performing the bootstrap helps guarantee that the browser
         # will be loaded and ready to accept input when launch() returns
         bootstrapper = Bootstrapper()

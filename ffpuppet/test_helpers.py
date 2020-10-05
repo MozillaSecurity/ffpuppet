@@ -16,26 +16,23 @@ from .helpers import append_prefs, create_profile, check_prefs, configure_saniti
     get_processes, prepare_environment, SanitizerConfig, wait_on_files
 
 
-def test_helpers_01(tmp_path):
+def test_helpers_01(mocker, tmp_path):
+
     """test create_profile()"""
-    with pytest.raises(IOError, match="Cannot find template profile: 'fake_dir'"):
-        create_profile(template="fake_dir")
-    with pytest.raises(IOError, match="prefs.js file does not exist: 'fake_prefs'"):
-        create_profile(prefs_js="fake_prefs")
+    fake_mkdtemp = mocker.patch("ffpuppet.helpers.mkdtemp", autospec=True)
     # try creating a profile from scratch, does nothing but create a directory to be populated
+    (tmp_path / "dst1").mkdir()
+    fake_mkdtemp.return_value = str(tmp_path / "dst1")
     prof = create_profile()
     assert os.path.isdir(prof)
-    try:
-        assert not os.listdir(prof)
-    finally:
-        shutil.rmtree(prof, ignore_errors=True)
-    # create dummy profile
-    profile = (tmp_path / "profile")
-    profile.mkdir()
-    invalid_js = (profile / "Invalidprefs.js")
+    assert not os.listdir(prof)
+    # try creating a profile from a template profile
+    (tmp_path / "profile").mkdir()
+    invalid_js = (tmp_path / "profile" / "Invalidprefs.js")
     invalid_js.write_bytes(b"blah!")
-    # try creating a profile from a template
-    prof = create_profile(prefs_js=str(invalid_js), template=str(profile), tmpdir=str(tmp_path))
+    (tmp_path / "dst2").mkdir()
+    fake_mkdtemp.return_value = str(tmp_path / "dst2")
+    prof = create_profile(prefs_js=str(invalid_js), template=str(tmp_path / "profile"))
     assert os.path.isdir(prof)
     contents = os.listdir(prof)
     assert "prefs.js" in contents
@@ -73,29 +70,39 @@ def test_helpers_02(tmp_path):
         prefs_fp.write(b"user_pref(\"b.a\", false);\n")
     assert not check_prefs(str(dummy_prefs), str(custom_prefs))
 
-def test_helpers_03(tmp_path):
+def test_helpers_03(mocker, tmp_path):
     """test create_profile() extension support"""
+    mocker.patch("ffpuppet.helpers.mkdtemp", autospec=True, return_value=str(tmp_path / "dst"))
     # create a profile with a non-existent ext
+    (tmp_path / "dst").mkdir()
     with pytest.raises(RuntimeError, match="Unknown extension: 'fake_ext'"):
-        create_profile(extension="fake_ext", tmpdir=str(tmp_path))
+        create_profile(extension="fake_ext")
+    assert not (tmp_path / "dst").is_dir()
     # create a profile with an xpi ext
+    (tmp_path / "dst").mkdir()
     xpi = (tmp_path / "xpi-ext.xpi")
     xpi.touch()
-    prof = create_profile(extension=str(xpi), tmpdir=str(tmp_path))
+    prof = create_profile(extension=str(xpi))
     assert "extensions" in os.listdir(prof)
     assert "xpi-ext.xpi" in os.listdir(os.path.join(prof, "extensions"))
+    shutil.rmtree(str(tmp_path / "dst"))
     # create a profile with an unknown ext
+    (tmp_path / "dst").mkdir()
     dummy_ext = (tmp_path / "dummy_ext")
     dummy_ext.mkdir()
     with pytest.raises(RuntimeError, match=r"Failed to find extension id in manifest: '.+?dummy_ext'"):
-        create_profile(extension=str(dummy_ext), tmpdir=str(tmp_path))
+        create_profile(extension=str(dummy_ext))
+    assert not (tmp_path / "dst").is_dir()
     # create a profile with a bad legacy ext
+    (tmp_path / "dst").mkdir()
     bad_legacy = (tmp_path / "bad_legacy")
     bad_legacy.mkdir()
     (bad_legacy / "install.rdf").touch()
     with pytest.raises(RuntimeError, match=r"Failed to find extension id in manifest: '.+?bad_legacy'"):
-        create_profile(extension=str(bad_legacy), tmpdir=str(tmp_path))
+        create_profile(extension=str(bad_legacy))
+    assert not (tmp_path / "dst").is_dir()
     # create a profile with a good legacy ext
+    (tmp_path / "dst").mkdir()
     good_legacy = (tmp_path / "good_legacy")
     good_legacy.mkdir()
     with (good_legacy / "install.rdf").open("wb") as manifest:
@@ -107,28 +114,34 @@ def test_helpers_03(tmp_path):
                              </Description>
                            </RDF>""")
     (good_legacy / "example.js").touch()
-    prof = create_profile(extension=str(good_legacy), tmpdir=str(tmp_path))
+    prof = create_profile(extension=str(good_legacy))
     assert "extensions" in os.listdir(prof)
     assert "good-ext-id" in os.listdir(os.path.join(prof, "extensions"))
     assert set(os.listdir(os.path.join(prof, "extensions", "good-ext-id"))) == {"install.rdf", "example.js"}
+    shutil.rmtree(str(tmp_path / "dst"))
     # create a profile with a bad webext
+    (tmp_path / "dst").mkdir()
     bad_webext = (tmp_path / "bad_webext")
     bad_webext.mkdir()
     (bad_webext / "manifest.json").touch()
     with pytest.raises(RuntimeError, match=r"Failed to find extension id in manifest: '.+?bad_webext'"):
-        create_profile(extension=str(bad_webext), tmpdir=str(tmp_path))
+        create_profile(extension=str(bad_webext))
+    assert not (tmp_path / "dst").is_dir()
     # create a profile with a good webext
+    (tmp_path / "dst").mkdir()
     good_webext = (tmp_path / "good_webext")
     good_webext.mkdir()
     (good_webext / "manifest.json").write_bytes(b"""{"applications": {"gecko": {"id": "good-webext-id"}}}""")
     (good_webext / "example.js").touch()
-    prof = create_profile(extension=str(good_webext), tmpdir=str(tmp_path))
+    prof = create_profile(extension=str(good_webext))
     assert "extensions" in os.listdir(prof)
     ext_path = os.path.join(prof, "extensions")
     assert "good-webext-id" in os.listdir(ext_path)
     assert set(os.listdir(os.path.join(ext_path, "good-webext-id"))) == {"manifest.json", "example.js"}
+    shutil.rmtree(str(tmp_path / "dst"))
     # create a profile with multiple extensions
-    prof = create_profile(extension=[str(good_webext), str(good_legacy)], tmpdir=str(tmp_path))
+    (tmp_path / "dst").mkdir()
+    prof = create_profile(extension=[str(good_webext), str(good_legacy)])
     assert "extensions" in os.listdir(prof)
     ext_path = os.path.join(prof, "extensions")
     assert set(os.listdir(ext_path)) == {"good-ext-id", "good-webext-id"}

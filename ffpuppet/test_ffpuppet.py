@@ -348,15 +348,10 @@ def test_ffpuppet_15(tmp_path):
         assert not location.startswith("/")
         assert os.path.normpath(os.path.join("/", location)) == fname
 
-def test_ffpuppet_16():
-    """test passing nonexistent file to launch() via prefs_js"""
-    with FFPuppet() as ffp:
-        with pytest.raises(IOError, match="prefs.js file does not exist"):
-            ffp.launch(TESTFF_BIN, prefs_js="missing.js")
 
 @pytest.mark.skipif(platform.system() != "Linux" or call(["which", "gdb"]),
                     reason="GDB not installed")
-def test_ffpuppet_17(tmp_path):
+def test_ffpuppet_16(tmp_path):
     """test launching with gdb"""
     with FFPuppet(use_gdb=True) as ffp:
         bin_path = str(check_output(["which", "echo"]).strip().decode("ascii"))
@@ -371,7 +366,7 @@ def test_ffpuppet_17(tmp_path):
         assert b"[Inferior " in log_data
         assert b"quit_with_code" in log_data
 
-def test_ffpuppet_18(tmp_path):
+def test_ffpuppet_17(tmp_path):
     """test calling save_logs() before close()"""
     with FFPuppet() as ffp:
         with HTTPTestServer() as srv:
@@ -381,7 +376,7 @@ def test_ffpuppet_18(tmp_path):
 
 @pytest.mark.skipif(platform.system() != "Linux" or call(["which", "valgrind"]),
                     reason="Valgrind not installed")
-def test_ffpuppet_19(tmp_path):
+def test_ffpuppet_18(tmp_path):
     """test launching with Valgrind"""
     vmv = FFPuppet.VALGRIND_MIN_VERSION
     try:
@@ -400,7 +395,7 @@ def test_ffpuppet_19(tmp_path):
     finally:
         FFPuppet.VALGRIND_MIN_VERSION = vmv
 
-def test_ffpuppet_20(tmp_path):
+def test_ffpuppet_19(tmp_path):
     """test detecting invalid prefs file"""
     prefs = (tmp_path / "prefs.js")
     prefs.write_bytes(b"//fftest_invalid_js\n")
@@ -409,7 +404,7 @@ def test_ffpuppet_20(tmp_path):
             with pytest.raises(LaunchError, match="'.+?' is invalid"):
                 ffp.launch(TESTFF_BIN, location=srv.get_addr(), prefs_js=str(prefs))
 
-def test_ffpuppet_21():
+def test_ffpuppet_20():
     """test log_length()"""
     with FFPuppet() as ffp:
         assert ffp.log_length("INVALID") is None
@@ -422,7 +417,7 @@ def test_ffpuppet_21():
         # verify clean_up() removed the logs
         assert ffp.log_length("stderr") is None
 
-def test_ffpuppet_22():
+def test_ffpuppet_21():
     """test running multiple instances in parallel"""
     ffps = list()
     try:
@@ -441,7 +436,7 @@ def test_ffpuppet_22():
         for ffp in ffps:
             ffp.clean_up()
 
-def test_ffpuppet_23(tmp_path):
+def test_ffpuppet_22(tmp_path):
     """test hitting log size limit"""
     prefs = (tmp_path / "prefs.js")
     prefs.write_bytes(b"//fftest_big_log\n")
@@ -461,7 +456,7 @@ def test_ffpuppet_23(tmp_path):
         assert sum(x.stat().st_size for x in logfiles) > limit
         assert b"LOG_SIZE_LIMIT_EXCEEDED" in (logs / "log_ffp_worker_log_size.txt").read_bytes()
 
-def test_ffpuppet_24(tmp_path):
+def test_ffpuppet_23(tmp_path):
     """test collecting and cleaning up ASan logs"""
     test_logs = list()
     with FFPuppet() as ffp:
@@ -502,7 +497,7 @@ def test_ffpuppet_24(tmp_path):
                 assert log_fp.readline() in ("BAD LOG\n", "GOOD LOG\n", "SHORT LOG\n")
     assert not any(os.path.isfile(f) for f in test_logs)
 
-def test_ffpuppet_25(tmp_path):
+def test_ffpuppet_24(tmp_path):
     """test multiple minidumps"""
     profile = (tmp_path / "profile")
     profile.mkdir()
@@ -528,7 +523,7 @@ def test_ffpuppet_25(tmp_path):
         assert any(logs.glob("log_minidump_02.txt"))
         assert any(logs.glob("log_minidump_03.txt"))
 
-def test_ffpuppet_26(tmp_path):
+def test_ffpuppet_25(tmp_path):
     """test multiprocess target"""
     prefs = (tmp_path / "prefs.js")
     prefs.write_bytes(b"//fftest_multi_proc\n")
@@ -546,7 +541,7 @@ def test_ffpuppet_26(tmp_path):
         assert not ffp.is_running()
         assert ffp.wait(timeout=0)
 
-def test_ffpuppet_27(tmp_path):
+def test_ffpuppet_26(tmp_path):
     """test multiprocess (target terminated)"""
     prefs = (tmp_path / "prefs.js")
     prefs.write_bytes(b"//fftest_multi_proc\n")
@@ -570,7 +565,7 @@ def test_ffpuppet_27(tmp_path):
 
 @pytest.mark.skipif(platform.system() != "Linux" or call(["which", "rr"]),
                     reason="rr not installed")
-def test_ffpuppet_28(tmp_path):
+def test_ffpuppet_27(tmp_path):
     """test launching with rr"""
     # NOTE: this can hang if ptrace is blocked by seccomp
     if call(["rr", "record", "echo"]) != 0:
@@ -589,7 +584,7 @@ def test_ffpuppet_28(tmp_path):
         assert b"rr record" in log_data
         assert b"[ffpuppet] Reason code:" in log_data
 
-def test_ffpuppet_29(tmp_path):
+def test_ffpuppet_28(tmp_path):
     """test rmtree error handler"""
     # normal profile creation
     # - just create a puppet, write a readonly file in its profile, then call close()
@@ -615,7 +610,7 @@ def test_ffpuppet_29(tmp_path):
         ffp.close()
         assert not os.path.isdir(prof_path)
 
-def test_ffpuppet_30(tmp_path):
+def test_ffpuppet_29(tmp_path):
     """test using a readonly prefs.js and extension"""
     prefs = (tmp_path / "prefs.js")
     prefs.touch()
@@ -629,7 +624,7 @@ def test_ffpuppet_30(tmp_path):
         ffp.close()
         assert not os.path.isdir(prof_path)
 
-def test_ffpuppet_31(mocker, tmp_path):
+def test_ffpuppet_30(mocker, tmp_path):
     """test _crashreports()"""
     class StubbedLaunch(FFPuppet):
         def __init__(self):
@@ -683,7 +678,7 @@ def test_ffpuppet_31(mocker, tmp_path):
         assert len(list(ffp._crashreports())) == 4
         assert not ffp._logs.watching
 
-def test_ffpuppet_32(tmp_path):
+def test_ffpuppet_31(tmp_path):
     """test build_launch_cmd()"""
     with FFPuppet() as ffp:
         cmd = ffp.build_launch_cmd("bin_path", ["test"])
@@ -715,7 +710,7 @@ def test_ffpuppet_32(tmp_path):
         finally:
             os.environ.pop("VALGRIND_SUP_PATH")
 
-def test_ffpuppet_33():
+def test_ffpuppet_32():
     """test cpu_usage()"""
     with FFPuppet() as ffp:
         assert not any(ffp.cpu_usage())
@@ -730,7 +725,7 @@ def test_ffpuppet_33():
         ffp.close()
         assert ffp.wait(timeout=10)
 
-def test_ffpuppet_34(mocker):
+def test_ffpuppet_33(mocker):
     """test _dbg_sanity_check()"""
     fake_plat = mocker.patch("ffpuppet.core.platform.system", autospec=True)
     fake_chkout = mocker.patch("ffpuppet.core.subprocess.check_output", autospec=True)
@@ -788,7 +783,7 @@ def test_ffpuppet_34(mocker):
     with pytest.raises(EnvironmentError, match="Valgrind is only supported on Linux"):
         FFPuppet._dbg_sanity_check(FFPuppet.DBG_VALGRIND)
 
-def test_ffpuppet_35(mocker):
+def test_ffpuppet_34(mocker):
     """test _terminate()"""
     procs = [
         mocker.Mock(spec=Process, pid=123),
@@ -817,7 +812,7 @@ def test_ffpuppet_35(mocker):
     with pytest.raises(TerminateError):
         FFPuppet._terminate(1234)
 
-def test_ffpuppet_36(mocker, tmp_path):
+def test_ffpuppet_35(mocker, tmp_path):
     """test FFPuppet.close() setting reason"""
     class StubbedProc(FFPuppet):
         def __init__(self):
