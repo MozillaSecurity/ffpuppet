@@ -94,21 +94,12 @@ def check_prefs(prof_prefs, input_prefs):
     @rtype: bool
     @return: True if all prefs in input_prefs are merged otherwise False
     """
-
-    if not os.path.isfile(input_prefs):
-        raise IOError("Cannot find %r" % input_prefs)
-    if not os.path.isfile(prof_prefs):
-        raise IOError("Cannot find %r" % prof_prefs)
-
     with open(prof_prefs, "r") as p_fp, open(input_prefs, "r") as i_fp:
         p_prefs = {pref.split(",")[0] for pref in p_fp if pref.startswith("user_pref(")}
         i_prefs = {pref.split(",")[0] for pref in i_fp if pref.startswith("user_pref(")}
-
     missing_prefs = i_prefs - p_prefs
-    log.debug(
-        "prefs not set %r",
-        ", ".join([m_pref.lstrip("user_pref(") for m_pref in missing_prefs]))
-
+    for missing in missing_prefs:
+        log.debug("pref not set %r", missing)
     return not missing_prefs
 
 
