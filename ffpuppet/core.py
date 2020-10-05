@@ -201,44 +201,52 @@ class FFPuppet(object):  # pylint: disable=too-many-instance-attributes
 
     def _crashreports(self, skip_md=False):
         # check for *San and Valgrind logs
-        if os.path.isdir(self._logs.working_path):
-            for fname in os.listdir(self._logs.working_path):
-                if fname.startswith(self._logs.PREFIX_SAN):
-                    full_name = os.path.join(self._logs.working_path, fname)
-                    size = self._logs.watching.get(full_name)
-                    # skip previously scanned files that have not been updated
-                    if size is not None and size == os.stat(full_name).st_size:
-                        continue
-                    # add logs with only benign warnings to watch list
-                    try:
-                        # WARNING: cannot open files that are already open on Windows
-                        with open(full_name, "rb") as log_fp:
-                            for line in log_fp:
-                                line = line.rstrip()
-                                if not line:
-                                    continue
-                                # frequently emitted by TSan
-                                if line.endswith(b"==WARNING: Symbolizer buffer too small"):
-                                    continue
-                                break
-                            else:
-                                self._logs.watching[full_name] = log_fp.tell()
+        assert self._logs is not None
+        try:
+            files = os.listdir(self._logs.working_path)
+        except OSError:  # pragma: no cover
+            files = tuple()
+        for fname in files:
+            if fname.startswith(self._logs.PREFIX_SAN):
+                full_name = os.path.join(self._logs.working_path, fname)
+                size = self._logs.watching.get(full_name)
+                # skip previously scanned files that have not been updated
+                if size is not None and size == os.stat(full_name).st_size:
+                    continue
+                # add logs with only benign warnings to watch list
+                try:
+                    # WARNING: cannot open files that are already open on Windows
+                    with open(full_name, "rb") as log_fp:
+                        for line in log_fp:
+                            line = line.rstrip()
+                            if not line:
                                 continue
-                    except OSError:
-                        log.debug("failed to scan log %r", full_name)
+                            # frequently emitted by TSan
+                            if line.endswith(b"==WARNING: Symbolizer buffer too small"):
+                                continue
+                            break
+                        else:
+                            self._logs.watching[full_name] = log_fp.tell()
+                            continue
+                except OSError:
+                    log.debug("failed to scan log %r", full_name)
+                yield full_name
+            elif self._dbg == self.DBG_VALGRIND and fname.startswith(self._logs.PREFIX_VALGRIND):
+                full_name = os.path.join(self._logs.working_path, fname)
+                if os.stat(full_name).st_size:
                     yield full_name
-                elif self._dbg == self.DBG_VALGRIND and fname.startswith(self._logs.PREFIX_VALGRIND):
-                    full_name = os.path.join(self._logs.working_path, fname)
-                    if os.stat(full_name).st_size:
-                        yield full_name
 
         # check for minidumps
         if not skip_md:
+            assert self.profile is not None
             md_path = os.path.join(self.profile, "minidumps")
-            if os.path.isdir(md_path):
-                for fname in os.listdir(md_path):
-                    if ".dmp" in fname:
-                        yield os.path.join(md_path, fname)
+            try:
+                files = os.listdir(md_path)
+            except OSError:
+                files = tuple()
+            for fname in files:
+                if ".dmp" in fname:
+                    yield os.path.join(md_path, fname)
 
 
     def log_length(self, log_id):
