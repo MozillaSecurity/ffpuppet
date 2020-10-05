@@ -9,7 +9,7 @@ import platform
 import re
 import shutil
 import stat
-import tempfile
+from tempfile import mkdtemp
 import time
 
 from xml.etree import ElementTree
@@ -187,7 +187,7 @@ def configure_sanitizers(env, target_dir, log_path):
         log.warning("Invalid ASAN_SYMBOLIZER_PATH (%s)", env["ASAN_SYMBOLIZER_PATH"])
 
 
-def create_profile(extension=None, prefs_js=None, template=None, tmpdir=None):
+def create_profile(extension=None, prefs_js=None, template=None):
     """
     Create a profile to be used with Firefox
 
@@ -204,32 +204,27 @@ def create_profile(extension=None, prefs_js=None, template=None, tmpdir=None):
     @return: Path to directory to be used as a profile
     """
 
-    profile = tempfile.mkdtemp(prefix="ffprof_", dir=tmpdir)
-    log.debug("profile directory: %r", profile)
-
-    if template is not None:
-        log.debug("using profile template: %r", template)
-        shutil.rmtree(profile) # reuse the directory name
-        if not os.path.isdir(template):
-            raise IOError("Cannot find template profile: %r" % template)
-        shutil.copytree(template, profile)
-        invalid_prefs = os.path.join(profile, "Invalidprefs.js")
-        # if Invalidprefs.js was copied from the template profile remove it
-        if os.path.isfile(invalid_prefs):
-            os.remove(invalid_prefs)
-
-    if prefs_js is not None:
-        log.debug("using prefs.js: %r", prefs_js)
-        if not os.path.isfile(prefs_js):
-            shutil.rmtree(profile, True) # clean up on failure
-            raise IOError("prefs.js file does not exist: %r" % prefs_js)
-        shutil.copyfile(prefs_js, os.path.join(profile, "prefs.js"))
-
-        # times.json only needs to be created when using a custom pref.js
-        times_json = os.path.join(profile, "times.json")
-        if not os.path.isfile(times_json):
-            with open(times_json, "w") as times_fp:
-                times_fp.write('{"created":%d}' % (int(time.time()) * 1000))
+    profile = mkdtemp(prefix="ffprof_")
+    try:
+        if template is not None:
+            log.debug("using profile template: %r", template)
+            shutil.rmtree(profile)
+            shutil.copytree(template, profile)
+            invalid_prefs = os.path.join(profile, "Invalidprefs.js")
+            # if Invalidprefs.js was copied from the template profile remove it
+            if os.path.isfile(invalid_prefs):
+                os.remove(invalid_prefs)
+        if prefs_js is not None:
+            log.debug("using prefs.js: %r", prefs_js)
+            shutil.copyfile(prefs_js, os.path.join(profile, "prefs.js"))
+            # times.json only needs to be created when using a custom prefs.js
+            times_json = os.path.join(profile, "times.json")
+            if not os.path.isfile(times_json):
+                with open(times_json, "w") as times_fp:
+                    times_fp.write('{"created":%d}' % (int(time.time()) * 1000))
+    except OSError:
+        shutil.rmtree(profile)
+        raise
 
     # extension support
     try:
@@ -275,7 +270,8 @@ def create_profile(extension=None, prefs_js=None, template=None, tmpdir=None):
             else:
                 raise RuntimeError("Unknown extension: %r" % ext)
     except:
-        shutil.rmtree(profile, True) # cleanup on failure
+        # cleanup on failure
+        shutil.rmtree(profile, True)
         raise
     return profile
 

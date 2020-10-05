@@ -163,7 +163,7 @@ def parse_args(argv=None):
         parser.error("--memory must be >= 0")
     args.memory *= 1048576
     if args.prefs is not None and not os.path.isfile(args.prefs):
-        parser.error("file not found %r" % args.prefs)
+        parser.error("Invalid prefs.js file %r" % args.prefs)
     # NOTE: mutually_exclusive_group will fail if no arguments are added
     # so sum() enabled debuggers instead
     use_gdb = getattr(args, "gdb", False)
