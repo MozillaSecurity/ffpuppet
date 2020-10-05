@@ -11,7 +11,7 @@ import platform
 import shutil
 import socket
 import stat
-from subprocess import call, check_output
+from subprocess import call, check_output, Popen
 import threading
 import time
 
@@ -816,3 +816,75 @@ def test_ffpuppet_35(mocker):
     fake_wait_procs.side_effect = None
     with pytest.raises(TerminateError):
         FFPuppet._terminate(1234)
+
+def test_ffpuppet_36(mocker, tmp_path):
+    """test FFPuppet.close() setting reason"""
+    class StubbedProc(FFPuppet):
+        def __init__(self):
+            super().__init__()
+        def launch(self):  # pylint: disable=arguments-differ
+            self.reason = None
+            self._last_bin_path = str(tmp_path)
+            self._logs.reset()
+            self._proc = mocker.Mock(spec=Popen, pid=123)
+            self._proc.poll.return_value = None
+            profile = (tmp_path / "profile")
+            profile.mkdir(exist_ok=True)
+            self.profile = str(profile)
+    mocker.patch("ffpuppet.core.FFPuppet._terminate", autospec=True)
+    fake_reports = mocker.patch("ffpuppet.core.FFPuppet._crashreports", autospec=True)
+    fake_reports.return_value = ()
+    fake_wait_files = mocker.patch("ffpuppet.core.wait_on_files", autospec=True)
+    fake_wait_files.return_value = True
+    # process exited - no crash
+    with StubbedProc() as ffp:
+        ffp.launch()
+        ffp._proc.poll.return_value = 0
+        ffp.close()
+        assert ffp._proc is None
+        assert ffp._logs.closed
+        assert ffp.reason == FFPuppet.RC_EXITED
+    # process exited - exit code - crash
+    with StubbedProc() as ffp:
+        ffp.launch()
+        ffp._proc.poll.return_value = -11
+        ffp.close()
+        assert ffp._proc is None
+        assert ffp._logs.closed
+        assert ffp.reason == FFPuppet.RC_ALERT
+    # process running - no crash reports
+    with StubbedProc() as ffp:
+        ffp.launch()
+        ffp._proc.poll.return_value = None
+        ffp.close()
+        assert ffp._proc is None
+        assert ffp._logs.closed
+        assert ffp.reason == FFPuppet.RC_CLOSED
+    # process running - with crash reports, hang waiting to close
+    (tmp_path / "fake_report1").touch()
+    with StubbedProc() as ffp:
+        ffp.launch()
+        ffp._proc.poll.return_value = None
+        fake_reports.return_value = (str(tmp_path / "fake_report1"),)
+        fake_wait_files.return_value = False
+        ffp.close()
+        assert ffp._proc is None
+        assert ffp._logs.closed
+        assert ffp.reason == FFPuppet.RC_ALERT
+    # process running - with crash reports, multiple logs
+    (tmp_path / "fake_report2").touch()
+    with StubbedProc() as ffp:
+        ffp.launch()
+        ffp._proc.poll.return_value = None
+        fake_reports.return_value = None
+        fake_reports.side_effect = (
+            (str(tmp_path / "fake_report1"),),
+            (str(tmp_path / "fake_report1"), str(tmp_path / "fake_report2"),),
+            (str(tmp_path / "fake_report1"), str(tmp_path / "fake_report2"),),
+            (str(tmp_path / "fake_report1"), str(tmp_path / "fake_report2"),),
+            (str(tmp_path / "fake_report1"), str(tmp_path / "fake_report2"),))
+        fake_wait_files.return_value = True
+        ffp.close()
+        assert ffp._proc is None
+        assert ffp._logs.closed
+        assert ffp.reason == FFPuppet.RC_ALERT
