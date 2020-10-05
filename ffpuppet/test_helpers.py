@@ -17,7 +17,6 @@ from .helpers import append_prefs, create_profile, check_prefs, configure_saniti
 
 
 def test_helpers_01(mocker, tmp_path):
-
     """test create_profile()"""
     fake_mkdtemp = mocker.patch("ffpuppet.helpers.mkdtemp", autospec=True)
     # try creating a profile from scratch, does nothing but create a directory to be populated
@@ -38,15 +37,17 @@ def test_helpers_01(mocker, tmp_path):
     assert "prefs.js" in contents
     assert "times.json" in contents
     assert "Invalidprefs.js" not in contents
+    # cleanup on failure
+    (tmp_path / "dst3").mkdir()
+    fake_mkdtemp.return_value = str(tmp_path / "dst3")
+    with pytest.raises(OSError):
+        create_profile(prefs_js="fake")
+    assert not (tmp_path / "dst3").is_dir()
 
 def test_helpers_02(tmp_path):
     """test check_prefs()"""
     dummy_prefs = (tmp_path / "dummy.js")
     dummy_prefs.touch()
-    with pytest.raises(IOError):
-        check_prefs(str(dummy_prefs), "/missing/file")
-    with pytest.raises(IOError):
-        check_prefs("/missing/file", str(dummy_prefs))
     with dummy_prefs.open("wb") as prefs_fp:
         prefs_fp.write(b"// comment line\n")
         prefs_fp.write(b"# comment line\n")
