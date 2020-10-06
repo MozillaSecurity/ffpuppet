@@ -296,7 +296,7 @@ def get_processes(pid, recursive=True):
     return procs
 
 
-def onerror(func, path, _exc_info):
+def onerror(func, path, _exc_info):  # pragma: no cover
     """
     Error handler for `shutil.rmtree`.
 

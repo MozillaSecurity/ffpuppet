@@ -7,13 +7,14 @@
 import multiprocessing
 import os
 import shutil
+import stat
 import sys
 import tempfile
 
 import pytest
 
-from .helpers import append_prefs, create_profile, check_prefs, configure_sanitizers, \
-    get_processes, prepare_environment, SanitizerConfig, wait_on_files
+from .helpers import append_prefs, create_profile, check_prefs, configure_sanitizers
+from .helpers import get_processes, onerror, prepare_environment, SanitizerConfig, wait_on_files
 
 
 def test_helpers_01(mocker, tmp_path):
@@ -322,3 +323,12 @@ def test_helpers_09(tmp_path):
     assert "user_pref('pre.existing', 1);" in data
     assert "user_pref('test.enabled', true);" in data
     assert "user_pref('foo', 'a1b2c3');" in data
+
+def test_helpers_10(tmp_path):
+    """test onerror()"""
+    (tmp_path / "target").mkdir()
+    (tmp_path / "target" / "dummy").touch()
+    os.chmod(str(tmp_path / "target"), stat.S_IRUSR)
+    with pytest.raises(OSError):
+        shutil.rmtree(str(tmp_path / "target"))
+    shutil.rmtree(str(tmp_path / "target"), onerror)
