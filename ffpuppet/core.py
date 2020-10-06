@@ -2,18 +2,23 @@
 # License, v. 2.0. If a copy of the MPL was not distributed with this
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
-import logging
-import os
-import platform
-import re
-import shutil
-import subprocess
-import sys
+from logging import getLogger
+from os import access, getenv, listdir, stat, X_OK
+from os.path import abspath, basename, dirname, isfile, join as pathjoin, realpath
+from platform import system
+from re import compile as re_compile, match as re_match, IGNORECASE
+from shutil import rmtree
+from subprocess import check_output, Popen
+try:
+    from subprocess import CREATE_NEW_PROCESS_GROUP
+except ImportError:
+    pass
+from sys import executable
 from urllib.request import pathname2url
 
-import psutil
+from psutil import AccessDenied, NoSuchProcess, wait_procs
 try:
-    import xvfbwrapper
+    from xvfbwrapper import Xvfb
 except ImportError:
     pass
 
@@ -26,7 +31,7 @@ from .helpers import (
 from .minidump_parser import process_minidumps
 from .puppet_logger import PuppetLogger
 
-log = logging.getLogger(__name__)  # pylint: disable=invalid-name
+log = getLogger(__name__)  # pylint: disable=invalid-name
 
 __author__ = "Tyson Smith"
 __all__ = ("FFPuppet",)
@@ -67,10 +72,10 @@ class FFPuppet(object):  # pylint: disable=too-many-instance-attributes
         self.reason = self.RC_CLOSED  # why the target process was terminated
 
         if use_xvfb:
-            if not platform.system().lower().startswith("linux"):
+            if not system().startswith("Linux"):
                 raise EnvironmentError("Xvfb is only supported on Linux")
             try:
-                self._xvfb = xvfbwrapper.Xvfb(width=1280, height=1024)
+                self._xvfb = Xvfb(width=1280, height=1024)
             except NameError:
                 raise EnvironmentError("Please install xvfbwrapper") from None
             self._xvfb.start()
@@ -87,28 +92,28 @@ class FFPuppet(object):  # pylint: disable=too-many-instance-attributes
     @classmethod
     def _dbg_sanity_check(cls, dbg_id):
         # sanity check debuggers
-        plat = platform.system().lower()
+        plat = system()
         if dbg_id == cls.DBG_GDB:
-            if not plat.startswith("linux"):
+            if not plat.startswith("Linux"):
                 raise EnvironmentError("GDB is only supported on Linux")
             try:
-                subprocess.check_output(["gdb", "--version"])
+                check_output(["gdb", "--version"])
             except OSError:
                 raise EnvironmentError("Please install GDB") from None
         elif dbg_id == cls.DBG_RR:
-            if not plat.startswith("linux"):
+            if not plat.startswith("Linux"):
                 raise EnvironmentError("rr is only supported on Linux")
             try:
-                subprocess.check_output(["rr", "--version"])
+                check_output(["rr", "--version"])
             except OSError:
                 raise EnvironmentError("Please install rr") from None
         elif dbg_id == cls.DBG_VALGRIND:
-            if not plat.startswith("linux"):
+            if not plat.startswith("Linux"):
                 raise EnvironmentError("Valgrind is only supported on Linux")
             try:
-                match = re.match(
+                match = re_match(
                     b"valgrind-(?P<ver>\\d+\\.\\d+)",
-                    subprocess.check_output(["valgrind", "--version"]))
+                    check_output(["valgrind", "--version"]))
             except OSError:
                 raise EnvironmentError("Please install Valgrind") from None
             if not match or float(match.group("ver")) < cls.VALGRIND_MIN_VERSION:
@@ -126,7 +131,7 @@ class FFPuppet(object):  # pylint: disable=too-many-instance-attributes
         @return: None
         """
         assert isinstance(token, str)
-        self._abort_tokens.add(re.compile(token))
+        self._abort_tokens.add(re_compile(token))
 
 
     def available_logs(self):
@@ -170,7 +175,7 @@ class FFPuppet(object):  # pylint: disable=too-many-instance-attributes
             for proc in get_processes(pid):
                 try:
                     yield proc.pid, proc.cpu_percent(interval=0.1)
-                except (psutil.AccessDenied, psutil.NoSuchProcess):  # pragma: no cover
+                except (AccessDenied, NoSuchProcess):  # pragma: no cover
                     continue
 
 
@@ -203,15 +208,15 @@ class FFPuppet(object):  # pylint: disable=too-many-instance-attributes
         # check for *San and Valgrind logs
         assert self._logs is not None
         try:
-            files = os.listdir(self._logs.working_path)
+            files = listdir(self._logs.working_path)
         except OSError:  # pragma: no cover
             files = tuple()
         for fname in files:
             if fname.startswith(self._logs.PREFIX_SAN):
-                full_name = os.path.join(self._logs.working_path, fname)
+                full_name = pathjoin(self._logs.working_path, fname)
                 size = self._logs.watching.get(full_name)
                 # skip previously scanned files that have not been updated
-                if size is not None and size == os.stat(full_name).st_size:
+                if size is not None and size == stat(full_name).st_size:
                     continue
                 # add logs with only benign warnings to watch list
                 try:
@@ -232,21 +237,21 @@ class FFPuppet(object):  # pylint: disable=too-many-instance-attributes
                     log.debug("failed to scan log %r", full_name)
                 yield full_name
             elif self._dbg == self.DBG_VALGRIND and fname.startswith(self._logs.PREFIX_VALGRIND):
-                full_name = os.path.join(self._logs.working_path, fname)
-                if os.stat(full_name).st_size:
+                full_name = pathjoin(self._logs.working_path, fname)
+                if stat(full_name).st_size:
                     yield full_name
 
         # check for minidumps
         if not skip_md:
             assert self.profile is not None
-            md_path = os.path.join(self.profile, "minidumps")
+            md_path = pathjoin(self.profile, "minidumps")
             try:
-                files = os.listdir(md_path)
+                files = listdir(md_path)
             except OSError:
                 files = tuple()
             for fname in files:
                 if ".dmp" in fname:
-                    yield os.path.join(md_path, fname)
+                    yield pathjoin(md_path, fname)
 
 
     def log_length(self, log_id):
@@ -332,9 +337,9 @@ class FFPuppet(object):  # pylint: disable=too-many-instance-attributes
             for proc in procs:
                 try:
                     proc.kill() if mode > 0 else proc.terminate()
-                except (psutil.AccessDenied, psutil.NoSuchProcess):  # pragma: no cover
+                except (AccessDenied, NoSuchProcess):  # pragma: no cover
                     pass
-            procs = psutil.wait_procs(procs, timeout=kill_delay)[1]
+            procs = wait_procs(procs, timeout=kill_delay)[1]
             if not procs:
                 log.debug("_terminate() was successful")
                 break
@@ -344,7 +349,7 @@ class FFPuppet(object):  # pylint: disable=too-many-instance-attributes
             for proc in procs:
                 try:
                     log.warning("Failed to terminate process %d (%s)", proc.pid, proc.name())
-                except (psutil.AccessDenied, psutil.NoSuchProcess):  # pragma: no cover
+                except (AccessDenied, NoSuchProcess):  # pragma: no cover
                     pass
             raise TerminateError("Failed to terminate browser")
 
@@ -420,11 +425,11 @@ class FFPuppet(object):  # pylint: disable=too-many-instance-attributes
                         check.dump_log(dst_fp=self._logs.add_log("ffp_worker_%s" % check.name))
                 # collect logs (excluding minidumps)
                 for fname in self._crashreports(skip_md=True):
-                    self._logs.add_log(os.path.basename(fname), open(fname, "rb"))
+                    self._logs.add_log(basename(fname), open(fname, "rb"))
                 # check for minidumps in the profile and dump them if possible
                 process_minidumps(
-                    os.path.join(self.profile, "minidumps"),
-                    os.path.join(self._last_bin_path, "symbols"),
+                    pathjoin(self.profile, "minidumps"),
+                    pathjoin(self._last_bin_path, "symbols"),
                     self._logs.add_log)
                 if self._logs.get_fp("stderr"):
                     self._logs.get_fp("stderr").write(
@@ -436,7 +441,7 @@ class FFPuppet(object):  # pylint: disable=too-many-instance-attributes
             self._checks = list()
             # remove temporary profile directory if necessary
             try:
-                shutil.rmtree(self.profile, onerror=onerror)
+                rmtree(self.profile, onerror=onerror)
             except OSError:  # pragma: no cover
                 log.error("Failed to remove profile %r", self.profile)
                 if not force_close:
@@ -486,16 +491,13 @@ class FFPuppet(object):  # pylint: disable=too-many-instance-attributes
         @rtype: list
         @return: List of arguments that make up the launch command
         """
-
         assert isinstance(bin_path, str), "bin_path must be 'str'"
 
         # if a python script is passed use 'sys.executable' as the binary
         # this is used by the test framework
+        cmd = list()
         if bin_path.lower().endswith(".py"):
-            cmd = [sys.executable]
-        else:
-            cmd = []
-
+            cmd.append(executable)
         cmd += [bin_path, "-no-remote"]
         if self.profile is not None:
             cmd += ["-profile", self.profile]
@@ -516,7 +518,7 @@ class FFPuppet(object):  # pylint: disable=too-many-instance-attributes
                 "--fair-sched=try",
                 "--gen-suppressions=all",
                 "--leak-check=no",
-                "--log-file=%s.%%p" % os.path.join(self._logs.working_path, self._logs.PREFIX_VALGRIND),
+                "--log-file=%s.%%p" % pathjoin(self._logs.working_path, self._logs.PREFIX_VALGRIND),
                 "--read-inline-info=no",
                 "--show-mismatched-frees=no",
                 "--show-possibly-lost=no",
@@ -526,9 +528,9 @@ class FFPuppet(object):  # pylint: disable=too-many-instance-attributes
                 "--track-origins=yes",
                 "--vex-iropt-register-updates=allregs-at-mem-access"]
 
-            sup_file = os.environ.get("VALGRIND_SUP_PATH", None)
+            sup_file = getenv("VALGRIND_SUP_PATH")
             if sup_file:
-                if not os.path.isfile(sup_file):
+                if not isfile(sup_file):
                     raise IOError("Missing Valgrind suppressions %r" % sup_file)
                 log.debug("using Valgrind suppressions: %r", sup_file)
                 valgrind_cmd.append("--suppressions=%s" % sup_file)
@@ -539,7 +541,7 @@ class FFPuppet(object):  # pylint: disable=too-many-instance-attributes
             cmd = [
                 "gdb",
                 "-nx",
-                "-x", os.path.abspath(os.path.join(os.path.dirname(__file__), "cmds.gdb")),
+                "-x", abspath(pathjoin(dirname(__file__), "cmds.gdb")),
                 "-ex", "run",
                 "-ex", "print $_siginfo",
                 "-ex", "info locals",
@@ -612,17 +614,17 @@ class FFPuppet(object):  # pylint: disable=too-many-instance-attributes
         if self._proc is not None:
             raise LaunchError("Process is already running")
 
-        bin_path = os.path.abspath(bin_path)
-        if not os.path.isfile(bin_path) or not os.access(bin_path, os.X_OK):
+        bin_path = abspath(bin_path)
+        if not isfile(bin_path) or not access(bin_path, X_OK):
             raise IOError("%s is not an executable" % bin_path)
-        self._last_bin_path = os.path.dirname(bin_path)  # need the path for minidump_stackwalk
+        self._last_bin_path = dirname(bin_path)  # need the path for minidump_stackwalk
 
         log.debug("requested location: %r", location)
         if location is not None:
-            if os.path.isfile(location):
+            if isfile(location):
                 location = "///".join(
-                    ["file:", pathname2url(os.path.realpath(location)).lstrip("/")])
-            elif re.match(r"http(s)?://", location, re.IGNORECASE) is None:
+                    ["file:", pathname2url(realpath(location)).lstrip("/")])
+            elif re_match(r"http(s)?://", location, IGNORECASE) is None:
                 raise IOError("Cannot find %r" % location)
 
         # create and modify a profile
@@ -647,20 +649,18 @@ class FFPuppet(object):  # pylint: disable=too-many-instance-attributes
             if self._dbg in (self.DBG_RR, self.DBG_VALGRIND):
                 # when the browser is running slowly socket reads can fail if this is > 0
                 prefs["network.http.speculative-parallel-limit"] = "0"
-
             append_prefs(self.profile, prefs)
 
             launch_args = [bootstrapper.location]
-            is_windows = platform.system() == "Windows"
+            is_windows = system().startswith("Windows")
             if is_windows:
                 # disable launcher process
                 launch_args.append("-no-deelevate")
                 launch_args.append("-wait-for-browser")
+            cmd = self.build_launch_cmd(bin_path, additional_args=launch_args)
 
             # clean up existing log files
             self._logs.reset()
-
-            cmd = self.build_launch_cmd(bin_path, additional_args=launch_args)
 
             if self._dbg == self.DBG_RR:
                 if env_mod is None:
@@ -681,13 +681,13 @@ class FFPuppet(object):  # pylint: disable=too-many-instance-attributes
             stderr.write(" ".join(cmd).encode("utf-8"))
             stderr.write(b"\n\n")
             stderr.flush()
-            sanitizer_logs = os.path.join(self._logs.working_path, self._logs.PREFIX_SAN)
+            sanitizer_logs = pathjoin(self._logs.working_path, self._logs.PREFIX_SAN)
             # launch the browser
             log.debug("launch command: %r", " ".join(cmd))
-            self._proc = subprocess.Popen(
+            self._proc = Popen(
                 cmd,
                 bufsize=0,  # unbuffered (for log scanners)
-                creationflags=subprocess.CREATE_NEW_PROCESS_GROUP if is_windows else 0,
+                creationflags=CREATE_NEW_PROCESS_GROUP if is_windows else 0,
                 env=prepare_environment(self._last_bin_path, sanitizer_logs, env_mod=env_mod),
                 shell=False,
                 stderr=stderr,
@@ -696,7 +696,7 @@ class FFPuppet(object):  # pylint: disable=too-many-instance-attributes
             bootstrapper.wait(self.is_healthy, timeout=launch_timeout, url=location)
         finally:
             bootstrapper.close()
-            if prefs_js is not None and os.path.isfile(os.path.join(self.profile, "Invalidprefs.js")):
+            if prefs_js is not None and isfile(pathjoin(self.profile, "Invalidprefs.js")):
                 raise InvalidPrefs("%r is invalid" % prefs_js)
 
         if log_limit:
@@ -742,7 +742,7 @@ class FFPuppet(object):  # pylint: disable=too-many-instance-attributes
         """
         assert timeout is None or timeout >= 0
         pid = self.get_pid()
-        if pid is None or not psutil.wait_procs(get_processes(pid), timeout=timeout)[1]:
+        if pid is None or not wait_procs(get_processes(pid), timeout=timeout)[1]:
             return True
         log.debug("wait(timeout=%0.2f) timed out", timeout)
         return False
