@@ -825,7 +825,9 @@ def test_ffpuppet_35(mocker, tmp_path):
             profile = (tmp_path / "profile")
             profile.mkdir(exist_ok=True)
             self.profile = str(profile)
-    mocker.patch("ffpuppet.core.FFPuppet._terminate", autospec=True)
+        @staticmethod
+        def _terminate(pid, _=None):
+            assert isinstance(pid, int)
     fake_reports = mocker.patch("ffpuppet.core.FFPuppet._crashreports", autospec=True)
     fake_reports.return_value = ()
     fake_wait_files = mocker.patch("ffpuppet.core.wait_on_files", autospec=True)
