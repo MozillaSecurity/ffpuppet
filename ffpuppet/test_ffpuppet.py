@@ -505,9 +505,9 @@ def test_ffpuppet_24(mocker, tmp_path):
     (profile / "minidumps").mkdir()
     with FFPuppet(use_profile=str(profile)) as ffp:
         ffp.launch(TESTFF_BIN)
-        ffp._last_bin_path = ffp.profile
+        ffp._bin_path = ffp.profile
         # create "test.dmp" files
-        md_path = os.path.join(ffp._last_bin_path, "minidumps")
+        md_path = os.path.join(ffp._bin_path, "minidumps")
         with open(os.path.join(md_path, "test1.dmp"), "w") as out_fp:
             out_fp.write("1a\n1b")
         with open(os.path.join(md_path, "test2.dmp"), "w") as out_fp:
@@ -818,7 +818,7 @@ def test_ffpuppet_35(mocker, tmp_path):
             super().__init__()
         def launch(self):  # pylint: disable=arguments-differ
             self.reason = None
-            self._last_bin_path = str(tmp_path)
+            self._bin_path = str(tmp_path)
             self._logs.reset()
             self._proc = mocker.Mock(spec=Popen, pid=123)
             self._proc.poll.return_value = None
