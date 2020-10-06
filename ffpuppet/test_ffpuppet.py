@@ -726,10 +726,10 @@ def test_ffpuppet_32():
 
 def test_ffpuppet_33(mocker):
     """test _dbg_sanity_check()"""
-    fake_plat = mocker.patch("ffpuppet.core.platform.system", autospec=True)
-    fake_chkout = mocker.patch("ffpuppet.core.subprocess.check_output", autospec=True)
+    fake_system = mocker.patch("ffpuppet.core.system", autospec=True)
+    fake_chkout = mocker.patch("ffpuppet.core.check_output", autospec=True)
     # gdb - success
-    fake_plat.return_value = "Linux"
+    fake_system.return_value = "Linux"
     FFPuppet._dbg_sanity_check(FFPuppet.DBG_GDB)
     assert fake_chkout.call_count == 1
     fake_chkout.reset_mock()
@@ -740,11 +740,11 @@ def test_ffpuppet_33(mocker):
     fake_chkout.reset_mock()
     fake_chkout.side_effect = None
     # gdb - unsupported OS
-    fake_plat.return_value = "Windows"
+    fake_system.return_value = "Windows"
     with pytest.raises(EnvironmentError, match="GDB is only supported on Linux"):
         FFPuppet._dbg_sanity_check(FFPuppet.DBG_GDB)
     # rr - success
-    fake_plat.return_value = "Linux"
+    fake_system.return_value = "Linux"
     FFPuppet._dbg_sanity_check(FFPuppet.DBG_RR)
     assert fake_chkout.call_count == 1
     fake_chkout.reset_mock()
@@ -755,17 +755,17 @@ def test_ffpuppet_33(mocker):
     fake_chkout.reset_mock()
     fake_chkout.side_effect = None
     # rr - unsupported OS
-    fake_plat.return_value = "Windows"
+    fake_system.return_value = "Windows"
     with pytest.raises(EnvironmentError, match="rr is only supported on Linux"):
         FFPuppet._dbg_sanity_check(FFPuppet.DBG_RR)
     # valgrind - success
-    fake_plat.return_value = "Linux"
+    fake_system.return_value = "Linux"
     fake_chkout.return_value = b"valgrind-%0.2f" % (FFPuppet.VALGRIND_MIN_VERSION)
     FFPuppet._dbg_sanity_check(FFPuppet.DBG_VALGRIND)
     assert fake_chkout.call_count == 1
     fake_chkout.reset_mock()
     # valgrind - old version
-    fake_plat.return_value = "Linux"
+    fake_system.return_value = "Linux"
     fake_chkout.return_value = b"valgrind-0.1"
     with pytest.raises(EnvironmentError, match=r"Valgrind >= \d+\.\d+ is required"):
         FFPuppet._dbg_sanity_check(FFPuppet.DBG_VALGRIND)
@@ -778,7 +778,7 @@ def test_ffpuppet_33(mocker):
     fake_chkout.reset_mock()
     fake_chkout.side_effect = None
     # valgrind - unsupported OS
-    fake_plat.return_value = "Windows"
+    fake_system.return_value = "Windows"
     with pytest.raises(EnvironmentError, match="Valgrind is only supported on Linux"):
         FFPuppet._dbg_sanity_check(FFPuppet.DBG_VALGRIND)
 
@@ -789,7 +789,7 @@ def test_ffpuppet_34(mocker):
         mocker.Mock(spec=Process, pid=124)
     ]
     mocker.patch("ffpuppet.core.get_processes", autospec=True, return_value=procs)
-    fake_wait_procs = mocker.patch("ffpuppet.core.psutil.wait_procs", autospec=True)
+    fake_wait_procs = mocker.patch("ffpuppet.core.wait_procs", autospec=True)
     # successful call to terminate
     fake_wait_procs.return_value = ([], [])
     FFPuppet._terminate(1234)
