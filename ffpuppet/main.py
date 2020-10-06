@@ -2,20 +2,22 @@
 # License, v. 2.0. If a copy of the MPL was not distributed with this
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
-import argparse
-import logging
-import os
-import shutil
-import sys
-import tempfile
-import time
+from argparse import ArgumentParser
+from logging import basicConfig, getLogger, DEBUG, ERROR, INFO, WARNING
+from os import listdir, stat
+from os.path import abspath, exists, isdir, isfile, join as pathjoin
+from platform import system
+from shutil import rmtree
+from tempfile import mkdtemp
+from time import localtime, sleep, strftime
 
 from .core import FFPuppet
 from .helpers import check_prefs
 
-log = logging.getLogger(__name__)  # pylint: disable=invalid-name
+log = getLogger(__name__)  # pylint: disable=invalid-name
 
 __author__ = "Tyson Smith"
+
 
 def dump_to_console(log_dir, log_quota=0x8000):
     """
@@ -31,7 +33,7 @@ def dump_to_console(log_dir, log_quota=0x8000):
     @return: Merged log data to be displayed on the console
     """
 
-    logs = list(x for x in os.listdir(log_dir) if os.path.isfile(os.path.join(log_dir, x)))
+    logs = list(x for x in listdir(log_dir) if isfile(pathjoin(log_dir, x)))
     if not logs:
         return ""
     # display stdout and stderr last to avoid the need to scroll back
@@ -49,8 +51,8 @@ def dump_to_console(log_dir, log_quota=0x8000):
     # merge logs
     lines = list()
     for fname in logs:
-        full_path = os.path.join(log_dir, fname)
-        fsize = os.stat(full_path).st_size
+        full_path = pathjoin(log_dir, fname)
+        fsize = stat(full_path).st_size
         lines.append("\n===\n")
         lines.append("=== Dumping %r (%0.2fKB)" % (fname, fsize / 1024.0))
         with open(full_path, "rb") as log_fp:
@@ -65,12 +67,12 @@ def dump_to_console(log_dir, log_quota=0x8000):
 
 def parse_args(argv=None):
     log_level_map = {
-        "ERROR": logging.ERROR,
-        "WARN": logging.WARNING,
-        "INFO": logging.INFO,
-        "DEBUG": logging.DEBUG}
+        "ERROR": ERROR,
+        "WARN": WARNING,
+        "INFO": INFO,
+        "DEBUG": DEBUG}
 
-    parser = argparse.ArgumentParser(
+    parser = ArgumentParser(
         description="FFPuppet - Firefox process launcher and log collector. Happy bug hunting!")
     parser.add_argument(
         "binary",
@@ -98,7 +100,7 @@ def parse_args(argv=None):
     cfg_group.add_argument(
         "-u", "--url",
         help="Server URL or path to local file to load.")
-    if sys.platform.startswith("linux"):
+    if system().startswith("Linux"):
         cfg_group.add_argument(
             "--xvfb", action="store_true",
             help="Use Xvfb")
@@ -129,7 +131,7 @@ def parse_args(argv=None):
         "--save-all", action="store_true",
         help="Always save logs. By default logs are saved only when an issue is detected.")
 
-    if sys.platform.startswith("linux"):
+    if system().startswith("Linux"):
         dbg_group = parser.add_argument_group("Available Debuggers")
         dbg_group.add_argument(
             "--gdb", action="store_true",
@@ -144,13 +146,13 @@ def parse_args(argv=None):
     args = parser.parse_args(argv)
 
     # sanity checks
-    if not os.path.isfile(args.binary):
+    if not isfile(args.binary):
         parser.error("Invalid browser binary %r" % args.binary)
     if args.extension is not None:
         for ext in args.extension:
-            if not os.path.exists(ext):
+            if not exists(ext):
                 parser.error("Extension %r does not exist" % ext)
-    if not os.path.isdir(args.logs):
+    if not isdir(args.logs):
         parser.error("Log output directory is invalid %r" % args.logs)
     log_level = log_level_map.get(args.log_level.upper(), None)
     if log_level is None:
@@ -162,7 +164,7 @@ def parse_args(argv=None):
     if args.memory < 0:
         parser.error("--memory must be >= 0")
     args.memory *= 1048576
-    if args.prefs is not None and not os.path.isfile(args.prefs):
+    if args.prefs is not None and not isfile(args.prefs):
         parser.error("Invalid prefs.js file %r" % args.prefs)
     # NOTE: mutually_exclusive_group will fail if no arguments are added
     # so sum() enabled debuggers instead
@@ -178,13 +180,13 @@ def parse_args(argv=None):
 def main(argv=None):  # pylint: disable=missing-docstring
     args = parse_args(argv)
     # set output verbosity
-    if args.log_level == logging.DEBUG:
+    if args.log_level == DEBUG:
         date_fmt = None
         log_fmt = "%(asctime)s %(levelname).1s %(name)s | %(message)s"
     else:
         date_fmt = "%Y-%m-%d %H:%M:%S"
         log_fmt = "[%(asctime)s] %(message)s"
-    logging.basicConfig(format=log_fmt, datefmt=date_fmt, level=args.log_level)
+    basicConfig(format=log_fmt, datefmt=date_fmt, level=args.log_level)
 
     ffp = FFPuppet(
         use_profile=args.profile,
@@ -206,11 +208,11 @@ def main(argv=None):  # pylint: disable=missing-docstring
             memory_limit=args.memory,
             prefs_js=args.prefs,
             extension=args.extension)
-        if args.prefs and os.path.isfile(args.prefs):
-            check_prefs(os.path.join(ffp.profile, "prefs.js"), args.prefs)
+        if args.prefs and isfile(args.prefs):
+            check_prefs(pathjoin(ffp.profile, "prefs.js"), args.prefs)
         log.info("Running Firefox (pid: %d)...", ffp.get_pid())
         while ffp.is_healthy():
-            time.sleep(args.poll_interval)
+            sleep(args.poll_interval)
     except KeyboardInterrupt:
         user_exit = True
         log.info("Ctrl+C detected.")
@@ -218,15 +220,14 @@ def main(argv=None):  # pylint: disable=missing-docstring
         log.info("Shutting down...")
         ffp.close()
         log.info("Firefox process is closed. (Reason: %r)", ffp.reason)
-        log_path = tempfile.mkdtemp(
-            prefix=time.strftime("%Y%m%d-%H%M%S_", time.localtime()),
-            suffix="_ffp_logs",
+        log_path = mkdtemp(
+            prefix=strftime("%Y%m%d-%H%M%S_ffp_logs_", localtime()),
             dir=args.logs)
         ffp.save_logs(log_path, logs_only=user_exit)
         if args.display_logs:
             log.info("Displaying logs...%s", dump_to_console(log_path))
         if ffp.reason == ffp.RC_ALERT or args.save_all:
-            log.info("Browser logs available here %r", os.path.abspath(log_path))
+            log.info("Browser logs available here %r", abspath(log_path))
         else:
-            shutil.rmtree(log_path)
+            rmtree(log_path)
         ffp.clean_up()

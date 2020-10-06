@@ -36,7 +36,7 @@ def test_main_02(mocker, tmp_path):
     fake_ffp.return_value.get_pid.return_value = 12345
     fake_ffp.return_value.profile = str(tmp_path)
     fake_ffp.return_value.reason = "CLOSED"
-    fake_sleep = mocker.patch("ffpuppet.main.time.sleep", autospec=True)
+    fake_sleep = mocker.patch("ffpuppet.main.sleep", autospec=True)
     fake_sleep.side_effect = KeyboardInterrupt
     fake_bin = (tmp_path / "fake.bin")
     fake_bin.touch()
