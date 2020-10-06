@@ -270,8 +270,6 @@ def test_ffpuppet_11(tmp_path):
     with FFPuppet() as ffp:
         ffp.add_abort_token(r"TEST\dREGEX\.+")
         ffp.add_abort_token("simple_string")
-        with pytest.raises(AssertionError):
-            ffp.add_abort_token(None)
         ffp.add_abort_token(r"ASSERTION:\s\w+")
         with HTTPTestServer() as srv:
             ffp.launch(TESTFF_BIN, location=srv.get_addr(), prefs_js=str(prefs))

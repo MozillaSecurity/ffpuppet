@@ -4,103 +4,83 @@
 # License, v. 2.0. If a copy of the MPL was not distributed with this file,
 # You can obtain one at http://mozilla.org/MPL/2.0/.
 
-import os
-import re
-import shutil
-import tempfile
-import unittest
+from os import getpid
+from re import compile as re_compile
 
-from .checks import Check, CheckLogContents, CheckLogSize, CheckMemoryUsage
+from .checks import CheckLogContents, CheckLogSize, CheckMemoryUsage
 
 
-class CheckTests(unittest.TestCase):
-    def setUp(self):
-        _fd, self.tmpfn = tempfile.mkstemp(prefix="check_test_")
-        os.close(_fd)
-        self.tmpdir = tempfile.mkdtemp(prefix="check_test_")
+def test_check_01(tmp_path):
+    """test CheckLogContents()"""
+    test_log = (tmp_path / "test.log")
+    # input contains token
+    test_log.write_text("blah\nfoo\ntest\n123")
+    checker = CheckLogContents([str(test_log)], [re_compile("test")])
+    assert checker.check()
+    with test_log.open("wb") as lfp:
+        checker.dump_log(lfp)
+        assert lfp.tell()
+    # input does not contains token
+    checker = CheckLogContents([str(test_log)], [re_compile("no_token")])
+    assert not checker.check()
+    # check a 2nd time
+    assert not checker.check()
+    with test_log.open("wb") as lfp:
+        checker.dump_log(lfp)
+        assert not lfp.tell()
+    # log does not exist
+    checker = CheckLogContents(["missing_log"], [re_compile("no_token")])
+    assert not checker.check()
+    with test_log.open("wb") as lfp:
+        checker.dump_log(lfp)
+        assert not lfp.tell()
+    # input exceeds chunk_size
+    with test_log.open("w") as lfp:
+        lfp.write("A" * (CheckLogContents.buf_limit - 2))
+        lfp.write("test123")
+        lfp.write("A" * 20)
+    checker = CheckLogContents([str(test_log)], [re_compile("test123")])
+    prev_chunk_size = CheckLogContents.chunk_size
+    try:
+        CheckLogContents.chunk_size = CheckLogContents.buf_limit
+        assert not checker.check()
+        assert checker.check()
+    finally:
+        CheckLogContents.chunk_size = prev_chunk_size
+    with test_log.open("wb") as lfp:
+        checker.dump_log(lfp)
+        assert lfp.tell()
 
-    def tearDown(self):
-        if os.path.isdir(self.tmpdir):
-            shutil.rmtree(self.tmpdir)
-        if os.path.isfile(self.tmpfn):
-            os.remove(self.tmpfn)
+def test_check_02(tmp_path):
+    """test CheckLogSize()"""
+    stde = (tmp_path / "stderr")
+    stde.write_text("test\n")
+    stdo = (tmp_path / "stdout")
+    stdo.write_text("test\n")
+    # exceed limit
+    checker = CheckLogSize(1, str(stde), str(stdo))
+    assert checker.check()
+    with (tmp_path / "log").open("wb") as lfp:
+        checker.dump_log(lfp)
+        assert lfp.tell()
+    # don't exceed limit
+    checker = CheckLogSize(12, str(stde), str(stdo))
+    assert not checker.check()
+    with (tmp_path / "log").open("wb") as lfp:
+        checker.dump_log(lfp)
+        assert not lfp.tell()
 
-    def test_01(self):
-        "test Check()"
-        checker = Check()
-        with self.assertRaises(NotImplementedError):
-            checker.check()
-        with tempfile.TemporaryFile() as log_fp:
-            checker.dump_log(log_fp)
-
-    def test_02(self):
-        "test CheckLogContents()"
-        # input contains token
-        with open(self.tmpfn, "w") as in_fp:
-            in_fp.write("blah\nfoo\ntest\n123")
-        checker = CheckLogContents([self.tmpfn], [re.compile("test")])
-        self.assertTrue(checker.check())
-        with open(self.tmpfn, "wb") as log_fp:
-            checker.dump_log(log_fp)
-            self.assertGreater(log_fp.tell(), 1)
-        # input does not contains token
-        checker = CheckLogContents([self.tmpfn], [re.compile("no_token")])
-        self.assertFalse(checker.check())
-        # check a 2nd time
-        self.assertFalse(checker.check())
-        with open(self.tmpfn, "wb") as log_fp:
-            checker.dump_log(log_fp)
-            self.assertEqual(log_fp.tell(), 0)
-        # log does not exist
-        checker = CheckLogContents(["missing_log"], [re.compile("no_token")])
-        self.assertFalse(checker.check())
-        with open(self.tmpfn, "wb") as log_fp:
-            checker.dump_log(log_fp)
-            self.assertEqual(log_fp.tell(), 0)
-        # input exceeds chunk_size
-        try:
-            CheckLogContents.chunk_size = CheckLogContents.buf_limit
-            with open(self.tmpfn, "w") as in_fp:
-                in_fp.write("A" * (CheckLogContents.buf_limit - 2))
-                in_fp.write("test123")
-                in_fp.write("A" * 20)
-            checker = CheckLogContents([self.tmpfn], [re.compile("test123")])
-            self.assertFalse(checker.check())
-            self.assertTrue(checker.check())
-        finally:
-            CheckLogContents.chunk_size = 0x20000
-        with open(self.tmpfn, "wb") as log_fp:
-            checker.dump_log(log_fp)
-            self.assertGreater(log_fp.tell(), 1)
-
-    def test_03(self):
-        "test CheckLogSize()"
-        stde = os.path.join(self.tmpdir, "stderr")
-        stdo = os.path.join(self.tmpdir, "stdout")
-        with open(stde, "w") as out_fp:
-            out_fp.write("test\n")
-        with open(stdo, "w") as out_fp:
-            out_fp.write("test\n")
-        checker = CheckLogSize(1, stde, stdo)
-        self.assertTrue(checker.check())
-        with open(self.tmpfn, "wb") as log_fp:
-            checker.dump_log(log_fp)
-            self.assertGreater(log_fp.tell(), 1)
-        checker = CheckLogSize(12, stde, stdo)
-        self.assertFalse(checker.check())
-        with open(self.tmpfn, "wb") as log_fp:
-            checker.dump_log(log_fp)
-            self.assertEqual(log_fp.tell(), 0)
-
-    def test_04(self):
-        "test CheckMemoryUsage()"
-        checker = CheckMemoryUsage(os.getpid(), 300 * 1024 * 1024)
-        self.assertFalse(checker.check())
-        with open(self.tmpfn, "wb") as log_fp:
-            checker.dump_log(log_fp)
-            self.assertEqual(log_fp.tell(), 0)
-        checker = CheckMemoryUsage(os.getpid(), 10)
-        self.assertTrue(checker.check())
-        with open(self.tmpfn, "wb") as log_fp:
-            checker.dump_log(log_fp)
-            self.assertGreater(log_fp.tell(), 1)
+def test_check_03(tmp_path):
+    """test CheckMemoryUsage()"""
+    checker = CheckMemoryUsage(getpid(), 300 * 1024 * 1024)
+    # don't exceed limit
+    assert not checker.check()
+    with (tmp_path / "log").open("wb") as lfp:
+        checker.dump_log(lfp)
+        assert not lfp.tell()
+    checker = CheckMemoryUsage(getpid(), 10)
+    # exceed limit
+    assert checker.check()
+    with (tmp_path / "log").open("wb") as lfp:
+        checker.dump_log(lfp)
+        assert lfp.tell()

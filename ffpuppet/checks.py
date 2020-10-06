@@ -2,7 +2,8 @@
 # License, v. 2.0. If a copy of the MPL was not distributed with this
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
-import os
+from abc import ABC, abstractmethod
+from os import stat, SEEK_SET
 
 from psutil import AccessDenied, NoSuchProcess
 
@@ -12,22 +13,22 @@ __author__ = "Tyson Smith"
 __credits__ = ["Tyson Smith"]
 
 
-class Check(object):
+class Check(ABC):
     """
     Check base class
     """
     name = None
 
+    __slots__ = ("message",)
+
     def __init__(self):
         self.message = None
 
-
+    @abstractmethod
     def check(self):
         """
         Implement a check that returns True when the abort conditions are met.
         """
-        raise NotImplementedError("check() needs to be implemented!")
-
 
     def dump_log(self, dst_fp):
         if self.message is not None:
@@ -41,6 +42,9 @@ class CheckLogContents(Check):
     buf_limit = 1024  # 1KB
     chunk_size = 0x20000  # 128KB
     name = "log_contents"
+
+    __slots__ = ("logs", "tokens")
+
     def __init__(self, log_files, search_tokens):
         assert log_files, "log_files is empty"
         assert search_tokens, "search_tokens is empty"
@@ -50,16 +54,15 @@ class CheckLogContents(Check):
             self.logs.append({"fname": log_file, "buffer": "", "offset": 0})
         self.tokens = search_tokens
 
-
     def check(self):
         for log in self.logs:
             try:
                 # check if file has new data
-                if os.stat(log["fname"]).st_size <= log["offset"]:
+                if stat(log["fname"]).st_size <= log["offset"]:
                     continue
                 with open(log["fname"], "r") as scan_fp:
                     # only collect new data
-                    scan_fp.seek(log["offset"], os.SEEK_SET)
+                    scan_fp.seek(log["offset"], SEEK_SET)
                     # read and prepend chunk of previously read data
                     data = "".join([log["buffer"], scan_fp.read(self.chunk_size)])
                     log["offset"] = scan_fp.tell()
@@ -80,16 +83,18 @@ class CheckLogSize(Check):
     CheckLogSize will check the total file size of the browser logs.
     """
     name = "log_size"
+
+    __slots__ = ("limit", "stderr_file", "stdout_file")
+
     def __init__(self, limit, stderr_file, stdout_file):
         super().__init__()
         self.limit = limit
         self.stderr_file = stderr_file
         self.stdout_file = stdout_file
 
-
     def check(self):
-        err_size = os.stat(self.stderr_file).st_size
-        out_size = os.stat(self.stdout_file).st_size
+        err_size = stat(self.stderr_file).st_size
+        out_size = stat(self.stdout_file).st_size
         total_size = err_size + out_size
         if total_size > self.limit:
             self.message = "".join([
@@ -106,11 +111,13 @@ class CheckMemoryUsage(Check):
     process and its descendants against a defined limit.
     """
     name = "memory_usage"
+
+    __slots__ = ("limit", "pid")
+
     def __init__(self, pid, limit):
         super().__init__()
         self.limit = limit
         self.pid = pid
-
 
     def check(self):
         """
