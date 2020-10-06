@@ -31,7 +31,7 @@ from .helpers import (
 from .minidump_parser import process_minidumps
 from .puppet_logger import PuppetLogger
 
-log = getLogger(__name__)  # pylint: disable=invalid-name
+LOG = getLogger(__name__)
 
 __author__ = "Tyson Smith"
 __all__ = ("FFPuppet",)
@@ -192,17 +192,17 @@ class FFPuppet(object):  # pylint: disable=too-many-instance-attributes
                  in a valid functioning state otherwise False.
         """
         if self.reason is not None:
-            log.debug("reason is set to %r", self.reason)
+            LOG.debug("reason is set to %r", self.reason)
             return False
         if not self.is_running():
-            log.debug("is_running() returned False")
+            LOG.debug("is_running() returned False")
             return False
         if any(self._crashreports()):
-            log.debug("crash report found")
+            LOG.debug("crash report found")
             return False
         for check in self._checks:
             if check.check():
-                log.debug("%r check abort conditions met", check.name)
+                LOG.debug("%r check abort conditions met", check.name)
                 return False
         return True
 
@@ -237,7 +237,7 @@ class FFPuppet(object):  # pylint: disable=too-many-instance-attributes
                             self._logs.watching[full_name] = log_fp.tell()
                             continue
                 except OSError:
-                    log.debug("failed to scan log %r", full_name)
+                    LOG.debug("failed to scan log %r", full_name)
                 yield full_name
             elif self._dbg == self.DBG_VALGRIND and fname.startswith(self._logs.PREFIX_VALGRIND):
                 full_name = pathjoin(self._logs.working_path, fname)
@@ -288,7 +288,7 @@ class FFPuppet(object):  # pylint: disable=too-many-instance-attributes
         @return: None
         """
 
-        log.debug("save_logs() called, dest=%r, logs_only=%r, meta=%r", dest, logs_only, meta)
+        LOG.debug("save_logs() called, dest=%r, logs_only=%r, meta=%r", dest, logs_only, meta)
         assert self._launches > -1, "clean_up() has been called"
         assert self._logs.closed, "Logs are still in use. Call close() first!"
 
@@ -307,10 +307,10 @@ class FFPuppet(object):  # pylint: disable=too-many-instance-attributes
         """
 
         if self._launches < 0:
-            log.debug("clean_up() call ignored")
+            LOG.debug("clean_up() call ignored")
             return
 
-        log.debug("clean_up() called")
+        LOG.debug("clean_up() called")
         self.close(force_close=True)
         self._logs.clean_up(ignore_errors=True)
 
@@ -331,11 +331,11 @@ class FFPuppet(object):  # pylint: disable=too-many-instance-attributes
 
     @staticmethod
     def _terminate(pid, kill_delay=30):
-        log.debug("_terminate(%d, kill_delay=%0.2f)", pid, kill_delay)
+        LOG.debug("_terminate(%d, kill_delay=%0.2f)", pid, kill_delay)
         procs = get_processes(pid)
         mode = 0
         while mode < 2:
-            log.debug("%d running process(es)", len(procs))
+            LOG.debug("%d running process(es)", len(procs))
             # iterate over and terminate/kill processes
             for proc in procs:
                 try:
@@ -344,14 +344,14 @@ class FFPuppet(object):  # pylint: disable=too-many-instance-attributes
                     pass
             procs = wait_procs(procs, timeout=kill_delay)[1]
             if not procs:
-                log.debug("_terminate() was successful")
+                LOG.debug("_terminate() was successful")
                 break
-            log.debug("timed out (%0.2f), mode %d", kill_delay, mode)
+            LOG.debug("timed out (%0.2f), mode %d", kill_delay, mode)
             mode += 1
         else:
             for proc in procs:
                 try:
-                    log.warning("Failed to terminate process %d (%s)", proc.pid, proc.name())
+                    LOG.warning("Failed to terminate process %d (%s)", proc.pid, proc.name())
                 except (AccessDenied, NoSuchProcess):  # pragma: no cover
                     pass
             raise TerminateError("Failed to terminate browser")
@@ -368,41 +368,41 @@ class FFPuppet(object):  # pylint: disable=too-many-instance-attributes
         @return: None
         """
 
-        log.debug("close(force_close=%r) called", force_close)
+        LOG.debug("close(force_close=%r) called", force_close)
         assert self._launches > -1, "clean_up() has been called"
         if self.reason is not None:
             self._logs.close()  # make sure browser logs are closed
             return
 
         assert self._proc is not None
-        log.debug("browser pid: %r", self._proc.pid)
+        LOG.debug("browser pid: %r", self._proc.pid)
         # set reason code
         crash_reports = set(self._crashreports())
         if crash_reports:
             r_code = self.RC_ALERT
             while True:
-                log.debug("%d crash report(s) found", len(crash_reports))
+                LOG.debug("%d crash report(s) found", len(crash_reports))
                 # wait until all open files are closed (except stdout & stderr)
                 report_wait = 300 if self._dbg == self.DBG_RR else 90
                 if not wait_on_files(crash_reports, timeout=report_wait):
-                    log.warning("wait_on_files(timeout=%d) Timed out", report_wait)
+                    LOG.warning("wait_on_files(timeout=%d) Timed out", report_wait)
                     break
                 new_reports = set(self._crashreports())
                 # verify no new reports have appeared
                 if not new_reports - crash_reports:
                     break
-                log.debug("more reports have appeared")
+                LOG.debug("more reports have appeared")
                 crash_reports = new_reports
         elif self.is_running():
             r_code = self.RC_CLOSED
         elif self._proc.poll() not in (0, -1, 1, -2):
             r_code = self.RC_ALERT
-            log.debug("poll() returned %r", self._proc.poll())
+            LOG.debug("poll() returned %r", self._proc.poll())
         else:
             r_code = self.RC_EXITED
 
         if self.is_running():
-            log.debug("browser needs to be terminated")
+            LOG.debug("browser needs to be terminated")
             self._terminate(self._proc.pid)
             # wait for reports triggered by the call to _terminate()
             wait_on_files(self._crashreports(), timeout=10)
@@ -417,7 +417,7 @@ class FFPuppet(object):  # pylint: disable=too-many-instance-attributes
                 # in this situation the PuppetLogger should still be available.
                 assert self._proc is None, "PuppetLogger is closed!"
             else:
-                log.debug("reviewing %d check(s)", len(self._checks))
+                LOG.debug("reviewing %d check(s)", len(self._checks))
                 for check in self._checks:
                     if check.message is not None:
                         r_code = self.RC_WORKER
@@ -442,13 +442,13 @@ class FFPuppet(object):  # pylint: disable=too-many-instance-attributes
             try:
                 rmtree(self.profile, onerror=onerror)
             except OSError:  # pragma: no cover
-                log.error("Failed to remove profile %r", self.profile)
+                LOG.error("Failed to remove profile %r", self.profile)
                 if not force_close:
                     raise
             finally:
                 self.profile = None
         finally:
-            log.debug("exit reason code %r", r_code)
+            LOG.debug("exit reason code %r", r_code)
             self.reason = r_code
 
 
@@ -531,7 +531,7 @@ class FFPuppet(object):  # pylint: disable=too-many-instance-attributes
             if sup_file:
                 if not isfile(sup_file):
                     raise IOError("Missing Valgrind suppressions %r" % sup_file)
-                log.debug("using Valgrind suppressions: %r", sup_file)
+                LOG.debug("using Valgrind suppressions: %r", sup_file)
                 valgrind_cmd.append("--suppressions=%s" % sup_file)
 
             cmd = valgrind_cmd + cmd
@@ -618,7 +618,7 @@ class FFPuppet(object):  # pylint: disable=too-many-instance-attributes
             raise IOError("%s is not an executable" % bin_path)
         self._bin_path = dirname(bin_path)  # need the path for minidump_stackwalk
 
-        log.debug("requested location: %r", location)
+        LOG.debug("requested location: %r", location)
         if location is not None:
             if isfile(location):
                 location = "///".join(
@@ -631,10 +631,10 @@ class FFPuppet(object):  # pylint: disable=too-many-instance-attributes
             extension=extension,
             prefs_js=prefs_js,
             template=self._profile_template)
-        log.debug("using profile %r", self.profile)
+        LOG.debug("using profile %r", self.profile)
 
         launch_timeout = max(launch_timeout, self.LAUNCH_TIMEOUT_MIN)
-        log.debug("launch timeout: %d", launch_timeout)
+        LOG.debug("launch timeout: %d", launch_timeout)
         # clean up existing log files
         self._logs.reset()
         self.reason = None
@@ -681,7 +681,7 @@ class FFPuppet(object):  # pylint: disable=too-many-instance-attributes
             stderr.flush()
             sanitizer_logs = pathjoin(self._logs.working_path, self._logs.PREFIX_SAN)
             # launch the browser
-            log.debug("launch command: %r", " ".join(cmd))
+            LOG.debug("launch command: %r", " ".join(cmd))
             self._proc = Popen(
                 cmd,
                 bufsize=0,  # unbuffered (for log scanners)
@@ -690,7 +690,7 @@ class FFPuppet(object):  # pylint: disable=too-many-instance-attributes
                 shell=False,
                 stderr=stderr,
                 stdout=self._logs.get_fp("stdout"))
-            log.debug("launched firefox with pid: %d", self._proc.pid)
+            LOG.debug("launched firefox with pid: %d", self._proc.pid)
             bootstrapper.wait(self.is_healthy, timeout=launch_timeout, url=location)
         finally:
             bootstrapper.close()
@@ -742,5 +742,5 @@ class FFPuppet(object):  # pylint: disable=too-many-instance-attributes
         pid = self.get_pid()
         if pid is None or not wait_procs(get_processes(pid), timeout=timeout)[1]:
             return True
-        log.debug("wait(timeout=%0.2f) timed out", timeout)
+        LOG.debug("wait(timeout=%0.2f) timed out", timeout)
         return False

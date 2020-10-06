@@ -11,7 +11,7 @@ from time import time
 from .exceptions import BrowserTerminatedError, BrowserTimeoutError, LaunchError
 
 
-log = getLogger(__name__)  # pylint: disable=invalid-name
+LOG = getLogger(__name__)
 
 __author__ = "Tyson Smith"
 __all__ = ("Bootstrapper",)
@@ -75,7 +75,7 @@ class Bootstrapper(object):
         time_limit = start_time + timeout
         conn = None
         try:
-            log.debug("waiting for browser connection...")
+            LOG.debug("waiting for browser connection...")
             while True:
                 try:
                     conn, _ = self._socket.accept()
@@ -89,7 +89,7 @@ class Bootstrapper(object):
                     raise BrowserTimeoutError("Timeout waiting for browser connection")
             conn.settimeout(1)
             received = False
-            log.debug("waiting to receive browser request...")
+            LOG.debug("waiting to receive browser request...")
             while True:
                 try:
                     request = conn.recv(self.BUF_SIZE)
@@ -101,7 +101,7 @@ class Bootstrapper(object):
                     if not received:
                         continue
                 if not received and not request:
-                    log.warning("Empty request received from browser during bootstrap!")
+                    LOG.warning("Empty request received from browser during bootstrap!")
                 elif len(request) == self.BUF_SIZE:
                     # maybe there is more to read...
                     received = True
@@ -115,7 +115,7 @@ class Bootstrapper(object):
                        "Location: %s\r\n" \
                        "Connection: close\r\n\r\n" % url
             conn.settimeout(max(int(time_limit - time()), 1))
-            log.debug("sending response (redirect %r)", url)
+            LOG.debug("sending response (redirect %r)", url)
             try:
                 conn.sendall(resp.encode("ascii"))
             except socket.timeout:
@@ -126,7 +126,7 @@ class Bootstrapper(object):
                 raise BrowserTerminatedError("Failure during browser startup")
             if resp_timeout:
                 raise BrowserTimeoutError("Timeout sending response")
-            log.debug("bootstrap complete (%0.2fs)", time() - start_time)
+            LOG.debug("bootstrap complete (%0.2fs)", time() - start_time)
         except socket.error as soc_e:  # pragma: no cover
             raise LaunchError("Error attempting to launch browser: %s" % soc_e) from soc_e
         finally:
