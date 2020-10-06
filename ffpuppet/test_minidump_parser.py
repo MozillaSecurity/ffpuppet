@@ -18,7 +18,7 @@ def test_minidump_parser_01(mocker, tmp_path):
     with pytest.raises(IOError):
         MinidumpParser("/path/does/not/exist/")
     mdp = MinidumpParser(str(tmp_path))
-    assert not mdp.dump_files
+    assert not mdp.md_files
     callback = mocker.Mock()
     with pytest.raises(IOError):
         mdp.collect_logs(callback, "/path/does/not/exist/")
@@ -37,7 +37,7 @@ def test_minidump_parser_02(mocker, tmp_path):
     log_path = tmp_path / "logs"
     log_path.mkdir()
     mdp = MinidumpParser(str(md_path), record_failures=False)
-    assert len(mdp.dump_files) == 1
+    assert len(mdp.md_files) == 1
     mdp.collect_logs(callback, str(log_path))
     assert callback.return_value.tell.call_count == 1
     assert callback.return_value.write.call_count == 1
@@ -68,7 +68,7 @@ def test_minidump_parser_03(mocker, tmp_path):
     with tempfile.TemporaryFile() as log_fp:
         mdp._read_registers("fake.dmp", log_fp)
         log_fp.seek(0)
-        for line in log_fp:  # pylint: disable=not-an-iterable
+        for line in log_fp:
             if b"=" not in line:
                 break
             md_lines.append(line)
@@ -136,8 +136,7 @@ def test_minidump_parser_05(mocker, tmp_path):
         out_fp.write(b"OS|Linux|0.0.0 sys info...\n")
         out_fp.write(b"Crash|SIGSEGV|0x7fff27aaeff8|0\n")
         out_fp.write(b"0|0|blah|foo|a/bar.c|123|0x0\n")
-    fake_subproc = mocker.patch("ffpuppet.minidump_parser.subprocess", autospec=True)
-    fake_subproc.call.return_value = 0
+    mocker.patch("ffpuppet.minidump_parser.call", autospec=True, return_value=0)
     mdp = MinidumpParser(str(tmp_path))
     callback = mocker.mock_open()
     callback.return_value.tell.return_value = 0
@@ -146,11 +145,10 @@ def test_minidump_parser_05(mocker, tmp_path):
 
 def test_minidump_parser_06(mocker, tmp_path):
     """test MinidumpParser._call_mdsw()"""
-    fake_subproc = mocker.patch("ffpuppet.minidump_parser.subprocess", autospec=True)
-    fake_subproc.call.return_value = 0
+    fake_call = mocker.patch("ffpuppet.minidump_parser.call", autospec=True, return_value=0)
     working = (tmp_path / "fake_tmpd")
     working.mkdir()
-    mocker.patch("ffpuppet.minidump_parser.tempfile.mkdtemp", return_value=str(working))
+    mocker.patch("ffpuppet.minidump_parser.mkdtemp", return_value=str(working))
     dmp_path = (tmp_path / "dmps")
     dmp_path.mkdir()
     mdp = MinidumpParser(str(dmp_path))
@@ -159,23 +157,22 @@ def test_minidump_parser_06(mocker, tmp_path):
     dmp_file.touch()
     mdp._call_mdsw(str(dmp_file), fake_file())
     # test minidump_stackwalk failures
-    fake_subproc.call.call_count = 0
+    fake_call.call_count = 0
     fake_file.return_value.seek.call_count = 0
     mdp._record_failures = True
     mdp.symbols_path = "sympath"
-    fake_subproc.call.return_value = 1
+    fake_call.return_value = 1
     with pytest.raises(RuntimeError, match="MDSW Error"):
         mdp._call_mdsw(str(dmp_file), fake_file())
-    assert fake_subproc.call.call_count == 1
+    assert fake_call.call_count == 1
     assert len(tuple(working.glob("**/mdsw_*.txt"))) == 3
     assert any(working.glob("**/test.dmp"))
 
 def test_minidump_parser_07(mocker):
     """test MinidumpParser.mdsw_available()"""
-    fake_subproc = mocker.patch("ffpuppet.minidump_parser.subprocess", autospec=True)
-    fake_subproc.call.return_value = 0
+    fake_call = mocker.patch("ffpuppet.minidump_parser.call", autospec=True, return_value=0)
     assert MinidumpParser.mdsw_available()
-    fake_subproc.call.side_effect = OSError
+    fake_call.side_effect = OSError
     assert not MinidumpParser.mdsw_available()
 
 def test_process_minidumps_01(mocker, tmp_path):
@@ -185,10 +182,10 @@ def test_process_minidumps_01(mocker, tmp_path):
     # test scan_path does not exist
     process_minidumps("/missing/path/", "symbols_path", mocker.Mock())
     # test empty scan_path (no .dmp files)
-    fake_mdp.return_value.dump_files = []
+    fake_mdp.return_value.md_files = []
     process_minidumps(str(tmp_path), "symbols_path", mocker.Mock())
     # test symbols_path does not exist
-    fake_mdp.return_value.dump_files = [mocker.Mock()]
+    fake_mdp.return_value.md_files = [mocker.Mock()]
     process_minidumps(str(tmp_path), "symbols_path", mocker.Mock())
     assert fake_mdp.return_value.mdsw_available.call_count == 0
     assert not fake_mdp.return_value.mdsw_available.return_value

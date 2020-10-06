@@ -2,40 +2,40 @@
 # License, v. 2.0. If a copy of the MPL was not distributed with this
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
-import logging
-import os
-import shutil
-import subprocess
-import sys
-import tempfile
+from logging import getLogger
+from os import devnull, getenv, listdir
+from os.path import getmtime, isdir, join as pathjoin
+from shutil import copy, copyfileobj
+from subprocess import call
+from sys import executable
+from tempfile import mkdtemp, TemporaryFile
 
-log = logging.getLogger(__name__)  # pylint: disable=invalid-name
+log = getLogger(__name__)  # pylint: disable=invalid-name
 
 __author__ = "Tyson Smith"
 __all__ = ("process_minidumps",)
+
 
 class MinidumpParser(object):
     MDSW_BIN = "minidump_stackwalk"
     MDSW_MAX_STACK = 150
 
-    __slots__ = ("dump_files", "dump_path", "symbols_path",
-                 "_include_raw", "_record_failures")
+    __slots__ = ("md_files", "symbols_path", "_include_raw", "_record_failures")
 
     def __init__(self, scan_path, record_failures=True):
-        if not os.path.isdir(scan_path):
-            raise IOError("scan_path does not exist: %r" % (scan_path,))
-        self.dump_files = {fname for fname in os.listdir(scan_path) if fname.endswith(".dmp")}
-        self.dump_path = scan_path
+        self.md_files = list()
+        for fname in listdir(scan_path):
+            if fname.endswith(".dmp"):
+                self.md_files.append(pathjoin(scan_path, fname))
         self.symbols_path = None
-        self._include_raw = os.getenv("FFP_DEBUG_MDSW") is not None
+        self._include_raw = getenv("FFP_DEBUG_MDSW") is not None
         self._record_failures = record_failures  # mdsw failure reporting
-
 
     def _call_mdsw(self, dump_file, out_fp, extra_flags=None):
         # if a python script is passed use 'sys.executable' as the binary
         # this is used by the test framework
         if self.MDSW_BIN.endswith(".py"):
-            cmd = [sys.executable, self.MDSW_BIN]
+            cmd = [executable, self.MDSW_BIN]
         else:  # pragma: no cover
             cmd = [self.MDSW_BIN]
         if extra_flags is None:
@@ -44,31 +44,30 @@ class MinidumpParser(object):
         cmd.append(dump_file)
         cmd.append(self.symbols_path)
 
-        with tempfile.TemporaryFile() as err_fp:
-            ret_val = subprocess.call(cmd, stdout=out_fp, stderr=err_fp)
+        with TemporaryFile() as err_fp:
+            ret_val = call(cmd, stdout=out_fp, stderr=err_fp)
             if ret_val != 0:
                 # mdsw failed
                 log.warning("%r returned %r", " ".join(cmd), ret_val)
                 if self._record_failures:
                     # save the dmp file and the logs
-                    report_dir = tempfile.mkdtemp(prefix="mdsw_err_")
-                    shutil.copy(dump_file, report_dir)
-                    with open(os.path.join(report_dir, "mdsw_cmd.txt"), "wb") as log_fp:
+                    report_dir = mkdtemp(prefix="mdsw_err_")
+                    copy(dump_file, report_dir)
+                    with open(pathjoin(report_dir, "mdsw_cmd.txt"), "wb") as log_fp:
                         log_fp.write((" ".join(cmd)).encode("ascii"))
                     err_fp.seek(0)
-                    with open(os.path.join(report_dir, "mdsw_stderr.txt"), "wb") as log_fp:
-                        shutil.copyfileobj(err_fp, log_fp, 0x10000)
+                    with open(pathjoin(report_dir, "mdsw_stderr.txt"), "wb") as log_fp:
+                        copyfileobj(err_fp, log_fp, 0x10000)
                     out_fp.seek(0)
-                    with open(os.path.join(report_dir, "mdsw_stdout.txt"), "wb") as log_fp:
-                        shutil.copyfileobj(out_fp, log_fp, 0x10000)
+                    with open(pathjoin(report_dir, "mdsw_stdout.txt"), "wb") as log_fp:
+                        copyfileobj(out_fp, log_fp, 0x10000)
                     log.warning("mdsw failure can be found @ %r", report_dir)
                     raise RuntimeError("MDSW Error")
         out_fp.seek(0)
 
-
     def _read_registers(self, dump_file, log_fp):
         log.debug("calling minidump_stackwalk on %s", dump_file)
-        with tempfile.TemporaryFile() as out_fp:
+        with TemporaryFile() as out_fp:
             self._call_mdsw(dump_file, out_fp)
             found_registers = False
             for line in out_fp:  # pylint: disable=not-an-iterable
@@ -85,13 +84,12 @@ class MinidumpParser(object):
                 log_fp.write(line)
             log.debug("collected register info: %r", found_registers)
 
-
     def _read_stacktrace(self, dump_file, log_fp, raw_fp=None):
         log.debug("calling minidump_stackwalk -m on %s", dump_file)
-        with tempfile.TemporaryFile() as out_fp:
+        with TemporaryFile() as out_fp:
             self._call_mdsw(dump_file, out_fp, extra_flags=["-m"])
             if raw_fp is not None:
-                shutil.copyfileobj(out_fp, raw_fp, 0x10000)  # read in 64K chunks
+                copyfileobj(out_fp, raw_fp, 0x10000)  # read in 64K chunks
                 out_fp.seek(0)
             crash_thread = None
             line_count = 0  # lines added to the log so far
@@ -118,15 +116,13 @@ class MinidumpParser(object):
                     log_fp.write(b"WARNING: Hit line output limit!")
                     break
 
-
     def collect_logs(self, cb_create_log, symbols_path):
-        if not os.path.isdir(symbols_path):
+        if not isdir(symbols_path):
             raise IOError("symbols_path does not exist: %r" % (symbols_path,))
         self.symbols_path = symbols_path
-        dump_files = (os.path.join(self.dump_path, x) for x in self.dump_files)
         # sort dumps by modified date since the oldest is likely the most interesting
         # this does assume that the dumps are written sequentially
-        for count, file_path in enumerate(sorted(dump_files, key=os.path.getmtime), start=1):
+        for count, file_path in enumerate(sorted(self.md_files, key=getmtime), start=1):
             log_fp = cb_create_log("minidump_%02d" % count)
             self._read_registers(file_path, log_fp)
             # create log for raw mdsw stack output if needed
@@ -136,18 +132,17 @@ class MinidumpParser(object):
                 log.warning("minidump_stackwalk log was empty (minidump_%02d)", count)
                 log_fp.write(b"WARNING: minidump_stackwalk log was empty\n")
 
-
     @classmethod
     def mdsw_available(cls):
         # if a python script is passed use 'sys.executable' as the binary
         # this is used by the test framework
         if cls.MDSW_BIN.endswith(".py"):
-            cmd = [sys.executable, cls.MDSW_BIN]
+            cmd = [executable, cls.MDSW_BIN]
         else:  # pragma: no cover
             cmd = [cls.MDSW_BIN]
         try:
-            with open(os.devnull, "w") as null_fp:
-                subprocess.call(cmd, stdout=null_fp, stderr=null_fp)
+            with open(devnull, "w") as null_fp:
+                call(cmd, stdout=null_fp, stderr=null_fp)
         except OSError:
             return False
         return True
@@ -174,16 +169,16 @@ def process_minidumps(scan_path, symbols_path, cb_create_log):
     assert isinstance(symbols_path, str)
     assert callable(cb_create_log)
 
-    if not os.path.isdir(scan_path):
+    if not isdir(scan_path):
         log.debug("scan_path %r does not exist", scan_path)
         return
 
     md_parser = MinidumpParser(scan_path)
-    if not md_parser.dump_files:
+    if not md_parser.md_files:
         log.debug("scan_path %r did not contain '.dmp' files", scan_path)
         return
 
-    if not os.path.isdir(symbols_path):
+    if not isdir(symbols_path):
         log.warning("symbols_path not found: %r", symbols_path)
         return
 
