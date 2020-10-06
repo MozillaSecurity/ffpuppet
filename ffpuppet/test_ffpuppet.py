@@ -27,9 +27,7 @@ from .minidump_parser import MinidumpParser
 Bootstrapper.POLL_WAIT = 0.2
 CWD = os.path.realpath(os.path.dirname(__file__))
 TESTFF_BIN = os.path.join(CWD, "resources", "testff.py")
-TESTMDSW_BIN = os.path.join(CWD, "resources", "testmdsw.py")
 
-MinidumpParser.MDSW_BIN = TESTMDSW_BIN
 MinidumpParser.MDSW_MAX_STACK = 8
 
 
@@ -495,13 +493,16 @@ def test_ffpuppet_23(tmp_path):
                 assert log_fp.readline() in ("BAD LOG\n", "GOOD LOG\n", "SHORT LOG\n")
     assert not any(os.path.isfile(f) for f in test_logs)
 
-def test_ffpuppet_24(tmp_path):
+def test_ffpuppet_24(mocker, tmp_path):
     """test multiple minidumps"""
+    def _fake_process_minidumps(dmps, _, add_log):
+        for num, _ in enumerate(x for x in os.listdir(dmps) if x.endswith(".dmp")):
+            lfp = add_log("minidump_%02d" % (num + 1,))
+            lfp.write(b"test")
+    mocker.patch("ffpuppet.core.process_minidumps", side_effect=_fake_process_minidumps)
     profile = (tmp_path / "profile")
     profile.mkdir()
     (profile / "minidumps").mkdir()
-    # 'symbols' directory needs to exist to satisfy a check
-    (profile / "symbols").mkdir()
     with FFPuppet(use_profile=str(profile)) as ffp:
         ffp.launch(TESTFF_BIN)
         ffp._last_bin_path = ffp.profile
