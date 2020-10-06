@@ -2,21 +2,23 @@
 # License, v. 2.0. If a copy of the MPL was not distributed with this
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
-import json
-import logging
-import os
-import platform
-import re
-import shutil
-import stat
+from json import load as json_load
+from logging import getLogger
+from os import access, chmod, environ, mkdir, remove, W_OK
+from os.path import abspath, basename, expanduser, isdir, isfile
+from os.path import join as pathjoin, normcase, realpath
+from platform import system
+from re import compile as re_compile
+from shutil import copyfile, copytree, rmtree
+from stat import S_IWUSR
 from tempfile import mkdtemp
-import time
+from time import sleep, time
 
 from xml.etree import ElementTree
-import psutil
+from psutil import AccessDenied, NoSuchProcess, Process, process_iter
 
 
-log = logging.getLogger(__name__)  # pylint: disable=invalid-name
+log = getLogger(__name__)  # pylint: disable=invalid-name
 
 __author__ = "Tyson Smith"
 __all__ = ("check_prefs", "create_profile", "get_processes", "onerror",
@@ -24,7 +26,9 @@ __all__ = ("check_prefs", "create_profile", "get_processes", "onerror",
 
 
 class SanitizerConfig(object):
-    re_delim = re.compile(r":(?![\\|/])")
+    re_delim = re_compile(r":(?![\\|/])")
+
+    __slots__ = ("_options",)
 
     def __init__(self):
         self._options = dict()
@@ -56,8 +60,8 @@ class SanitizerConfig(object):
                     assert self.is_quoted(opt_value), "%s value must be quoted" % opt_name
                 # add a sanity check for suppression files
                 if opt_name == "suppressions":
-                    sup_file = os.path.abspath(os.path.expanduser(opt_value.strip("'\"")))
-                    if not os.path.isfile(sup_file):
+                    sup_file = abspath(expanduser(opt_value.strip("'\"")))
+                    if not isfile(sup_file):
                         raise IOError("Suppressions file %r does not exist" % sup_file)
                     opt_value = "'%s'" % sup_file
                 self._options[opt_name] = opt_value
@@ -71,7 +75,7 @@ class SanitizerConfig(object):
 
 def append_prefs(profile_path, prefs):
     assert isinstance(prefs, dict)
-    with open(os.path.join(profile_path, "prefs.js"), "a") as prefs_fp:
+    with open(pathjoin(profile_path, "prefs.js"), "a") as prefs_fp:
         prefs_fp.write("\n")  # make sure there is a newline before appending to prefs.js
         for name, value in prefs.items():
             prefs_fp.write("user_pref('%s', %s);\n" % (name, value))
@@ -168,13 +172,13 @@ def configure_sanitizers(env, target_dir, log_path):
 
     if "ASAN_SYMBOLIZER_PATH" not in env:
         # ASAN_SYMBOLIZER_PATH only needs to be set on platforms other than Windows
-        if not platform.system().lower().startswith("windows"):
-            symbolizer_bin = os.path.join(target_dir, "llvm-symbolizer")
-            if os.path.isfile(symbolizer_bin):
+        if not system().lower().startswith("windows"):
+            symbolizer_bin = pathjoin(target_dir, "llvm-symbolizer")
+            if isfile(symbolizer_bin):
                 env["ASAN_SYMBOLIZER_PATH"] = symbolizer_bin
-        elif not os.path.join(target_dir, "llvm-symbolizer.exe"):
+        elif not pathjoin(target_dir, "llvm-symbolizer.exe"):
             log.warning("llvm-symbolizer.exe should be next to the target binary")
-    elif "ASAN_SYMBOLIZER_PATH" in env and not os.path.isfile(env["ASAN_SYMBOLIZER_PATH"]):
+    elif "ASAN_SYMBOLIZER_PATH" in env and not isfile(env["ASAN_SYMBOLIZER_PATH"]):
         log.warning("Invalid ASAN_SYMBOLIZER_PATH (%s)", env["ASAN_SYMBOLIZER_PATH"])
 
 
@@ -199,22 +203,22 @@ def create_profile(extension=None, prefs_js=None, template=None):
     try:
         if template is not None:
             log.debug("using profile template: %r", template)
-            shutil.rmtree(profile)
-            shutil.copytree(template, profile)
-            invalid_prefs = os.path.join(profile, "Invalidprefs.js")
+            rmtree(profile)
+            copytree(template, profile)
+            invalid_prefs = pathjoin(profile, "Invalidprefs.js")
             # if Invalidprefs.js was copied from the template profile remove it
-            if os.path.isfile(invalid_prefs):
-                os.remove(invalid_prefs)
+            if isfile(invalid_prefs):
+                remove(invalid_prefs)
         if prefs_js is not None:
             log.debug("using prefs.js: %r", prefs_js)
-            shutil.copyfile(prefs_js, os.path.join(profile, "prefs.js"))
+            copyfile(prefs_js, pathjoin(profile, "prefs.js"))
             # times.json only needs to be created when using a custom prefs.js
-            times_json = os.path.join(profile, "times.json")
-            if not os.path.isfile(times_json):
+            times_json = pathjoin(profile, "times.json")
+            if not isfile(times_json):
                 with open(times_json, "w") as times_fp:
-                    times_fp.write('{"created":%d}' % (int(time.time()) * 1000))
+                    times_fp.write('{"created":%d}' % (int(time()) * 1000))
     except OSError:
-        shutil.rmtree(profile)
+        rmtree(profile)
         raise
 
     # extension support
@@ -225,28 +229,26 @@ def create_profile(extension=None, prefs_js=None, template=None):
             extensions = extension
         else:
             extensions = [extension]
-        if extensions and not os.path.isdir(os.path.join(profile, "extensions")):
-            os.mkdir(os.path.join(profile, "extensions"))
+        if extensions and not isdir(pathjoin(profile, "extensions")):
+            mkdir(pathjoin(profile, "extensions"))
         for ext in extensions:
-            if os.path.isfile(ext) and ext.endswith(".xpi"):
-                shutil.copyfile(
-                    ext,
-                    os.path.join(profile, "extensions", os.path.basename(ext)))
-            elif os.path.isdir(ext):
+            if isfile(ext) and ext.endswith(".xpi"):
+                copyfile(ext, pathjoin(profile, "extensions", basename(ext)))
+            elif isdir(ext):
                 # read manifest to see what the folder should be named
                 ext_name = None
-                if os.path.isfile(os.path.join(ext, "manifest.json")):
+                if isfile(pathjoin(ext, "manifest.json")):
                     try:
-                        with open(os.path.join(ext, "manifest.json")) as manifest:
-                            manifest = json.load(manifest)
+                        with open(pathjoin(ext, "manifest.json")) as manifest:
+                            manifest = json_load(manifest)
                         ext_name = manifest["applications"]["gecko"]["id"]
                     except (IOError, KeyError, ValueError) as exc:
                         log.debug("Failed to parse manifest.json: %s", exc)
-                elif os.path.isfile(os.path.join(ext, "install.rdf")):
+                elif isfile(pathjoin(ext, "install.rdf")):
                     try:
                         xmlns = {"x": "http://www.w3.org/1999/02/22-rdf-syntax-ns#",
                                  "em": "http://www.mozilla.org/2004/em-rdf#"}
-                        tree = ElementTree.parse(os.path.join(ext, "install.rdf"))
+                        tree = ElementTree.parse(pathjoin(ext, "install.rdf"))
                         assert tree.getroot().tag == "{%s}RDF" % xmlns["x"]
                         ids = tree.findall("./x:Description/em:id", namespaces=xmlns)
                         assert len(ids) == 1
@@ -255,14 +257,12 @@ def create_profile(extension=None, prefs_js=None, template=None):
                         log.debug("Failed to parse install.rdf: %s", exc)
                 if ext_name is None:
                     raise RuntimeError("Failed to find extension id in manifest: %r" % ext)
-                shutil.copytree(
-                    os.path.abspath(ext),
-                    os.path.join(profile, "extensions", ext_name))
+                copytree(abspath(ext), pathjoin(profile, "extensions", ext_name))
             else:
                 raise RuntimeError("Unknown extension: %r" % ext)
     except:
         # cleanup on failure
-        shutil.rmtree(profile, True)
+        rmtree(profile, True)
         raise
     return profile
 
@@ -284,14 +284,14 @@ def get_processes(pid, recursive=True):
              be the Process that corresponds to PID
     """
     try:
-        procs = [psutil.Process(pid)]
-    except (psutil.AccessDenied, psutil.NoSuchProcess):
+        procs = [Process(pid)]
+    except (AccessDenied, NoSuchProcess):
         return list()
     if not recursive:
         return procs
     try:
         procs += procs[0].children(recursive=True)
-    except (psutil.AccessDenied, psutil.NoSuchProcess):  # pragma: no cover
+    except (AccessDenied, NoSuchProcess):  # pragma: no cover
         pass
     return procs
 
@@ -311,9 +311,9 @@ def onerror(func, path, _exc_info):
 
     Usage : `shutil.rmtree(path, onerror=onerror)`
     """
-    if not os.access(path, os.W_OK):
+    if not access(path, W_OK):
         # Is the error an access error?
-        os.chmod(path, stat.S_IWUSR)
+        chmod(path, S_IWUSR)
         func(path)
     else:
         # this should only ever be called from an exception context
@@ -340,7 +340,7 @@ def prepare_environment(target_dir, sanitizer_log, env_mod=None):
     @return: A dict representing the string environment
     """
     base = dict()
-    env = dict(os.environ)
+    env = dict(environ)
 
     # https://developer.gimp.org/api/2.0/glib/glib-running.html#G_SLICE
     base["G_SLICE"] = "always-malloc"
@@ -410,7 +410,7 @@ def true_path(path):
     @rtype: String
     @return: Normalized real path of given path
     """
-    return os.path.normcase(os.path.realpath(path))
+    return normcase(realpath(path))
 
 
 def wait_on_files(wait_files, poll_rate=0.25, timeout=60):
@@ -432,32 +432,32 @@ def wait_on_files(wait_files, poll_rate=0.25, timeout=60):
     assert poll_rate >= 0, "Invalid poll_rate %d, must be greater than or equal to 0" % poll_rate
     assert timeout >= 0, "Invalid timeout %d, must be greater than or equal to 0" % timeout
     poll_rate = min(poll_rate, timeout)
-    wait_files = {true_path(x) for x in wait_files if os.path.isfile(x)}
+    wait_files = {true_path(x) for x in wait_files if isfile(x)}
     if not wait_files:
         return True
-    deadline = time.time() + timeout
+    deadline = time() + timeout
     # collect all blocking processes
     procs = list()
-    for proc in psutil.process_iter(attrs=["pid", "open_files"]):
+    for proc in process_iter(attrs=["pid", "open_files"]):
         if not proc.info["open_files"]:
             continue
         # WARNING: Process.open_files() has issues on Windows!
         # https://psutil.readthedocs.io/en/latest/#psutil.Process.open_files
         if wait_files.intersection({true_path(x.path) for x in proc.info["open_files"]}):
             try:
-                procs.append(psutil.Process(proc.info["pid"]))
-            except (psutil.AccessDenied, psutil.NoSuchProcess):  # pragma: no cover
+                procs.append(Process(proc.info["pid"]))
+            except (AccessDenied, NoSuchProcess):  # pragma: no cover
                 pass
     # only check previously blocking processes
     while procs:
         try:
             if wait_files.intersection({true_path(x.path) for x in procs[-1].open_files()}):
-                if deadline <= time.time():
+                if deadline <= time():
                     log.debug("wait_on_files(timeout=%d) timed out", timeout)
                     return False
-                time.sleep(poll_rate)
+                sleep(poll_rate)
                 continue
-        except (psutil.AccessDenied, psutil.NoSuchProcess):  # pragma: no cover
+        except (AccessDenied, NoSuchProcess):  # pragma: no cover
             pass
         procs.pop()
     return True
