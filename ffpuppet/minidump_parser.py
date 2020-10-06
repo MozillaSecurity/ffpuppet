@@ -7,7 +7,6 @@ from os import devnull, getenv, listdir
 from os.path import getmtime, isdir, join as pathjoin
 from shutil import copy, copyfileobj
 from subprocess import call
-from sys import executable
 from tempfile import mkdtemp, TemporaryFile
 
 log = getLogger(__name__)  # pylint: disable=invalid-name
@@ -32,15 +31,9 @@ class MinidumpParser(object):
         self._record_failures = record_failures  # mdsw failure reporting
 
     def _call_mdsw(self, dump_file, out_fp, extra_flags=None):
-        # if a python script is passed use 'sys.executable' as the binary
-        # this is used by the test framework
-        if self.MDSW_BIN.endswith(".py"):
-            cmd = [executable, self.MDSW_BIN]
-        else:  # pragma: no cover
-            cmd = [self.MDSW_BIN]
-        if extra_flags is None:
-            extra_flags = list()
-        cmd += extra_flags
+        cmd = [self.MDSW_BIN]
+        if extra_flags:
+            cmd += extra_flags
         cmd.append(dump_file)
         cmd.append(self.symbols_path)
 
@@ -134,12 +127,7 @@ class MinidumpParser(object):
 
     @classmethod
     def mdsw_available(cls):
-        # if a python script is passed use 'sys.executable' as the binary
-        # this is used by the test framework
-        if cls.MDSW_BIN.endswith(".py"):
-            cmd = [executable, cls.MDSW_BIN]
-        else:  # pragma: no cover
-            cmd = [cls.MDSW_BIN]
+        cmd = [cls.MDSW_BIN]
         try:
             with open(devnull, "w") as null_fp:
                 call(cmd, stdout=null_fp, stderr=null_fp)
