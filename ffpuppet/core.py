@@ -49,11 +49,12 @@ class FFPuppet(object):  # pylint: disable=too-many-instance-attributes
     RC_WORKER = "WORKER"  # target was closed by worker thread
     VALGRIND_MIN_VERSION = 3.14  # minimum allowed version of Valgrind
 
-    __slots__ = ("_abort_tokens", "_checks", "_dbg", "_last_bin_path", "_launches",
+    __slots__ = ("_abort_tokens", "_bin_path", "_checks", "_dbg",  "_launches",
                  "_logs", "_proc", "_profile_template", "_xvfb", "profile", "reason")
 
     def __init__(self, use_profile=None, use_valgrind=False, use_xvfb=False, use_gdb=False, use_rr=False):
         self._abort_tokens = set()  # tokens used to notify log scanner to kill the browser process
+        self._bin_path = None
         self._checks = list()
         assert sum((use_gdb, use_rr, use_valgrind)) < 2, "only a single debugger can be enabled"
         if use_gdb:
@@ -65,7 +66,6 @@ class FFPuppet(object):  # pylint: disable=too-many-instance-attributes
         else:
             self._dbg = self.DBG_NONE
         self._dbg_sanity_check(self._dbg)
-        self._last_bin_path = None
         self._launches = 0  # number of successful browser launches
         self._logs = PuppetLogger()
         self._proc = None
@@ -374,42 +374,38 @@ class FFPuppet(object):  # pylint: disable=too-many-instance-attributes
             self._logs.close()  # make sure browser logs are closed
             return
 
-        if self._proc is not None:
-            log.debug("browser pid: %r", self._proc.pid)
-            # set reason code
-            crash_reports = set(self._crashreports())
-            if crash_reports:
-                r_code = self.RC_ALERT
-                while True:
-                    log.debug("%d crash report(s) found", len(crash_reports))
-                    # wait until all open files are closed (except stdout & stderr)
-                    report_wait = 300 if self._dbg == self.DBG_RR else 90
-                    if not wait_on_files(crash_reports, timeout=report_wait):
-                        log.warning("wait_on_files(timeout=%d) Timed out", report_wait)
-                        break
-                    new_reports = set(self._crashreports())
-                    # verify no new reports have appeared
-                    if not new_reports - crash_reports:
-                        break
-                    log.debug("more reports have appeared")
-                    crash_reports = new_reports
-            elif self.is_running():
-                r_code = self.RC_CLOSED
-            elif self._proc.poll() not in (0, -1, 1, -2):
-                r_code = self.RC_ALERT
-                log.debug("poll() returned %r", self._proc.poll())
-            else:
-                r_code = self.RC_EXITED
-
-            if self.is_running():
-                log.debug("browser needs to be terminated")
-                self._terminate(self._proc.pid)
-                # wait for reports triggered by the call to _terminate()
-                wait_on_files(self._crashreports(), timeout=10)
-
-        else:
+        assert self._proc is not None
+        log.debug("browser pid: %r", self._proc.pid)
+        # set reason code
+        crash_reports = set(self._crashreports())
+        if crash_reports:
+            r_code = self.RC_ALERT
+            while True:
+                log.debug("%d crash report(s) found", len(crash_reports))
+                # wait until all open files are closed (except stdout & stderr)
+                report_wait = 300 if self._dbg == self.DBG_RR else 90
+                if not wait_on_files(crash_reports, timeout=report_wait):
+                    log.warning("wait_on_files(timeout=%d) Timed out", report_wait)
+                    break
+                new_reports = set(self._crashreports())
+                # verify no new reports have appeared
+                if not new_reports - crash_reports:
+                    break
+                log.debug("more reports have appeared")
+                crash_reports = new_reports
+        elif self.is_running():
             r_code = self.RC_CLOSED
-            log.debug("browser process was 'None'")
+        elif self._proc.poll() not in (0, -1, 1, -2):
+            r_code = self.RC_ALERT
+            log.debug("poll() returned %r", self._proc.poll())
+        else:
+            r_code = self.RC_EXITED
+
+        if self.is_running():
+            log.debug("browser needs to be terminated")
+            self._terminate(self._proc.pid)
+            # wait for reports triggered by the call to _terminate()
+            wait_on_files(self._crashreports(), timeout=10)
 
         if not force_close:
             if self._logs.closed:  # pragma: no cover
@@ -432,7 +428,7 @@ class FFPuppet(object):  # pylint: disable=too-many-instance-attributes
                 # check for minidumps in the profile and dump them if possible
                 process_minidumps(
                     pathjoin(self.profile, "minidumps"),
-                    pathjoin(self._last_bin_path, "symbols"),
+                    pathjoin(self._bin_path, "symbols"),
                     self._logs.add_log)
                 if self._logs.get_fp("stderr"):
                     self._logs.get_fp("stderr").write(
@@ -620,7 +616,7 @@ class FFPuppet(object):  # pylint: disable=too-many-instance-attributes
         bin_path = abspath(bin_path)
         if not isfile(bin_path) or not access(bin_path, X_OK):
             raise IOError("%s is not an executable" % bin_path)
-        self._last_bin_path = dirname(bin_path)  # need the path for minidump_stackwalk
+        self._bin_path = dirname(bin_path)  # need the path for minidump_stackwalk
 
         log.debug("requested location: %r", location)
         if location is not None:
@@ -639,6 +635,8 @@ class FFPuppet(object):  # pylint: disable=too-many-instance-attributes
 
         launch_timeout = max(launch_timeout, self.LAUNCH_TIMEOUT_MIN)
         log.debug("launch timeout: %d", launch_timeout)
+        # clean up existing log files
+        self._logs.reset()
         self.reason = None
         # performing the bootstrap helps guarantee that the browser
         # will be loaded and ready to accept input when launch() returns
@@ -661,9 +659,6 @@ class FFPuppet(object):  # pylint: disable=too-many-instance-attributes
                 launch_args.append("-no-deelevate")
                 launch_args.append("-wait-for-browser")
             cmd = self.build_launch_cmd(bin_path, additional_args=launch_args)
-
-            # clean up existing log files
-            self._logs.reset()
 
             if self._dbg == self.DBG_RR:
                 if env_mod is None:
@@ -691,7 +686,7 @@ class FFPuppet(object):  # pylint: disable=too-many-instance-attributes
                 cmd,
                 bufsize=0,  # unbuffered (for log scanners)
                 creationflags=CREATE_NEW_PROCESS_GROUP if is_windows else 0,
-                env=prepare_environment(self._last_bin_path, sanitizer_logs, env_mod=env_mod),
+                env=prepare_environment(self._bin_path, sanitizer_logs, env_mod=env_mod),
                 shell=False,
                 stderr=stderr,
                 stdout=self._logs.get_fp("stdout"))
