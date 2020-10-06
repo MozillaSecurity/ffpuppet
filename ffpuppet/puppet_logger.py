@@ -2,16 +2,17 @@
 # License, v. 2.0. If a copy of the MPL was not distributed with this
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
-import json
-import logging
-import os
-import shutil
-import subprocess
-import tempfile
+from json import dump as json_dump
+from logging import getLogger
+from os import close as os_close, getpid, listdir, makedirs, mkdir, stat, stat_result
+from os.path import abspath, isdir, isfile, join as pathjoin, realpath
+from shutil import copy2, copyfileobj, copytree, rmtree
+from subprocess import CalledProcessError, check_output, STDOUT
+from tempfile import mkdtemp, mkstemp
 
 from .helpers import onerror, wait_on_files
 
-log = logging.getLogger(__name__)  # pylint: disable=invalid-name
+log = getLogger(__name__)  # pylint: disable=invalid-name
 
 __author__ = "Tyson Smith"
 __credits__ = ["Tyson Smith"]
@@ -23,8 +24,8 @@ class PuppetLogger(object):
     BUF_SIZE = 0x10000  # buffer size used to copy logs
     META_FILE = "log_metadata.json"
     PATH_RR = "rr-traces"
-    PREFIX_SAN = "ffp_asan_%d.log" % os.getpid()
-    PREFIX_VALGRIND = "valgrind.%d" % os.getpid()
+    PREFIX_SAN = "ffp_asan_%d.log" % (getpid(),)
+    PREFIX_VALGRIND = "valgrind.%d" % (getpid(),)
 
     __slots__ = ("_base", "_logs", "_rr_packed", "closed", "watching", "working_path")
 
@@ -37,14 +38,11 @@ class PuppetLogger(object):
         self.working_path = None
         self.reset()
 
-
     def __enter__(self):
         return self
 
-
     def __exit__(self, *exc):
         self.clean_up()
-
 
     def add_log(self, log_id, logfp=None):
         """
@@ -66,7 +64,6 @@ class PuppetLogger(object):
         self._logs[log_id] = logfp
         return logfp
 
-
     def add_path(self, name):
         """
         Add a directory that can be used as temporary storage for miscellaneous
@@ -79,11 +76,10 @@ class PuppetLogger(object):
         @return: path of newly created directory
         """
         assert not self.closed
-        path = os.path.join(self.working_path, name)
+        path = pathjoin(self.working_path, name)
         log.debug("adding path %r as %r", name, path)
-        os.mkdir(path)
+        mkdir(path)
         return path
-
 
     def available_logs(self):
         """
@@ -93,7 +89,6 @@ class PuppetLogger(object):
         @return: A list containing log IDs
         """
         return self._logs.keys()
-
 
     def clean_up(self, ignore_errors=False, wait_delay=10):
         """
@@ -112,18 +107,18 @@ class PuppetLogger(object):
         """
         if not self.closed:
             self.close()
-        if self.working_path is not None and os.path.isdir(self.working_path):
+        if self.working_path is not None and isdir(self.working_path):
             for attempt in range(2):
                 try:
-                    shutil.rmtree(self.working_path, ignore_errors=ignore_errors, onerror=onerror)
-                    break
+                    rmtree(self.working_path, ignore_errors=ignore_errors, onerror=onerror)
                 except OSError:
                     if attempt > 0:
                         raise
                     wait_on_files(self.files, timeout=wait_delay)
+                    continue
+                break
         self._logs.clear()
         self.working_path = None
-
 
     def clone_log(self, log_id, offset=None, target_file=None):
         """
@@ -155,11 +150,10 @@ class PuppetLogger(object):
             else:
                 cpyfp = open(target_file, "wb")
             try:
-                shutil.copyfileobj(in_fp, cpyfp, self.BUF_SIZE)
+                copyfileobj(in_fp, cpyfp, self.BUF_SIZE)
             finally:
                 cpyfp.close()
         return target_file
-
 
     def close(self):
         """
@@ -173,7 +167,6 @@ class PuppetLogger(object):
                 lfp.close()
         self.closed = True
 
-
     @property
     def files(self):
         """
@@ -182,7 +175,6 @@ class PuppetLogger(object):
         for lfp in self._logs.values():
             if lfp.name is not None:
                 yield lfp.name
-
 
     def get_fp(self, log_id):
         """
@@ -199,10 +191,9 @@ class PuppetLogger(object):
         except KeyError:
             log.warning("log_id %r does not exist", log_id)
             return None
-        if log_fp.name is None or not os.path.isfile(log_fp.name):
+        if log_fp.name is None or not isfile(log_fp.name):
             raise IOError("log file %r does not exist" % log_fp.name)
         return log_fp
-
 
     def log_length(self, log_id):
         """
@@ -219,8 +210,7 @@ class PuppetLogger(object):
             return None
         if not log_fp.closed:
             log_fp.flush()
-        return os.stat(log_fp.name).st_size
-
+        return stat(log_fp.name).st_size
 
     @staticmethod
     def open_unique(base_dir=None, mode="wb"):
@@ -237,14 +227,13 @@ class PuppetLogger(object):
         @rtype: file object
         @return: An open file object.
         """
-        tmp_fd, log_file = tempfile.mkstemp(
+        tmp_fd, log_file = mkstemp(
             suffix=".txt",
             prefix="ffp_log_",
             dir=base_dir)
-        os.close(tmp_fd)
+        os_close(tmp_fd)
         # use open() so the file object 'name' attribute is correct
         return open(log_file, mode)
-
 
     def reset(self):
         """
@@ -256,8 +245,7 @@ class PuppetLogger(object):
         self.clean_up()
         self.closed = False
         self._rr_packed = False
-        self.working_path = os.path.realpath(tempfile.mkdtemp(prefix="ffplogs_", dir=self._base))
-
+        self.working_path = realpath(mkdtemp(prefix="ffplogs_", dir=self._base))
 
     def save_logs(self, dest, logs_only=False, meta=False):
         """
@@ -278,39 +266,36 @@ class PuppetLogger(object):
         """
         assert self.closed, "save_logs() cannot be called before calling close()"
         assert self.working_path is not None
-        if meta:
-            meta_map = dict()
-        else:
-            meta_map = None
-        # copy log to location specified by dest
-        if not os.path.isdir(dest):
-            os.makedirs(dest)
-        dest = os.path.abspath(dest)
 
+        # copy log to location specified by dest
+        makedirs(dest, exist_ok=True)
+        dest = abspath(dest)
+
+        meta_map = dict()
         for log_id, log_fp in self._logs.items():
             out_name = "log_%s.txt" % log_id
             if meta:
-                file_stat = os.stat(log_fp.name)
+                file_stat = stat(log_fp.name)
                 meta_map[out_name] = {field: getattr(file_stat, field)
-                                      for field in dir(os.stat_result) if field.startswith("st_")}
-            shutil.copy2(log_fp.name, os.path.join(dest, out_name))
+                                      for field in dir(stat_result) if field.startswith("st_")}
+            copy2(log_fp.name, pathjoin(dest, out_name))
 
         if not logs_only:
-            rr_trace = os.path.join(self.working_path, self.PATH_RR, "latest-trace")
-            if not self._rr_packed and os.path.isdir(rr_trace):
+            rr_trace = pathjoin(self.working_path, self.PATH_RR, "latest-trace")
+            if not self._rr_packed and isdir(rr_trace):
                 log.debug("packing rr trace")
                 try:
-                    subprocess.check_output(["rr", "pack", rr_trace], stderr=subprocess.STDOUT)
+                    check_output(["rr", "pack", rr_trace], stderr=STDOUT)
                     self._rr_packed = True
-                except (OSError, subprocess.CalledProcessError):
+                except (OSError, CalledProcessError):
                     log.warning("Error calling 'rr pack %s'", rr_trace)
 
-            for path in os.listdir(self.working_path):
-                full_path = os.path.join(self.working_path, path)
-                if not os.path.isdir(full_path):
+            for path in listdir(self.working_path):
+                full_path = pathjoin(self.working_path, path)
+                if not isdir(full_path):
                     continue
-                shutil.copytree(full_path, os.path.join(dest, path), symlinks=True)
+                copytree(full_path, pathjoin(dest, path), symlinks=True)
 
         if meta_map:
-            with open(os.path.join(dest, self.META_FILE), "w") as json_fp:
-                json.dump(meta_map, json_fp, indent=2, sort_keys=True)
+            with open(pathjoin(dest, self.META_FILE), "w") as json_fp:
+                json_dump(meta_map, json_fp, indent=2, sort_keys=True)

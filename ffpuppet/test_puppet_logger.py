@@ -170,7 +170,7 @@ def test_puppet_logger_06(tmp_path):
 
 def test_puppet_logger_07(mocker, tmp_path):
     """test PuppetLogger.save_logs() rr trace directory"""
-    fake_ck = mocker.patch("ffpuppet.puppet_logger.subprocess.check_output", autospec=True)
+    fake_ck = mocker.patch("ffpuppet.puppet_logger.check_output", autospec=True)
     with PuppetLogger(base_path=str(tmp_path)) as plog:
         os.makedirs(os.path.join(plog.working_path, plog.PATH_RR, "latest-trace"))
         plog.close()
@@ -213,14 +213,14 @@ def test_puppet_logger_09(tmp_path):
 
 def test_puppet_logger_10(mocker, tmp_path):
     """test PuppetLogger.clean_up() with in-use file"""
-    fake_shutil = mocker.patch("ffpuppet.puppet_logger.shutil", autospec=True)
+    fake_rmtree = mocker.patch("ffpuppet.puppet_logger.rmtree", autospec=True)
     with PuppetLogger(base_path=str(tmp_path)) as plog:
         plog.add_log("test")
-        fake_shutil.rmtree.side_effect = OSError
+        fake_rmtree.side_effect = OSError
         with pytest.raises(OSError):
             plog.clean_up(wait_delay=0)
         assert plog.working_path is not None
-        fake_shutil.rmtree.side_effect = None
+        fake_rmtree.side_effect = None
         plog.clean_up()
         plog.close()
 
