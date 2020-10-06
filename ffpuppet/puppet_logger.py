@@ -12,7 +12,7 @@ from tempfile import mkdtemp, mkstemp
 
 from .helpers import onerror, wait_on_files
 
-log = getLogger(__name__)  # pylint: disable=invalid-name
+LOG = getLogger(__name__)
 
 __author__ = "Tyson Smith"
 __credits__ = ["Tyson Smith"]
@@ -77,7 +77,7 @@ class PuppetLogger(object):
         """
         assert not self.closed
         path = pathjoin(self.working_path, name)
-        log.debug("adding path %r as %r", name, path)
+        LOG.debug("adding path %r as %r", name, path)
         mkdir(path)
         return path
 
@@ -189,7 +189,7 @@ class PuppetLogger(object):
         try:
             log_fp = self._logs[log_id]
         except KeyError:
-            log.warning("log_id %r does not exist", log_id)
+            LOG.warning("log_id %r does not exist", log_id)
             return None
         if log_fp.name is None or not isfile(log_fp.name):
             raise IOError("log file %r does not exist" % log_fp.name)
@@ -283,12 +283,12 @@ class PuppetLogger(object):
         if not logs_only:
             rr_trace = pathjoin(self.working_path, self.PATH_RR, "latest-trace")
             if not self._rr_packed and isdir(rr_trace):
-                log.debug("packing rr trace")
+                LOG.debug("packing rr trace")
                 try:
                     check_output(["rr", "pack", rr_trace], stderr=STDOUT)
                     self._rr_packed = True
                 except (OSError, CalledProcessError):
-                    log.warning("Error calling 'rr pack %s'", rr_trace)
+                    LOG.warning("Error calling 'rr pack %s'", rr_trace)
 
             for path in listdir(self.working_path):
                 full_path = pathjoin(self.working_path, path)

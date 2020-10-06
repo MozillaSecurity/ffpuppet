@@ -9,7 +9,7 @@ from shutil import copy, copyfileobj
 from subprocess import call
 from tempfile import mkdtemp, TemporaryFile
 
-log = getLogger(__name__)  # pylint: disable=invalid-name
+LOG = getLogger(__name__)
 
 __author__ = "Tyson Smith"
 __all__ = ("process_minidumps",)
@@ -41,7 +41,7 @@ class MinidumpParser(object):
             ret_val = call(cmd, stdout=out_fp, stderr=err_fp)
             if ret_val != 0:
                 # mdsw failed
-                log.warning("%r returned %r", " ".join(cmd), ret_val)
+                LOG.warning("%r returned %r", " ".join(cmd), ret_val)
                 if self._record_failures:
                     # save the dmp file and the logs
                     report_dir = mkdtemp(prefix="mdsw_err_")
@@ -54,12 +54,12 @@ class MinidumpParser(object):
                     out_fp.seek(0)
                     with open(pathjoin(report_dir, "mdsw_stdout.txt"), "wb") as log_fp:
                         copyfileobj(out_fp, log_fp, 0x10000)
-                    log.warning("mdsw failure can be found @ %r", report_dir)
+                    LOG.warning("mdsw failure can be found @ %r", report_dir)
                     raise RuntimeError("MDSW Error")
         out_fp.seek(0)
 
     def _read_registers(self, dump_file, log_fp):
-        log.debug("calling minidump_stackwalk on %s", dump_file)
+        LOG.debug("calling minidump_stackwalk on %s", dump_file)
         with TemporaryFile() as out_fp:
             self._call_mdsw(dump_file, out_fp)
             found_registers = False
@@ -75,10 +75,10 @@ class MinidumpParser(object):
                 if b"=" not in line:
                     break  # we reached the end
                 log_fp.write(line)
-            log.debug("collected register info: %r", found_registers)
+            LOG.debug("collected register info: %r", found_registers)
 
     def _read_stacktrace(self, dump_file, log_fp, raw_fp=None):
-        log.debug("calling minidump_stackwalk -m on %s", dump_file)
+        LOG.debug("calling minidump_stackwalk -m on %s", dump_file)
         with TemporaryFile() as out_fp:
             self._call_mdsw(dump_file, out_fp, extra_flags=["-m"])
             if raw_fp is not None:
@@ -105,7 +105,7 @@ class MinidumpParser(object):
                 log_fp.write(line)
                 line_count += 1
                 if line_count >= self.MDSW_MAX_STACK:
-                    log.warning("MDSW_MAX_STACK (%d) limit reached", self.MDSW_MAX_STACK)
+                    LOG.warning("MDSW_MAX_STACK (%d) limit reached", self.MDSW_MAX_STACK)
                     log_fp.write(b"WARNING: Hit line output limit!")
                     break
 
@@ -122,7 +122,7 @@ class MinidumpParser(object):
             raw_fp = cb_create_log("raw_mdsw_%02d" % count) if self._include_raw else None
             self._read_stacktrace(file_path, log_fp, raw_fp)
             if log_fp.tell() < 1:
-                log.warning("minidump_stackwalk log was empty (minidump_%02d)", count)
+                LOG.warning("minidump_stackwalk log was empty (minidump_%02d)", count)
                 log_fp.write(b"WARNING: minidump_stackwalk log was empty\n")
 
     @classmethod
@@ -158,20 +158,20 @@ def process_minidumps(scan_path, symbols_path, cb_create_log):
     assert callable(cb_create_log)
 
     if not isdir(scan_path):
-        log.debug("scan_path %r does not exist", scan_path)
+        LOG.debug("scan_path %r does not exist", scan_path)
         return
 
     md_parser = MinidumpParser(scan_path)
     if not md_parser.md_files:
-        log.debug("scan_path %r did not contain '.dmp' files", scan_path)
+        LOG.debug("scan_path %r did not contain '.dmp' files", scan_path)
         return
 
     if not isdir(symbols_path):
-        log.warning("symbols_path not found: %r", symbols_path)
+        LOG.warning("symbols_path not found: %r", symbols_path)
         return
 
     if not md_parser.mdsw_available():
-        log.warning("Found a minidump, but can't process it without minidump_stackwalk."
+        LOG.warning("Found a minidump, but can't process it without minidump_stackwalk."
                     " See README.md for how to obtain it.")
         return
 

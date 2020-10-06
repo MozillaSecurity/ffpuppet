@@ -14,7 +14,7 @@ from time import localtime, sleep, strftime
 from .core import FFPuppet
 from .helpers import check_prefs
 
-log = getLogger(__name__)  # pylint: disable=invalid-name
+LOG = getLogger(__name__)
 
 __author__ = "Tyson Smith"
 
@@ -199,7 +199,7 @@ def main(argv=None):  # pylint: disable=missing-docstring
 
     user_exit = False
     try:
-        log.info("Launching Firefox...")
+        LOG.info("Launching Firefox...")
         ffp.launch(
             args.binary,
             location=args.url,
@@ -210,24 +210,24 @@ def main(argv=None):  # pylint: disable=missing-docstring
             extension=args.extension)
         if args.prefs and isfile(args.prefs):
             check_prefs(pathjoin(ffp.profile, "prefs.js"), args.prefs)
-        log.info("Running Firefox (pid: %d)...", ffp.get_pid())
+        LOG.info("Running Firefox (pid: %d)...", ffp.get_pid())
         while ffp.is_healthy():
             sleep(args.poll_interval)
     except KeyboardInterrupt:
         user_exit = True
-        log.info("Ctrl+C detected.")
+        LOG.info("Ctrl+C detected.")
     finally:
-        log.info("Shutting down...")
+        LOG.info("Shutting down...")
         ffp.close()
-        log.info("Firefox process is closed. (Reason: %r)", ffp.reason)
+        LOG.info("Firefox process is closed. (Reason: %r)", ffp.reason)
         log_path = mkdtemp(
             prefix=strftime("%Y%m%d-%H%M%S_ffp_logs_", localtime()),
             dir=args.logs)
         ffp.save_logs(log_path, logs_only=user_exit)
         if args.display_logs:
-            log.info("Displaying logs...%s", dump_to_console(log_path))
+            LOG.info("Displaying logs...%s", dump_to_console(log_path))
         if ffp.reason == ffp.RC_ALERT or args.save_all:
-            log.info("Browser logs available here %r", abspath(log_path))
+            LOG.info("Browser logs available here %r", abspath(log_path))
         else:
             rmtree(log_path)
         ffp.clean_up()

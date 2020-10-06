@@ -18,7 +18,7 @@ from xml.etree import ElementTree
 from psutil import AccessDenied, NoSuchProcess, Process, process_iter
 
 
-log = getLogger(__name__)  # pylint: disable=invalid-name
+LOG = getLogger(__name__)
 
 __author__ = "Tyson Smith"
 __all__ = ("check_prefs", "create_profile", "get_processes", "onerror",
@@ -66,7 +66,7 @@ class SanitizerConfig(object):
                     opt_value = "'%s'" % sup_file
                 self._options[opt_name] = opt_value
             except ValueError:
-                log.warning("Malformed option in %r", key)
+                LOG.warning("Malformed option in %r", key)
 
     @property
     def options(self):
@@ -103,7 +103,7 @@ def check_prefs(prof_prefs, input_prefs):
         i_prefs = {pref.split(",")[0] for pref in i_fp if pref.startswith("user_pref(")}
     missing_prefs = i_prefs - p_prefs
     for missing in missing_prefs:
-        log.debug("pref not set %r", missing)
+        LOG.debug("pref not set %r", missing)
     return not missing_prefs
 
 
@@ -133,7 +133,7 @@ def configure_sanitizers(env, target_dir, log_path):
     asan_config.add("detect_leaks", "false")
     # log_path is required for FFPuppet logging to function properly
     if "log_path" in asan_config:
-        log.warning("ASAN_OPTIONS=log_path is used internally and cannot be set externally")
+        LOG.warning("ASAN_OPTIONS=log_path is used internally and cannot be set externally")
     asan_config.add("log_path", "'%s'" % log_path, overwrite=True)
     # attempt to save some memory during deep stack allocations
     asan_config.add("malloc_context_size", "20")
@@ -155,7 +155,7 @@ def configure_sanitizers(env, target_dir, log_path):
     tsan_config.load_options(env, "TSAN_OPTIONS")
     tsan_config.add("halt_on_error", "1")
     if "log_path" in tsan_config:
-        log.warning("TSAN_OPTIONS=log_path is used internally and cannot be set externally")
+        LOG.warning("TSAN_OPTIONS=log_path is used internally and cannot be set externally")
     tsan_config.add("log_path", "'%s'" % log_path, overwrite=True)
     env["TSAN_OPTIONS"] = tsan_config.options
 
@@ -165,7 +165,7 @@ def configure_sanitizers(env, target_dir, log_path):
     for flag in common_flags:
         ubsan_config.add(*flag)
     if "log_path" in ubsan_config:
-        log.warning("UBSAN_OPTIONS=log_path is used internally and cannot be set externally")
+        LOG.warning("UBSAN_OPTIONS=log_path is used internally and cannot be set externally")
     ubsan_config.add("log_path", "'%s'" % log_path, overwrite=True)
     ubsan_config.add("print_stacktrace", "1")
     env["UBSAN_OPTIONS"] = ubsan_config.options
@@ -177,9 +177,9 @@ def configure_sanitizers(env, target_dir, log_path):
             if isfile(symbolizer_bin):
                 env["ASAN_SYMBOLIZER_PATH"] = symbolizer_bin
         elif not pathjoin(target_dir, "llvm-symbolizer.exe"):
-            log.warning("llvm-symbolizer.exe should be next to the target binary")
+            LOG.warning("llvm-symbolizer.exe should be next to the target binary")
     elif "ASAN_SYMBOLIZER_PATH" in env and not isfile(env["ASAN_SYMBOLIZER_PATH"]):
-        log.warning("Invalid ASAN_SYMBOLIZER_PATH (%s)", env["ASAN_SYMBOLIZER_PATH"])
+        LOG.warning("Invalid ASAN_SYMBOLIZER_PATH (%s)", env["ASAN_SYMBOLIZER_PATH"])
 
 
 def create_profile(extension=None, prefs_js=None, template=None):
@@ -202,7 +202,7 @@ def create_profile(extension=None, prefs_js=None, template=None):
     profile = mkdtemp(prefix="ffprof_")
     try:
         if template is not None:
-            log.debug("using profile template: %r", template)
+            LOG.debug("using profile template: %r", template)
             rmtree(profile)
             copytree(template, profile)
             invalid_prefs = pathjoin(profile, "Invalidprefs.js")
@@ -210,7 +210,7 @@ def create_profile(extension=None, prefs_js=None, template=None):
             if isfile(invalid_prefs):
                 remove(invalid_prefs)
         if prefs_js is not None:
-            log.debug("using prefs.js: %r", prefs_js)
+            LOG.debug("using prefs.js: %r", prefs_js)
             copyfile(prefs_js, pathjoin(profile, "prefs.js"))
             # times.json only needs to be created when using a custom prefs.js
             times_json = pathjoin(profile, "times.json")
@@ -243,7 +243,7 @@ def create_profile(extension=None, prefs_js=None, template=None):
                             manifest = json_load(manifest)
                         ext_name = manifest["applications"]["gecko"]["id"]
                     except (IOError, KeyError, ValueError) as exc:
-                        log.debug("Failed to parse manifest.json: %s", exc)
+                        LOG.debug("Failed to parse manifest.json: %s", exc)
                 elif isfile(pathjoin(ext, "install.rdf")):
                     try:
                         xmlns = {"x": "http://www.w3.org/1999/02/22-rdf-syntax-ns#",
@@ -254,7 +254,7 @@ def create_profile(extension=None, prefs_js=None, template=None):
                         assert len(ids) == 1
                         ext_name = ids[0].text
                     except (AssertionError, IOError, ElementTree.ParseError) as exc:
-                        log.debug("Failed to parse install.rdf: %s", exc)
+                        LOG.debug("Failed to parse install.rdf: %s", exc)
                 if ext_name is None:
                     raise RuntimeError("Failed to find extension id in manifest: %r" % ext)
                 copytree(abspath(ext), pathjoin(profile, "extensions", ext_name))
@@ -381,11 +381,11 @@ def prepare_environment(target_dir, sanitizer_log, env_mod=None):
     for env_name, env_value in base.items():
         if env_value is None:
             if env_name in env:
-                log.debug("removing env var %r", env_name)
+                LOG.debug("removing env var %r", env_name)
                 del env[env_name]
             continue
         if env_name in optional and env_name in env:
-            log.debug("skipping optional env var %r", env_name)
+            LOG.debug("skipping optional env var %r", env_name)
             continue
         env[env_name] = env_value
 
@@ -453,7 +453,7 @@ def wait_on_files(wait_files, poll_rate=0.25, timeout=60):
         try:
             if wait_files.intersection({true_path(x.path) for x in procs[-1].open_files()}):
                 if deadline <= time():
-                    log.debug("wait_on_files(timeout=%d) timed out", timeout)
+                    LOG.debug("wait_on_files(timeout=%d) timed out", timeout)
                     return False
                 sleep(poll_rate)
                 continue
