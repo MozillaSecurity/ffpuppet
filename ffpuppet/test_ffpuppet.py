@@ -115,10 +115,10 @@ def test_ffpuppet_02(tmp_path):
         assert ffp.launches == 0
         assert ffp.reason == ffp.RC_ALERT
 
-def test_ffpuppet_03(tmp_path):
+def test_ffpuppet_03(mocker, tmp_path):
     """test hang on start"""
+    mocker.patch("ffpuppet.core.FFPuppet.LAUNCH_TIMEOUT_MIN", 1)
     with FFPuppet() as ffp:
-        ffp.LAUNCH_TIMEOUT_MIN = 1
         prefs = (tmp_path / "prefs.js")
         prefs.write_bytes(b"//fftest_startup_hang\n")
         start = time.time()
@@ -127,7 +127,7 @@ def test_ffpuppet_03(tmp_path):
         duration = time.time() - start
         ffp.close()
         assert ffp.reason == ffp.RC_CLOSED
-        assert duration >= ffp.LAUNCH_TIMEOUT_MIN
+        assert duration >= 1
         assert duration < 30
 
 def test_ffpuppet_04(tmp_path):

@@ -10,7 +10,7 @@ from re import compile as re_compile
 from .checks import CheckLogContents, CheckLogSize, CheckMemoryUsage
 
 
-def test_check_01(tmp_path):
+def test_check_01(mocker, tmp_path):
     """test CheckLogContents()"""
     test_log = (tmp_path / "test.log")
     # input contains token
@@ -40,13 +40,9 @@ def test_check_01(tmp_path):
         lfp.write("test123")
         lfp.write("A" * 20)
     checker = CheckLogContents([str(test_log)], [re_compile("test123")])
-    prev_chunk_size = CheckLogContents.chunk_size
-    try:
-        CheckLogContents.chunk_size = CheckLogContents.buf_limit
-        assert not checker.check()
-        assert checker.check()
-    finally:
-        CheckLogContents.chunk_size = prev_chunk_size
+    mocker.patch("ffpuppet.checks.CheckLogContents.chunk_size", CheckLogContents.buf_limit)
+    assert not checker.check()
+    assert checker.check()
     with test_log.open("wb") as lfp:
         checker.dump_log(lfp)
         assert lfp.tell()

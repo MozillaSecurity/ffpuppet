@@ -49,6 +49,9 @@ class FFPuppet(object):  # pylint: disable=too-many-instance-attributes
     RC_WORKER = "WORKER"  # target was closed by worker thread
     VALGRIND_MIN_VERSION = 3.14  # minimum allowed version of Valgrind
 
+    __slots__ = ("_abort_tokens", "_checks", "_dbg", "_last_bin_path", "_launches",
+                 "_logs", "_proc", "_profile_template", "_xvfb", "profile", "reason")
+
     def __init__(self, use_profile=None, use_valgrind=False, use_xvfb=False, use_gdb=False, use_rr=False):
         self._abort_tokens = set()  # tokens used to notify log scanner to kill the browser process
         self._checks = list()
