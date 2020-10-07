@@ -76,7 +76,8 @@ class SanitizerConfig(object):
 def append_prefs(profile_path, prefs):
     assert isinstance(prefs, dict)
     with open(pathjoin(profile_path, "prefs.js"), "a") as prefs_fp:
-        prefs_fp.write("\n")  # make sure there is a newline before appending to prefs.js
+        # make sure there is a newline before appending to prefs.js
+        prefs_fp.write("\n")
         for name, value in prefs.items():
             prefs_fp.write("user_pref('%s', %s);\n" % (name, value))
 
@@ -429,8 +430,8 @@ def wait_on_files(wait_files, poll_rate=0.25, timeout=60):
     @rtype: bool
     @return: True if all files were closed within timeout else False
     """
-    assert poll_rate >= 0, "Invalid poll_rate %d, must be greater than or equal to 0" % poll_rate
-    assert timeout >= 0, "Invalid timeout %d, must be greater than or equal to 0" % timeout
+    assert poll_rate >= 0
+    assert timeout >= 0
     poll_rate = min(poll_rate, timeout)
     wait_files = {true_path(x) for x in wait_files if isfile(x)}
     if not wait_files:

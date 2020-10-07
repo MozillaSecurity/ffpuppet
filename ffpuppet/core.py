@@ -133,7 +133,7 @@ class FFPuppet(object):  # pylint: disable=too-many-instance-attributes
         @rtype: None
         @return: None
         """
-        assert isinstance(token, str)
+        assert token and isinstance(token, str)
         self._abort_tokens.add(re_compile(token))
 
 
@@ -320,10 +320,10 @@ class FFPuppet(object):  # pylint: disable=too-many-instance-attributes
             self._xvfb = None
 
         # at this point everything should be cleaned up
-        assert self.reason is not None, "self.reason is None"
-        assert self._logs.closed, "self._logs.closed is not True"
-        assert self._proc is None, "self._proc is not None"
-        assert self.profile is None, "self.profile is not None"
+        assert self.reason is not None
+        assert self._logs.closed
+        assert self._proc is None
+        assert self.profile is None
 
         # negative 'self._launches' indicates clean_up() has been called
         self._launches = -1
@@ -490,7 +490,7 @@ class FFPuppet(object):  # pylint: disable=too-many-instance-attributes
         @rtype: list
         @return: List of arguments that make up the launch command
         """
-        assert isinstance(bin_path, str), "bin_path must be 'str'"
+        assert isinstance(bin_path, str)
 
         # if a python script is passed use 'sys.executable' as the binary
         # this is used by the test framework
@@ -502,9 +502,8 @@ class FFPuppet(object):  # pylint: disable=too-many-instance-attributes
             cmd += ["-profile", self.profile]
 
         if additional_args:
-            assert isinstance(additional_args, list), "additional_args must be 'list'"
-            for add_arg in additional_args:
-                assert isinstance(add_arg, str), "additional arguments must be 'str'"
+            assert isinstance(additional_args, list)
+            assert all(isinstance(x, str) for x in additional_args)
             cmd.extend(additional_args)
 
         if self._dbg == self.DBG_VALGRIND:
