@@ -55,6 +55,14 @@ class CheckLogContents(Check):
         self.tokens = search_tokens
 
     def check(self):
+        """Collect log contents for tokens.
+
+        Args:
+            None
+
+        Returns:
+            bool: True if a token is located otherwise False.
+        """
         for log in self.logs:
             try:
                 # check if file has new data
@@ -93,6 +101,15 @@ class CheckLogSize(Check):
         self.stdout_file = stdout_file
 
     def check(self):
+        """Collect log disk usage info and compare with limit.
+
+        Args:
+            None
+
+        Returns:
+            bool: True if the total usage is greater than or equal to
+                  self.limit otherwise False.
+        """
         err_size = stat(self.stderr_file).st_size
         out_size = stat(self.stdout_file).st_size
         total_size = err_size + out_size
@@ -120,12 +137,14 @@ class CheckMemoryUsage(Check):
         self.pid = pid
 
     def check(self):
-        """
-        Use psutil to collect memory usage info and compare with limit.
+        """Use psutil to collect memory usage info and compare with limit.
 
-        @rtype: bool
-        @return: True if the total memory usage is greater than or equal to
-        self.limit otherwise False.
+        Args:
+            None
+
+        Returns:
+            bool: True if the total usage is greater than or equal to
+                  self.limit otherwise False.
         """
         procs = get_processes(self.pid)
         proc_info = list()
