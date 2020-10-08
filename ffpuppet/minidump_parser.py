@@ -31,6 +31,16 @@ class MinidumpParser(object):
         self._record_failures = record_failures  # mdsw failure reporting
 
     def _call_mdsw(self, dump_file, out_fp, extra_flags=None):
+        """Call minidump_stackwalk on a dmp file and collect output.
+
+        Args:
+            dump_file (str): Path to dmp file.
+            out_fp (file): File to write output to.
+            extra_flags (list): Arguments to add to call to minidump_stackwalk.
+
+        Returns:
+            None
+        """
         cmd = [self.MDSW_BIN]
         if extra_flags:
             cmd += extra_flags
@@ -59,6 +69,15 @@ class MinidumpParser(object):
         out_fp.seek(0)
 
     def _read_registers(self, dump_file, log_fp):
+        """Use minidump_stackwalk to retrieve register info from dump_file.
+
+        Args:
+            dump_file (str): Path to dmp file.
+            out_fp (file): File to write output to.
+
+        Returns:
+            None
+        """
         LOG.debug("calling minidump_stackwalk on %s", dump_file)
         with TemporaryFile() as out_fp:
             self._call_mdsw(dump_file, out_fp)
@@ -71,13 +90,24 @@ class MinidumpParser(object):
                     continue
                 line = line.lstrip()
                 if line.startswith(b"0"):
-                    continue  # skip first line
+                    # skip first line
+                    continue
                 if b"=" not in line:
-                    break  # we reached the end
+                    # we reached the end
+                    break
                 log_fp.write(line)
             LOG.debug("collected register info: %r", found_registers)
 
     def _read_stacktrace(self, dump_file, log_fp, raw_fp=None):
+        """Use minidump_stackwalk to retrieve stack trace from dump_file.
+
+        Args:
+            dump_file (str): Path to dmp file.
+            out_fp (file): File to write output to.
+
+        Returns:
+            None
+        """
         LOG.debug("calling minidump_stackwalk -m on %s", dump_file)
         with TemporaryFile() as out_fp:
             self._call_mdsw(dump_file, out_fp, extra_flags=["-m"])
@@ -88,7 +118,8 @@ class MinidumpParser(object):
             line_count = 0  # lines added to the log so far
             for line in out_fp:  # pylint: disable=not-an-iterable
                 if b"|" not in line or line.startswith(b"Module|"):
-                    continue  # ignore line
+                    # ignore line
+                    continue
 
                 # check if this is a stack entry (starts with '#|')
                 try:
@@ -100,7 +131,8 @@ class MinidumpParser(object):
                     elif t_id != crash_thread:
                         break
                 except ValueError:
-                    pass  # not a stack entry
+                    # not a stack entry
+                    pass
 
                 log_fp.write(line)
                 line_count += 1
@@ -110,8 +142,15 @@ class MinidumpParser(object):
                     break
 
     def collect_logs(self, cb_create_log, symbols_path):
-        if not isdir(symbols_path):
-            raise IOError("symbols_path does not exist: %r" % (symbols_path,))
+        """Collect logs from dmp files.
+
+        Args:
+            cb_create_log (callable): A callback to add log to PuppetLogger.
+            symbols_path (str): Path to symbols directory.
+
+        Returns:
+            None
+        """
         self.symbols_path = symbols_path
         # sort dumps by modified date since the oldest is likely the most interesting
         # this does assume that the dumps are written sequentially
@@ -127,6 +166,14 @@ class MinidumpParser(object):
 
     @classmethod
     def mdsw_available(cls):
+        """Check if minidump_stackwalk is available.
+
+        Args:
+            None
+
+        Returns:
+            bool: True if minidump_stack walk is available otherwise False.
+        """
         cmd = [cls.MDSW_BIN]
         try:
             with open(devnull, "w") as null_fp:
@@ -137,42 +184,32 @@ class MinidumpParser(object):
 
 
 def process_minidumps(scan_path, symbols_path, cb_create_log):
-    """
-    Scan for minidump (.dmp) files a in scan_path. If dumps are found they are parsed and
-    new logs are added via the cb_create_log callback.
+    """Scan for minidump (.dmp) files a in scan_path. If dumps are found they
+    are parsed and new logs are added via the cb_create_log callback.
 
-    @type scan_path: String
-    @param scan_path: Directory potentially containing minidump files
+    Args:
+        scan_path (str): Directory potentially containing minidump files.
+        symbols_path (str): Directory containing symbols for the target binary.
+        cb_create_log (callable): A callback to the add_log() of a PuppetLogger.
 
-    @type symbols_path: String
-    @param symbols_path: Directory containing symbols for the target binary
-
-    @type cb_create_log: callback
-    @param cb_create_log: A callback to the add_log() of a PuppetLogger
-
-    @rtype: None
-    @return: None
+    Returns:
+        None
     """
     assert isinstance(scan_path, str)
     assert isinstance(symbols_path, str)
     assert callable(cb_create_log)
-
     if not isdir(scan_path):
         LOG.debug("scan_path %r does not exist", scan_path)
         return
-
-    md_parser = MinidumpParser(scan_path)
-    if not md_parser.md_files:
+    parser = MinidumpParser(scan_path)
+    if not parser.md_files:
         LOG.debug("scan_path %r did not contain '.dmp' files", scan_path)
         return
-
     if not isdir(symbols_path):
         LOG.warning("symbols_path not found: %r", symbols_path)
         return
-
-    if not md_parser.mdsw_available():
+    if not parser.mdsw_available():
         LOG.warning("Found a minidump, but can't process it without minidump_stackwalk."
                     " See README.md for how to obtain it.")
         return
-
-    md_parser.collect_logs(cb_create_log, symbols_path)
+    parser.collect_logs(cb_create_log, symbols_path)

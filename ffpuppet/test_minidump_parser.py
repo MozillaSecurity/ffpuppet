@@ -20,8 +20,6 @@ def test_minidump_parser_01(mocker, tmp_path):
     mdp = MinidumpParser(str(tmp_path))
     assert not mdp.md_files
     callback = mocker.Mock()
-    with pytest.raises(IOError):
-        mdp.collect_logs(callback, "/path/does/not/exist/")
     assert callback.call_count == 0
     mdp.collect_logs(callback, str(tmp_path))
     assert callback.call_count == 0
