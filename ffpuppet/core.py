@@ -56,7 +56,7 @@ class FFPuppet(object):  # pylint: disable=too-many-instance-attributes
         self._abort_tokens = set()  # tokens used to notify log scanner to kill the browser process
         self._bin_path = None
         self._checks = list()
-        assert sum((use_gdb, use_rr, use_valgrind)) < 2, "only a single debugger can be enabled"
+        assert sum((use_gdb, use_rr, use_valgrind)) < 2, "multiple debuggers enabled"
         if use_gdb:
             self._dbg = self.DBG_GDB
         elif use_rr:
@@ -94,24 +94,30 @@ class FFPuppet(object):  # pylint: disable=too-many-instance-attributes
 
     @classmethod
     def _dbg_sanity_check(cls, dbg_id):
-        # sanity check debuggers
-        plat = system()
+        """Check requested debugger is supported and available.
+
+        Args:
+            dbg_id (int): Debugger to sanity check.
+
+        Returns:
+            None
+        """
         if dbg_id == cls.DBG_GDB:
-            if not plat.startswith("Linux"):
+            if not system().startswith("Linux"):
                 raise EnvironmentError("GDB is only supported on Linux")
             try:
                 check_output(["gdb", "--version"])
             except OSError:
                 raise EnvironmentError("Please install GDB") from None
         elif dbg_id == cls.DBG_RR:
-            if not plat.startswith("Linux"):
+            if not system().startswith("Linux"):
                 raise EnvironmentError("rr is only supported on Linux")
             try:
                 check_output(["rr", "--version"])
             except OSError:
                 raise EnvironmentError("Please install rr") from None
         elif dbg_id == cls.DBG_VALGRIND:
-            if not plat.startswith("Linux"):
+            if not system().startswith("Linux"):
                 raise EnvironmentError("Valgrind is only supported on Linux")
             try:
                 match = re_match(
@@ -124,54 +130,53 @@ class FFPuppet(object):  # pylint: disable=too-many-instance-attributes
 
 
     def add_abort_token(self, token):
-        """
-        Add a token that when present in the browser log will have the browser process terminated.
+        """Add a token that when present in the browser log will have the
+        browser process terminated.
 
-        @type token: String
-        @param token: String to search for in the browser log.
+        Args:
+            token (str): Value to search for in the browser logs.
 
-        @rtype: None
-        @return: None
+        Returns:
+            None
         """
         assert token and isinstance(token, str)
         self._abort_tokens.add(re_compile(token))
 
 
     def available_logs(self):
-        """
-        List of IDs for the currently available logs.
+        """List of IDs for the currently available logs.
 
-        @rtype: list
-        @return: A list containing 'log_id's
+        Args:
+            None
+
+        Returns:
+            list: A list contains log IDs (str).
         """
-        return self._logs.available_logs()
+        return list(self._logs.available_logs())
 
 
     def clone_log(self, log_id, offset=None, target_file=None):
-        """
-        Create a copy of the current browser log.
+        """Create a copy of the selected browser log.
 
-        @type log_id: String
-        @param log_id: The id (key) of the log to clone (stderr, stdout... etc).
+        Args:
+            log_id (str): ID (key) of the log to clone (stderr, stdout... etc).
+            target_file (str): The log contents will be saved to target_file.
+            offset (int):
 
-        @type target_file: String
-        @param target_file: The log contents will be saved to target_file.
-
-        @type offset: int
-        @param offset: Where to begin reading the log from
-
-        @rtype: String or None
-        @return: Name of the file containing the cloned log or None on failure
+        Returns:
+            str: Name of the file containing the cloned log or None on failure.
         """
         return self._logs.clone_log(log_id, offset=offset, target_file=target_file)
 
 
     def cpu_usage(self):
-        """
-        Collect percentage of CPU usage per process.
+        """Collect percentage of CPU usage per process.
 
-        @rtype: Yields a tuple for each process
-        @return: PID of the process and the CPU usage as a percentage.
+        Args:
+            None
+
+        Yields:
+            tuple: PID and the CPU usage as a percentage.
         """
         pid = self.get_pid()
         if pid is not None:
@@ -183,13 +188,15 @@ class FFPuppet(object):  # pylint: disable=too-many-instance-attributes
 
 
     def is_healthy(self):
-        """
-        Verify the browser is in a known good state by performing a series
+        """Verify the browser is in a good state by performing a series
         of checks.
 
-        @rtype: bool
-        @return: True if the browser is running and determined to be
-                 in a valid functioning state otherwise False.
+        Args:
+            None
+
+        Returns:
+            bool: True if the browser is running and determined to be
+                  in a valid functioning state otherwise False.
         """
         if self.reason is not None:
             LOG.debug("reason is set to %r", self.reason)
@@ -208,6 +215,14 @@ class FFPuppet(object):  # pylint: disable=too-many-instance-attributes
 
 
     def _crashreports(self, skip_md=False):
+        """Collect crash logs/reports.
+
+        Args:
+            skip_md (bool): Do not scan for minidumps.
+
+        Yields:
+            str: Path to log on the filesystem.
+        """
         # check for *San and Valgrind logs
         assert self._logs is not None
         try:
@@ -243,7 +258,6 @@ class FFPuppet(object):  # pylint: disable=too-many-instance-attributes
                 full_name = pathjoin(self._logs.working_path, fname)
                 if stat(full_name).st_size:
                     yield full_name
-
         # check for minidumps
         if not skip_md:
             assert self.profile is not None
@@ -258,83 +272,84 @@ class FFPuppet(object):  # pylint: disable=too-many-instance-attributes
 
 
     def log_length(self, log_id):
-        """
-        Get the length of the current browser log.
+        """Get the length of the selected browser log.
 
-        @type log_id: String
-        @param log_id: The id (key) of the log to clone (stderr, stdout... etc).
+        Args:
+            log_id (str): ID (key) of the log (stderr, stdout... etc).
 
-        @rtype: int
-        @return: length of the current browser log in bytes.
+        Returns:
+            int: Length of the log in bytes.
         """
         return self._logs.log_length(log_id)
 
 
     def save_logs(self, dest, logs_only=False, meta=False):
+        """The browser logs will be saved to dest. This can only be called
+        after close().
+
+        Args:
+            dest (str): Destination path for log data. Existing files will
+                        be overwritten.
+            logs_only (bool): Do not include other data such as debugger
+                              output files.
+            meta (bool): Output JSON file containing log file meta data.
+
+        Returns:
+            None
         """
-        The browser logs will be saved to dest.
-        This should only be called after close().
-
-        @type dest: String
-        @param dest: Destination path for log data. Existing files will be overwritten.
-
-        @type logs_only: bool
-        @param logs_only: Do not include other data, including debugger output files.
-
-        @type meta: bool
-        @param meta: Output JSON file containing log file meta data.
-
-        @rtype: None
-        @return: None
-        """
-
-        LOG.debug("save_logs() called, dest=%r, logs_only=%r, meta=%r", dest, logs_only, meta)
+        LOG.debug("save_logs(%r, logs_only=%r, meta=%r)", dest, logs_only, meta)
         assert self._launches > -1, "clean_up() has been called"
         assert self._logs.closed, "Logs are still in use. Call close() first!"
-
         self._logs.save_logs(dest, logs_only=logs_only, meta=meta)
 
 
     def clean_up(self):
-        """
-        Remove all remaining files created during execution.
-        This will clear some state information and should only be called once
-        the FFPuppet object is no longer needed. Using the FFPuppet object after
-        calling clean_up() is not supported.
+        """Remove all remaining files created during execution. This will also
+        clear some state information and should only be called once the FFPuppet
+        object is no longer needed. Using the FFPuppet object after calling
+        clean_up() is not supported.
 
-        @rtype: None
-        @return: None
-        """
+        Args:
+            None
 
+        Returns:
+            None
+        """
         if self._launches < 0:
             LOG.debug("clean_up() call ignored")
             return
-
         LOG.debug("clean_up() called")
         self.close(force_close=True)
         self._logs.clean_up(ignore_errors=True)
-
         # close Xvfb
         if self._xvfb is not None:
             self._xvfb.stop()
             self._xvfb = None
-
         # at this point everything should be cleaned up
         assert self.reason is not None
         assert self._logs.closed
         assert self._proc is None
         assert self.profile is None
-
         # negative 'self._launches' indicates clean_up() has been called
         self._launches = -1
 
 
     @staticmethod
     def _terminate(pid, kill_delay=30):
+        """Terminate the browser process(es).
+
+        Args:
+            kill_delay (int): Amount of time in seconds to wait after
+                              terminate() is called on the processes for them to
+                              exit. After the time elapses kill() will be
+                              called.
+
+        Returns:
+            None
+        """
         LOG.debug("_terminate(%d, kill_delay=%0.2f)", pid, kill_delay)
         procs = get_processes(pid)
-        mode = 0
-        while mode < 2:
+        for mode in range(2):
             LOG.debug("%d running process(es)", len(procs))
             # iterate over and terminate/kill processes
             for proc in procs:
@@ -347,7 +362,6 @@ class FFPuppet(object):  # pylint: disable=too-many-instance-attributes
                 LOG.debug("_terminate() was successful")
                 break
             LOG.debug("timed out (%0.2f), mode %d", kill_delay, mode)
-            mode += 1
         else:
             for proc in procs:
                 try:
@@ -358,20 +372,21 @@ class FFPuppet(object):  # pylint: disable=too-many-instance-attributes
 
 
     def close(self, force_close=False):
+        """Terminate the browser process(es) and set `self.reason`. The reason
+        code indicates how/why the browser process was terminated.
+
+        Args:
+            force_close (bool): Do not collect logs, etc, just make sure
+                                everything is closed.
+
+        Returns:
+            None
         """
-        Terminate the browser process and clean up all processes.
-
-        @type force_close: bool
-        @param force_close: Do not collect logs... etc, just make sure everything is closed
-
-        @rtype: None
-        @return: None
-        """
-
         LOG.debug("close(force_close=%r) called", force_close)
         assert self._launches > -1, "clean_up() has been called"
         if self.reason is not None:
-            self._logs.close()  # make sure browser logs are closed
+            # make sure browser logs are closed
+            self._logs.close()
             return
 
         assert self._proc is not None
@@ -400,13 +415,13 @@ class FFPuppet(object):  # pylint: disable=too-many-instance-attributes
             LOG.debug("poll() returned %r", self._proc.poll())
         else:
             r_code = self.RC_EXITED
-
+        # close processes
         if self.is_running():
             LOG.debug("browser needs to be terminated")
             self._terminate(self._proc.pid)
             # wait for reports triggered by the call to _terminate()
             wait_on_files(self._crashreports(), timeout=10)
-
+        # collect crash logs
         if not force_close:
             if self._logs.closed:  # pragma: no cover
                 # This should not happen while everything is working as expected.
@@ -433,7 +448,7 @@ class FFPuppet(object):  # pylint: disable=too-many-instance-attributes
                 if self._logs.get_fp("stderr"):
                     self._logs.get_fp("stderr").write(
                         ("[ffpuppet] Reason code: %s\n" % r_code).encode("utf-8"))
-
+        # reset remaining to closed state
         try:
             self._proc = None
             self._logs.close()
@@ -454,22 +469,26 @@ class FFPuppet(object):  # pylint: disable=too-many-instance-attributes
 
     @property
     def launches(self):
-        """
-        Get the number of successful launches
+        """Number of successful launches.
 
-        @rtype: int
-        @return: successful launch count
+        Args:
+            None
+
+        Returns:
+            int: Successful launch count.
         """
         assert self._launches > -1, "clean_up() has been called"
         return self._launches
 
 
     def get_pid(self):
-        """
-        Get the browser process ID
+        """Get the browser process ID.
 
-        @rtype: int
-        @return: browser process ID
+        Args:
+            None
+
+        Returns:
+            int: Browser PID.
         """
         try:
             return self._proc.pid
@@ -478,17 +497,14 @@ class FFPuppet(object):  # pylint: disable=too-many-instance-attributes
 
 
     def build_launch_cmd(self, bin_path, additional_args=None):
-        """
-        Build a command that can be used to launch the browser.
+        """Build a command that can be used to launch the browser.
 
-        @type bin_path: String
-        @param bin_path: Path to the Firefox binary
+        Args:
+            bin_path (str): Path to the browser binary.
+            additional_args (list): Additional arguments to pass to the browser.
 
-        @type additional_args: list
-        @param additional_args: Additional arguments passed to Firefox.
-
-        @rtype: list
-        @return: List of arguments that make up the launch command
+        Returns:
+            list: List of arguments that make up the launch command.
         """
         assert isinstance(bin_path, str)
 
@@ -571,40 +587,30 @@ class FFPuppet(object):  # pylint: disable=too-many-instance-attributes
 
     def launch(self, bin_path, env_mod=None, launch_timeout=300, location=None, log_limit=0,
                memory_limit=0, prefs_js=None, extension=None):
-        """
-        Launch a new browser process.
+        """Launch a new browser process.
 
-        @type bin_path: String
-        @param bin_path: Path to the Firefox binary
+        Args:
+            bin_path (str): Path to the Firefox binary.
+            env_mod (dict): Environment modifier. Add, remove and update entries
+                            in the prepared environment. Add and update by
+                            setting value (str) and remove by setting entry
+                            value to None.
+            launch_timeout (int): Timeout in seconds for launching the browser.
+            location (str): URL to navigate to after successfully launch of
+                            the browser.
+            log_limit (int): Log file size limit in bytes. Browser will be
+                             terminated if the log file exceeds the amount
+                             specified.
+            memory_limit (int): Memory limit in bytes. Browser will be
+                                terminated if its memory usage exceeds the
+                                amount specified.
+            prefs_js (str): Path to a prefs.js file to install in the Firefox
+                            profile.
+            extension (str): Path to an extension (or list of extension) to be
+                             installed.
 
-        @type env_mod: dict
-        @param env_mod: Environment modifier. Add, remove and update entries in the prepared
-                        environment via this dict. Add and update using key, value pairs where
-                        value is a string and to remove set the value to None. If it is None no
-                        extra modifications are made.
-
-        @type launch_timeout: int
-        @param launch_timeout: Timeout in seconds for launching the browser
-
-        @type location: String
-        @param location: URL to navigate to after successfully starting up the browser
-
-        @type log_limit: int
-        @param log_limit: Log file size limit in bytes. Browser will be terminated if the log file
-                          exceeds the amount specified here.
-
-        @type memory_limit: int
-        @param memory_limit: Memory limit in bytes. Browser will be terminated if its memory usage
-                             exceeds the amount specified here.
-
-        @type prefs_js: String
-        @param prefs_js: Path to a prefs.js file to install in the Firefox profile.
-
-        @type extension: String, or list of Strings
-        @param extension: Path to an extension (e.g. DOMFuzz fuzzPriv extension) to be installed.
-
-        @rtype: None
-        @return: None
+        Returns:
+            None
         """
         assert self._launches > -1, "clean_up() has been called"
         assert log_limit >= 0
@@ -615,7 +621,8 @@ class FFPuppet(object):  # pylint: disable=too-many-instance-attributes
         bin_path = abspath(bin_path)
         if not isfile(bin_path) or not access(bin_path, X_OK):
             raise IOError("%s is not an executable" % bin_path)
-        self._bin_path = dirname(bin_path)  # need the path for minidump_stackwalk
+        # need the path to help find symbols
+        self._bin_path = dirname(bin_path)
 
         LOG.debug("requested location: %r", location)
         if location is not None:
@@ -712,11 +719,13 @@ class FFPuppet(object):  # pylint: disable=too-many-instance-attributes
 
 
     def is_running(self):
-        """
-        Check if the browser process is running.
+        """Check if the browser process is running.
 
-        @rtype: bool
-        @return: True if the process is running otherwise False
+        Args:
+            None
+
+        Returns:
+            bool: True if the process is running otherwise False.
         """
         try:
             return self._proc.poll() is None
@@ -725,17 +734,16 @@ class FFPuppet(object):  # pylint: disable=too-many-instance-attributes
 
 
     def wait(self, timeout=None):
-        """
-        Wait for process and children to terminate. This call will block until the processes exit
-        unless a timeout is specified. If a timeout of zero or greater is specified the call will
-        only block until the timeout expires.
+        """Wait for browser process(es) to terminate. This call will block until
+        all process(es) exit unless a timeout is specified. If a timeout of zero
+        or greater is specified the call will block until the timeout expires.
 
-        @type timeout: float, int or None
-        @param timeout: maximum amount of time to wait for process to terminate
-                        or None (wait indefinitely)
+        Args:
+            timeout (float): The maximum amount of time in seconds to wait or
+                             None (wait indefinitely).
 
-        @rtype: bool
-        @return: True if processes exit before timeout expires otherwise False
+        Returns:
+            bool: True if processes exit before timeout expires otherwise False.
         """
         assert timeout is None or timeout >= 0
         pid = self.get_pid()
