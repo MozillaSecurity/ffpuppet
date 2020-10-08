@@ -114,6 +114,7 @@ def configure_sanitizers(env, target_dir, log_path):
         ("abort_on_error", "false"),
         ("allocator_may_return_null", "true"),
         ("disable_coredump", "true"),
+        ("exitcode", "77"),  # use unique exitcode to help identify missed reports
         ("handle_abort", "true"),  # if true, abort_on_error=false to prevent hangs
         ("handle_sigbus", "true"),  # set to be safe
         ("handle_sigfpe", "true"),  # set to be safe
