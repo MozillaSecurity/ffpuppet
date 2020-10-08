@@ -45,17 +45,15 @@ class PuppetLogger(object):
         self.clean_up()
 
     def add_log(self, log_id, logfp=None):
-        """
-        Add a log file to the log manager.
+        """Add a log file to the log manager.
 
-        @type log_id: String
-        @param log_id: ID of the log to add.
+        Args:
+            log_id (str): ID of the log to add.
+            logfp (file): File object to use. If None is provided a new log
+                          file will be created.
 
-        @type logfp: file
-        @param logfp: logfp is a file object. If None is provided a new log file will be created.
-
-        @rtype: file
-        @return: file object of the newly added log file.
+        Returns:
+            file: Newly added log file.
         """
         assert log_id not in self._logs
         assert not self.closed
@@ -65,15 +63,14 @@ class PuppetLogger(object):
         return logfp
 
     def add_path(self, name):
-        """
-        Add a directory that can be used as temporary storage for miscellaneous
-        items such as additional debugger output.
+        """Add a directory that can be used as temporary storage for
+        miscellaneous items such as additional debugger output.
 
-        @type name: String
-        @param name: name of path to create.
+        Args:
+            name (str): Name of directory to create.
 
-        @rtype: String
-        @return: path of newly created directory
+        Returns:
+            str: Path of newly created directory.
         """
         assert not self.closed
         path = pathjoin(self.working_path, name)
@@ -82,28 +79,27 @@ class PuppetLogger(object):
         return path
 
     def available_logs(self):
-        """
-        List of IDs for the currently available logs.
+        """List of IDs for the available logs.
 
-        @rtype: list
-        @return: A list containing log IDs
+        Args:
+            None
+
+        Returns:
+            list: A list containing log IDs.
         """
         return self._logs.keys()
 
     def clean_up(self, ignore_errors=False, wait_delay=10):
-        """
-        Remove log files from disk.
+        """Remove log files from disk.
 
-        @type ignore_errors: bool
-        @param ignore_errors: Errors triggered by removing files and directories
-                              will be ignored.
+        Args:
+            ignore_errors (bool): Ignore errors triggered by removing files and
+                                  directories will be ignored.
+            wait_delay (int): Maximum amount of time to wait for files to close
+                              if an error is hit before retrying.
 
-        @type wait_delay: int
-        @param wait_delay: Maximum amount of time to wait for files to close if
-                           an error is hit before retrying.
-
-        @rtype: None
-        @return: None
+        Returns:
+            None
         """
         if not self.closed:
             self.close()
@@ -121,20 +117,15 @@ class PuppetLogger(object):
         self.working_path = None
 
     def clone_log(self, log_id, offset=None, target_file=None):
-        """
-        Create a copy of the specified log.
+        """Create a copy of the specified log.
 
-        @type log_id: String
-        @param log_id: ID of the log to clone.
+        Args:
+            log_id (str): ID of the log to clone.
+            target_file (str): The log contents will be saved to target_file.
+            offset (int): Where to begin reading the log from.
 
-        @type target_file: String
-        @param target_file: The log contents will be saved to target_file.
-
-        @type offset: int
-        @param offset: Where to begin reading the log from
-
-        @rtype: String or None
-        @return: Name of the file containing the cloned log or None on failure
+        Returns:
+            str: Name of the file containing the cloned log or None on failure.
         """
         log_fp = self.get_fp(log_id)
         if log_fp is None:
@@ -156,11 +147,13 @@ class PuppetLogger(object):
         return target_file
 
     def close(self):
-        """
-        Close all open file objects.
+        """Close all open file objects.
 
-        @rtype: None
-        @return: None
+        Args:
+            None
+
+        Returns:
+            None
         """
         for lfp in self._logs.values():
             if not lfp.closed:
@@ -169,22 +162,26 @@ class PuppetLogger(object):
 
     @property
     def files(self):
-        """
-        Generator containing file names
+        """File names of log files.
+
+        Args:
+            None
+
+        Yields:
+            str: File names of log files.
         """
         for lfp in self._logs.values():
             if lfp.name is not None:
                 yield lfp.name
 
     def get_fp(self, log_id):
-        """
-        Lookup log file object by ID.
+        """Lookup log file object by ID.
 
-        @type log_id: String
-        @param log_id: ID of the log (stderr, stdout... etc).
+        Args:
+            log_id (str): ID of the log (stderr, stdout... etc).
 
-        @rtype: file object
-        @return: A file object if ID is valid otherwise None.
+        Returns:
+            file: The file matching given ID otherwise None.
         """
         try:
             log_fp = self._logs[log_id]
@@ -196,14 +193,14 @@ class PuppetLogger(object):
         return log_fp
 
     def log_length(self, log_id):
-        """
-        Get the length of the specified log.
+        """Get the length of the specified log.
 
-        @type log_id: String
-        @param log_id: ID of the log to measure.
+        Args:
+            log_id (str): ID of the log to measure.
 
-        @rtype: int
-        @return: length of the specified log in bytes or None if the log does not exist.
+        Returns:
+            int: Length of the specified log in bytes or None if the log does
+                 not exist.
         """
         log_fp = self.get_fp(log_id)
         if log_fp is None:
@@ -214,18 +211,15 @@ class PuppetLogger(object):
 
     @staticmethod
     def open_unique(base_dir=None, mode="wb"):
-        """
-        Create and open a unique file.
+        """Create and open a unique file.
 
-        @type base_dir: String
-        @param base_dir: This is where the file will be created. If None is passed
-                         mkstemp() will use the system default.
+        Args:
+            base_dir (str): This is where the file will be created. If None is
+                            passed mkstemp() will use the system default.
+            mode (str): File mode. See documentation for open().
 
-        @type mode: String
-        @param mode: File mode. See documentation for open().
-
-        @rtype: file object
-        @return: An open file object.
+        Returns:
+            file: An open file object.
         """
         tmp_fd, log_file = mkstemp(
             suffix=".txt",
@@ -236,11 +230,13 @@ class PuppetLogger(object):
         return open(log_file, mode)
 
     def reset(self):
-        """
-        Reset logger for reuse.
+        """Reset logger for reuse.
 
-        @rtype: None
-        @return: None
+        Args:
+            None
+
+        Returns:
+            None
         """
         self.clean_up()
         self.closed = False
@@ -248,21 +244,18 @@ class PuppetLogger(object):
         self.working_path = realpath(mkdtemp(prefix="ffplogs_", dir=self._base))
 
     def save_logs(self, dest, logs_only=False, meta=False):
-        """
-        The browser logs will be saved to dest.
-        This should only be called after close() has been called.
+        """The browser logs will be saved to dest. This can only be called
+        after close() has been called.
 
-        @type dest: String
-        @param dest: Destination path for log data. Existing files will be overwritten.
+        Args:
+            dest (str): Destination path for log data. Existing files will be
+                        overwritten.
+            logs_only (bool): Do not include other data, including debugger
+                              output files.
+            meta (bool): Output JSON file containing log file meta data.
 
-        @type logs_only: bool
-        @param logs_only: Do not include other data, including debugger output files.
-
-        @type meta: bool
-        @param meta: Output JSON file containing log file meta data.
-
-        @rtype: None
-        @return: None
+        Returns:
+            None
         """
         assert self.closed, "save_logs() cannot be called before calling close()"
         assert self.working_path is not None
