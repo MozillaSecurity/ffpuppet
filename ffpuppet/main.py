@@ -20,19 +20,15 @@ __author__ = "Tyson Smith"
 
 
 def dump_to_console(log_dir, log_quota=0x8000):
+    """Read and merge log files and format for output on the console.
+
+    Args:
+        log_dir (str): Directory to scan for logs.
+        log_quota (int): Maximum number of bytes to read per log.
+
+    Returns:
+        str: Merged log data to be displayed on the console.
     """
-    Read and merge log files and format for output on the console
-
-    @type log_dir: String
-    @param log_dir: directory to scan for logs
-
-    @type log_quota: int
-    @param log_quota: maximum number of bytes to read per log
-
-    @rtype: String
-    @return: Merged log data to be displayed on the console
-    """
-
     logs = list(x for x in listdir(log_dir) if isfile(pathjoin(log_dir, x)))
     if not logs:
         return ""
