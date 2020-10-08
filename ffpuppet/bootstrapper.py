@@ -55,22 +55,59 @@ class Bootstrapper(object):
         self.close()
 
     def close(self):
+        """Close listening socket.
+
+        Args:
+            None
+
+        Returns:
+            None
+        """
         if self._socket is not None:
             self._socket.close()
             self._socket = None
 
     @property
     def location(self):
+        """Location in the format of 'http://127.0.0.1:#'.
+
+        Args:
+            None
+
+        Returns:
+            str: Location.
+        """
         assert self._socket is not None
         return "http://127.0.0.1:%d" % self.port
 
     @property
     def port(self):
+        """Listening socket port number.
+
+        Args:
+            None
+
+        Returns:
+            int: Port number.
+        """
         assert self._socket is not None
         return self._socket.getsockname()[1]
 
     def wait(self, cb_continue, timeout=60, url=None):
+        """Wait for browser connection, read request and send response.
+
+        Args:
+            cb_continue (callable): Callback that return True if the browser
+                                    process is healthy otherwise False.
+            timeout (int): Amount of time wait before raising
+                           BrowserTimeoutError.
+            url (str): Location to redirect to.
+
+        Returns:
+            None
+        """
         assert self._socket is not None
+        assert timeout >= 0
         start_time = time()
         time_limit = start_time + timeout
         conn = None
