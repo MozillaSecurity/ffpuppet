@@ -7,17 +7,19 @@ python:
   - 3.6
   - 3.7
   - 3.8
+  - 3.9
 jobs:
   include:
     - os: osx
       osx_image: xcode11.2
       language: shell
     - os: windows
-      python: 3.8
       language: shell
       before_install:
         - choco install python --version 3.8
       env: PATH=/c/Python38:/c/Python38/Scripts:$PATH
+  allow_failures:
+    - python: 3.9
 addons:
   apt:
     packages:
