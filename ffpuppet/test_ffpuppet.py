@@ -15,13 +15,12 @@ from subprocess import call, check_output, Popen
 import threading
 import time
 
-from psutil import AccessDenied, NoSuchProcess, Process, wait_procs
+from psutil import Process
 import pytest
 
 from .bootstrapper import Bootstrapper
 from .core import FFPuppet
 from .exceptions import BrowserTimeoutError, BrowserTerminatedError, LaunchError, TerminateError
-from .helpers import get_processes
 from .minidump_parser import MinidumpParser
 
 Bootstrapper.POLL_WAIT = 0.2
@@ -522,49 +521,9 @@ def test_ffpuppet_24(mocker, tmp_path):
         assert any(logs.glob("log_minidump_02.txt"))
         assert any(logs.glob("log_minidump_03.txt"))
 
-def test_ffpuppet_25(tmp_path):
-    """test multiprocess target"""
-    prefs = (tmp_path / "prefs.js")
-    prefs.write_bytes(b"//fftest_multi_proc\n")
-    with FFPuppet() as ffp:
-        with HTTPTestServer() as srv:
-            ffp.launch(TESTFF_BIN, prefs_js=str(prefs), location=srv.get_addr())
-            assert ffp.is_running()
-            assert not ffp.wait(timeout=0)
-            c_procs = Process(ffp.get_pid()).children()
-            assert c_procs
-            # terminate one of the child processes
-            c_procs[-1].terminate()
-            assert ffp.is_running()
-            ffp.close()
-        assert not ffp.is_running()
-        assert ffp.wait(timeout=0)
-
-def test_ffpuppet_26(tmp_path):
-    """test multiprocess (target terminated)"""
-    prefs = (tmp_path / "prefs.js")
-    prefs.write_bytes(b"//fftest_multi_proc\n")
-    with FFPuppet() as ffp:
-        with HTTPTestServer() as srv:
-            ffp.launch(TESTFF_BIN, prefs_js=str(prefs), location=srv.get_addr())
-            assert ffp.is_running()
-            procs = get_processes(ffp.get_pid())
-            # when running the browser the children exit if the parent disappears
-            # since the first item in procs is the parent iterate over the list
-            # calling terminate()
-            for proc in procs:
-                try:
-                    proc.terminate()
-                except (AccessDenied, NoSuchProcess):
-                    pass
-            assert not wait_procs(procs, timeout=10)[1]
-            ffp.close()
-        assert not ffp.is_running()
-        assert ffp.wait(timeout=0)
-
 @pytest.mark.skipif(platform.system() != "Linux" or call(["which", "rr"]),
                     reason="rr not installed")
-def test_ffpuppet_27(tmp_path):
+def test_ffpuppet_25(tmp_path):
     """test launching with rr"""
     # NOTE: this can hang if ptrace is blocked by seccomp
     if call(["rr", "record", "echo"]) != 0:
@@ -583,7 +542,7 @@ def test_ffpuppet_27(tmp_path):
         assert b"rr record" in log_data
         assert b"[ffpuppet] Reason code:" in log_data
 
-def test_ffpuppet_28(tmp_path):
+def test_ffpuppet_26(tmp_path):
     """test rmtree error handler"""
     # normal profile creation
     # - just create a puppet, write a readonly file in its profile, then call close()
@@ -609,7 +568,7 @@ def test_ffpuppet_28(tmp_path):
         ffp.close()
         assert not os.path.isdir(prof_path)
 
-def test_ffpuppet_29(tmp_path):
+def test_ffpuppet_27(tmp_path):
     """test using a readonly prefs.js and extension"""
     prefs = (tmp_path / "prefs.js")
     prefs.touch()
@@ -623,7 +582,7 @@ def test_ffpuppet_29(tmp_path):
         ffp.close()
         assert not os.path.isdir(prof_path)
 
-def test_ffpuppet_30(mocker, tmp_path):
+def test_ffpuppet_28(mocker, tmp_path):
     """test _crashreports()"""
     class StubbedLaunch(FFPuppet):
         def __init__(self):
@@ -677,7 +636,7 @@ def test_ffpuppet_30(mocker, tmp_path):
         assert len(list(ffp._crashreports())) == 4
         assert not ffp._logs.watching
 
-def test_ffpuppet_31(tmp_path):
+def test_ffpuppet_29(tmp_path):
     """test build_launch_cmd()"""
     with FFPuppet() as ffp:
         cmd = ffp.build_launch_cmd("bin_path", ["test"])
@@ -709,7 +668,7 @@ def test_ffpuppet_31(tmp_path):
         finally:
             os.environ.pop("VALGRIND_SUP_PATH")
 
-def test_ffpuppet_32():
+def test_ffpuppet_30():
     """test cpu_usage()"""
     with FFPuppet() as ffp:
         assert not any(ffp.cpu_usage())
@@ -724,7 +683,7 @@ def test_ffpuppet_32():
         ffp.close()
         assert ffp.wait(timeout=10)
 
-def test_ffpuppet_33(mocker):
+def test_ffpuppet_31(mocker):
     """test _dbg_sanity_check()"""
     fake_system = mocker.patch("ffpuppet.core.system", autospec=True)
     fake_chkout = mocker.patch("ffpuppet.core.check_output", autospec=True)
@@ -782,7 +741,7 @@ def test_ffpuppet_33(mocker):
     with pytest.raises(EnvironmentError, match="Valgrind is only supported on Linux"):
         FFPuppet._dbg_sanity_check(FFPuppet.DBG_VALGRIND)
 
-def test_ffpuppet_34(mocker):
+def test_ffpuppet_32(mocker):
     """test _terminate()"""
     procs = [
         mocker.Mock(spec=Process, pid=123),
@@ -790,8 +749,17 @@ def test_ffpuppet_34(mocker):
     ]
     mocker.patch("ffpuppet.core.get_processes", autospec=True, return_value=procs)
     fake_wait_procs = mocker.patch("ffpuppet.core.wait_procs", autospec=True)
-    # successful call to terminate
+    # successful call to terminate (parent process only)
     fake_wait_procs.return_value = ([], [])
+    FFPuppet._terminate(1234)
+    assert sum(x.terminate.call_count for x in procs) == 1
+    assert not sum(x.kill.call_count for x in procs)
+    assert procs[0].terminate.call_count == 1
+    for proc in procs:
+        proc.reset_mock()
+    # successful call to terminate (all processes)
+    fake_wait_procs.return_value = None
+    fake_wait_procs.side_effect = (([], [procs[-1]]), ([], []))
     FFPuppet._terminate(1234)
     assert sum(x.terminate.call_count for x in procs) == 2
     assert not sum(x.kill.call_count for x in procs)
@@ -799,19 +767,19 @@ def test_ffpuppet_34(mocker):
         proc.reset_mock()
     # successful call to kill
     fake_wait_procs.return_value = None
-    fake_wait_procs.side_effect = (([], procs), ([], []))
+    fake_wait_procs.side_effect = (([], procs), ([], procs), ([], []))
     FFPuppet._terminate(1234)
-    assert sum(x.terminate.call_count for x in procs) == 2
+    assert sum(x.terminate.call_count for x in procs) == 3
     assert sum(x.kill.call_count for x in procs) == 2
     for proc in procs:
         proc.reset_mock()
-    # successful call to kill
+    # failed call to kill
     fake_wait_procs.return_value = ([], procs)
     fake_wait_procs.side_effect = None
     with pytest.raises(TerminateError):
         FFPuppet._terminate(1234)
 
-def test_ffpuppet_35(mocker, tmp_path):
+def test_ffpuppet_33(mocker, tmp_path):
     """test FFPuppet.close() setting reason"""
     class StubbedProc(FFPuppet):
         def __init__(self):

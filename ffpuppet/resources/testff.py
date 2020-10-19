@@ -1,8 +1,5 @@
 #!/usr/bin/env python
-
 """fake firefox"""
-
-from multiprocessing import Event, Process
 import os
 import platform
 import sys
@@ -13,16 +10,9 @@ except ImportError:
     from urllib2 import urlopen, URLError
 
 EXIT_DELAY = 45
-POOL_SIZE = 4  # number of child procs to create
 
 
-def dummy_process(is_alive, parent_done):
-    is_alive.set()
-    sys.stdout.write('child process, pid: %d\n' % os.getpid())
-    parent_done.wait(EXIT_DELAY)
-
-
-def main(parent_done):
+def main():
     os_name = platform.system()
     profile = url = None
     while len(sys.argv) > 1:
@@ -56,8 +46,6 @@ def main(parent_done):
                         cmd = 'start_crash'
                     elif line == 'fftest_memory':
                         cmd = 'memory'
-                    elif line == 'fftest_multi_proc':
-                        cmd = 'multi_proc'
                     elif line == 'fftest_soft_assert':
                         cmd = 'soft_assert'
                     elif line == 'fftest_invalid_js':
@@ -75,7 +63,6 @@ def main(parent_done):
     #sys.stdout.write('cmd: %s\n' % cmd)
     #sys.stdout.flush()
 
-    proc_pool = list()
     if cmd == 'hang':
         sys.stdout.write('hanging\n')
         sys.stdout.flush()
@@ -92,13 +79,6 @@ def main(parent_done):
     if cmd == 'invalid_js':
         with open(os.path.join(profile, 'Invalidprefs.js'), "w") as prefs_js:
             prefs_js.write("bad!")
-    elif cmd in ('memory', 'multi_proc'):
-        is_alive = Event()
-        for _ in range(POOL_SIZE):
-            proc_pool.append(Process(target=dummy_process, args=(is_alive, parent_done)))
-            proc_pool[-1].start()
-            is_alive.wait()
-            is_alive.clear()
 
     target_url = None
     if url:
@@ -146,23 +126,13 @@ def main(parent_done):
         sys.stdout.flush()
         return exit_code
 
-    try:
-        sys.stdout.write('running... (sleep %d)\n' % EXIT_DELAY)
-        sys.stdout.flush()
-        time.sleep(EXIT_DELAY) # wait before closing (should be terminated before elapse)
-    finally:
-        parent_done.set()
-        # cleanup for multiprocess
-        for proc in proc_pool:
-            proc.join()
-
+    sys.stdout.write('running... (sleep %d)\n' % EXIT_DELAY)
+    sys.stdout.flush()
+    time.sleep(EXIT_DELAY) # wait before closing (should be terminated before elapse)
     sys.stdout.write('exiting normally\n')
     sys.stdout.flush()
     return 0
 
+
 if __name__ == '__main__':
-    PARENT_DONE = Event()
-    try:
-        sys.exit(main(PARENT_DONE))
-    finally:
-        PARENT_DONE.set()
+    sys.exit(main())
