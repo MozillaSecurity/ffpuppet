@@ -223,29 +223,30 @@ class FFPuppet(object):  # pylint: disable=too-many-instance-attributes
         Yields:
             str: Path to log on the filesystem.
         """
-        # check for *San and Valgrind logs
         assert self._logs is not None
         try:
             files = listdir(self._logs.working_path)
         except OSError:  # pragma: no cover
             files = tuple()
         for fname in files:
+            # scan for sanitizer logs
             if fname.startswith(self._logs.PREFIX_SAN):
                 full_name = pathjoin(self._logs.working_path, fname)
                 size = self._logs.watching.get(full_name)
                 # skip previously scanned files that have not been updated
                 if size is not None and size == stat(full_name).st_size:
                     continue
-                # add logs with only benign warnings to watch list
                 try:
                     # WARNING: cannot open files that are already open on Windows
                     with open(full_name, "rb") as log_fp:
+                        # NOTE: add only benign single line warnings here
                         for line in log_fp:
                             line = line.rstrip()
                             if not line:
                                 continue
-                            # frequently emitted by TSan
+                            # entries to ignores
                             if line.endswith(b"==WARNING: Symbolizer buffer too small"):
+                                # frequently emitted by TSan
                                 continue
                             break
                         else:
@@ -254,6 +255,7 @@ class FFPuppet(object):  # pylint: disable=too-many-instance-attributes
                 except OSError:
                     LOG.debug("failed to scan log %r", full_name)
                 yield full_name
+            # scan for Valgrind logs
             elif self._dbg == self.DBG_VALGRIND and fname.startswith(self._logs.PREFIX_VALGRIND):
                 full_name = pathjoin(self._logs.working_path, fname)
                 if stat(full_name).st_size:
@@ -342,9 +344,7 @@ class FFPuppet(object):  # pylint: disable=too-many-instance-attributes
         process.kill() on all processes.
 
         Args:
-            retry_delay (int): Amount of time in seconds to wait after
-                               terminate() is called for the processes to exit.
-                               After the time elapses kill() will be called.
+            retry_delay (int): Time in seconds to wait before next attempt.
 
         Returns:
             None
