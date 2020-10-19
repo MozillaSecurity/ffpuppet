@@ -701,7 +701,7 @@ class FFPuppet(object):  # pylint: disable=too-many-instance-attributes
                 shell=False,
                 stderr=stderr,
                 stdout=self._logs.get_fp("stdout"))
-            LOG.debug("launched firefox with pid: %d", self._proc.pid)
+            LOG.debug("launched process %r", self.get_pid())
             bootstrapper.wait(self.is_healthy, timeout=launch_timeout, url=location)
         finally:
             bootstrapper.close()
