@@ -11,7 +11,7 @@ import platform
 import shutil
 import socket
 import stat
-from subprocess import call, check_output, Popen
+from subprocess import Popen
 import threading
 import time
 
@@ -343,23 +343,30 @@ def test_ffpuppet_15(tmp_path):
         assert not location.startswith("/")
         assert os.path.normpath(os.path.join("/", location)) == fname
 
-
-@pytest.mark.skipif(platform.system() != "Linux" or call(["which", "gdb"]),
-                    reason="GDB not installed")
-def test_ffpuppet_16(tmp_path):
+def test_ffpuppet_16(mocker, tmp_path):
     """test launching with gdb"""
-    with FFPuppet(use_gdb=True) as ffp:
-        bin_path = str(check_output(["which", "echo"]).strip().decode("ascii"))
-        # launch will fail b/c 'echo' will exit right away but that's fine
-        with pytest.raises(LaunchError, match="Failure waiting for browser connection"):
-            ffp.launch(bin_path)
+    mocker.patch("ffpuppet.core.check_output", autospec=True)
+    mocker.patch("ffpuppet.core.system", autospec=True, return_value="Linux")
+    fake_bts = mocker.patch("ffpuppet.core.Bootstrapper", autospec=True)
+    fake_bts.return_value = mocker.Mock(spec=Bootstrapper, location="http://test:123")
+    proc = mocker.Mock(spec=Popen, pid=0xFFFF)
+    proc.poll.return_value = None
+    mocker.patch("ffpuppet.core.Popen", autospec=True, return_value=proc)
+    class StubbedTerm(FFPuppet):
+        VALGRIND_MIN_VERSION = 0
+        @staticmethod
+        def _terminate(pid, _=None):
+            assert isinstance(pid, int)
+    with StubbedTerm(use_gdb=True) as ffp:
+        ffp.launch(TESTFF_BIN)
         ffp.close()
+        assert ffp.reason == ffp.RC_CLOSED
         logs = (tmp_path / "logs")
         ffp.save_logs(str(logs))
-        log_data = (logs / "log_stdout.txt").read_bytes()
-        # verify GDB ran and executed the script
-        assert b"[Inferior " in log_data
-        assert b"quit_with_code" in log_data
+    log_data = (logs / "log_stderr.txt").read_bytes()
+    # verify launch command was correct
+    assert b"gdb" in log_data
+    assert b"[ffpuppet] Reason code:" in log_data
 
 def test_ffpuppet_17(tmp_path):
     """test calling save_logs() before close()"""
@@ -369,26 +376,30 @@ def test_ffpuppet_17(tmp_path):
             with pytest.raises(AssertionError):
                 ffp.save_logs(str(tmp_path / "logs"))
 
-@pytest.mark.skipif(platform.system() != "Linux" or call(["which", "valgrind"]),
-                    reason="Valgrind not installed")
-def test_ffpuppet_18(tmp_path):
+def test_ffpuppet_18(mocker, tmp_path):
     """test launching with Valgrind"""
-    vmv = FFPuppet.VALGRIND_MIN_VERSION
-    try:
-        FFPuppet.VALGRIND_MIN_VERSION = 0
-        with FFPuppet(use_valgrind=True) as ffp:
-            bin_path = str(check_output(["which", "echo"]).strip().decode("ascii"))
-            # launch will fail b/c 'echo' will exit right away but that's fine
-            with pytest.raises(LaunchError, match="Failure waiting for browser connection"):
-                ffp.launch(bin_path)
-            ffp.close()
-            ffp.save_logs(str(tmp_path / "logs"))
-        log_data = (tmp_path / "logs" / "log_stderr.txt").read_bytes()
-        # verify Valgrind ran and executed the script
-        assert b"valgrind -q" in log_data
-        assert b"[ffpuppet] Reason code: EXITED" in log_data
-    finally:
-        FFPuppet.VALGRIND_MIN_VERSION = vmv
+    mocker.patch("ffpuppet.core.check_output", autospec=True, return_value=b"valgrind-1.0")
+    mocker.patch("ffpuppet.core.system", autospec=True, return_value="Linux")
+    fake_bts = mocker.patch("ffpuppet.core.Bootstrapper", autospec=True)
+    fake_bts.return_value = mocker.Mock(spec=Bootstrapper, location="http://test:123")
+    proc = mocker.Mock(spec=Popen, pid=0xFFFF)
+    proc.poll.return_value = None
+    mocker.patch("ffpuppet.core.Popen", autospec=True, return_value=proc)
+    class StubbedTerm(FFPuppet):
+        VALGRIND_MIN_VERSION = 0
+        @staticmethod
+        def _terminate(pid, _=None):
+            assert isinstance(pid, int)
+    with StubbedTerm(use_valgrind=True) as ffp:
+        ffp.launch(TESTFF_BIN)
+        ffp.close()
+        assert ffp.reason == ffp.RC_CLOSED
+        logs = (tmp_path / "logs")
+        ffp.save_logs(str(logs))
+    log_data = (logs / "log_stderr.txt").read_bytes()
+    # verify launch command was correct
+    assert b"valgrind -q" in log_data
+    assert b"[ffpuppet] Reason code:" in log_data
 
 def test_ffpuppet_19(tmp_path):
     """test detecting invalid prefs file"""
@@ -521,26 +532,29 @@ def test_ffpuppet_24(mocker, tmp_path):
         assert any(logs.glob("log_minidump_02.txt"))
         assert any(logs.glob("log_minidump_03.txt"))
 
-@pytest.mark.skipif(platform.system() != "Linux" or call(["which", "rr"]),
-                    reason="rr not installed")
-def test_ffpuppet_25(tmp_path):
+def test_ffpuppet_25(mocker, tmp_path):
     """test launching with rr"""
-    # NOTE: this can hang if ptrace is blocked by seccomp
-    if call(["rr", "record", "echo"]) != 0:
-        pytest.skip("Environment not configured to run rr")
-    with FFPuppet(use_rr=True) as ffp:
-        bin_path = str(check_output(["which", "echo"]).strip().decode("ascii"))
-        # launch will fail b/c 'echo' will exit right away but that's fine
-        with pytest.raises(LaunchError, match="Failure during browser startup"):
-            ffp.launch(bin_path, env_mod={"_RR_TRACE_DIR": str(tmp_path / "rr_wp")})
+    mocker.patch("ffpuppet.core.check_output", autospec=True)
+    mocker.patch("ffpuppet.core.system", autospec=True, return_value="Linux")
+    fake_bts = mocker.patch("ffpuppet.core.Bootstrapper", autospec=True)
+    fake_bts.return_value = mocker.Mock(spec=Bootstrapper, location="http://test:123")
+    proc = mocker.Mock(spec=Popen, pid=0xFFFF)
+    proc.poll.return_value = None
+    mocker.patch("ffpuppet.core.Popen", autospec=True, return_value=proc)
+    class StubbedTerm(FFPuppet):
+        @staticmethod
+        def _terminate(pid, _=None):
+            assert isinstance(pid, int)
+    with StubbedTerm(use_rr=True) as ffp:
+        ffp.launch(TESTFF_BIN)
         ffp.close()
-        assert ffp.reason == ffp.RC_EXITED
+        assert ffp.reason == ffp.RC_CLOSED
         logs = (tmp_path / "logs")
         ffp.save_logs(str(logs))
-        log_data = (logs / "log_stderr.txt").read_bytes()
-        # verify rr ran and executed the script
-        assert b"rr record" in log_data
-        assert b"[ffpuppet] Reason code:" in log_data
+    log_data = (logs / "log_stderr.txt").read_bytes()
+    # verify launch command was correct
+    assert b"rr record" in log_data
+    assert b"[ffpuppet] Reason code:" in log_data
 
 def test_ffpuppet_26(tmp_path):
     """test rmtree error handler"""
