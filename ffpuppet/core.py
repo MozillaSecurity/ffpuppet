@@ -335,33 +335,38 @@ class FFPuppet(object):  # pylint: disable=too-many-instance-attributes
 
 
     @staticmethod
-    def _terminate(pid, kill_delay=30):
-        """Terminate the browser process(es).
+    def _terminate(pid, retry_delay=30):
+        """Terminate the process. Each retry pass is more aggressive. The first
+        pass uses process.terminate() on the parent process only. The second
+        pass uses process.terminate() on all processes. The third pass uses
+        process.kill() on all processes.
 
         Args:
-            kill_delay (int): Amount of time in seconds to wait after
-                              terminate() is called on the processes for them to
-                              exit. After the time elapses kill() will be
-                              called.
+            retry_delay (int): Amount of time in seconds to wait after
+                               terminate() is called for the processes to exit.
+                               After the time elapses kill() will be called.
 
         Returns:
             None
         """
-        LOG.debug("_terminate(%d, kill_delay=%0.2f)", pid, kill_delay)
+        LOG.debug("_terminate(%d, retry_delay=%0.2f)", pid, retry_delay)
         procs = get_processes(pid)
-        for mode in range(2):
+        for mode in range(3):
             LOG.debug("%d running process(es)", len(procs))
             # iterate over and terminate/kill processes
             for proc in procs:
                 try:
-                    proc.kill() if mode > 0 else proc.terminate()
+                    proc.kill() if mode > 1 else proc.terminate()
                 except (AccessDenied, NoSuchProcess):  # pragma: no cover
                     pass
-            procs = wait_procs(procs, timeout=kill_delay)[1]
+                if mode == 0:
+                    # only target the parent process on the first pass
+                    break
+            procs = wait_procs(procs, timeout=retry_delay)[1]
             if not procs:
                 LOG.debug("_terminate() was successful")
                 break
-            LOG.debug("timed out (%0.2f), mode %d", kill_delay, mode)
+            LOG.debug("timed out (%0.2f), mode %d", retry_delay, mode)
         else:
             for proc in procs:
                 try:
