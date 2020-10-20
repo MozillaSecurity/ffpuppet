@@ -76,10 +76,12 @@ class FFPuppet(object):  # pylint: disable=too-many-instance-attributes
 
         if use_xvfb:
             if not system().startswith("Linux"):
+                self._logs.close()
                 raise EnvironmentError("Xvfb is only supported on Linux")
             try:
                 self._xvfb = Xvfb(width=1280, height=1024)
             except NameError:
+                self._logs.close()
                 raise EnvironmentError("Please install xvfbwrapper") from None
             self._xvfb.start()
 
@@ -395,7 +397,7 @@ class FFPuppet(object):  # pylint: disable=too-many-instance-attributes
             return
 
         assert self._proc is not None
-        LOG.debug("browser pid: %r", self._proc.pid)
+        LOG.debug("browser pid: %r", self.get_pid())
         # set reason code
         crash_reports = set(self._crashreports())
         if crash_reports:

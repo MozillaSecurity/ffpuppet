@@ -4,10 +4,7 @@ import os
 import platform
 import sys
 import time
-try:
-    from urllib.request import urlopen, URLError
-except ImportError:
-    from urllib2 import urlopen, URLError
+from urllib.request import urlopen, URLError
 
 EXIT_DELAY = 45
 
@@ -40,11 +37,7 @@ def main():
                     pass
                 elif line.startswith('/'):
                     line = line.lstrip('/').strip()
-                    if line == 'fftest_startup_hang':
-                        cmd = 'hang'
-                    elif line == 'fftest_startup_crash':
-                        cmd = 'start_crash'
-                    elif line == 'fftest_memory':
+                    if line == 'fftest_memory':
                         cmd = 'memory'
                     elif line == 'fftest_soft_assert':
                         cmd = 'soft_assert'
@@ -63,19 +56,6 @@ def main():
     #sys.stdout.write('cmd: %s\n' % cmd)
     #sys.stdout.flush()
 
-    if cmd == 'hang':
-        sys.stdout.write('hanging\n')
-        sys.stdout.flush()
-        for _ in range(10):  # 10 minutes (basically forever)
-            time.sleep(60)
-        return 1
-    if cmd == 'start_crash':
-        sys.stdout.write('simulating start up crash\n')
-        sys.stdout.flush()
-        os.mkdir(os.path.join(profile, "minidumps"))
-        with open(os.path.join(profile, "minidumps", "fake_mini.dmp"), "w") as _:
-            pass
-        return -11
     if cmd == 'invalid_js':
         with open(os.path.join(profile, 'Invalidprefs.js'), "w") as prefs_js:
             prefs_js.write("bad!")
