@@ -339,21 +339,26 @@ class FFPuppet(object):  # pylint: disable=too-many-instance-attributes
 
 
     @staticmethod
-    def _terminate(pid, retry_delay=30):
-        """Terminate the process. Each retry pass is more aggressive. The first
-        pass uses process.terminate() on the parent process only. The second
-        pass uses process.terminate() on all processes. The third pass uses
-        process.kill() on all processes.
+    def _terminate(pid, retry_delay=30, start_mode=0):
+        """Terminate the process. Each mode (retry pass) is more aggressive.
+        At the end of each attempt if there are active processes mode is
+        incremented and another pass is performed.
+
+        Mode:
+        - 0: uses process.terminate() on the parent process only.
+        - 1: uses process.terminate() on all processes.
+        - 2: uses process.kill() on all processes.
 
         Args:
             retry_delay (int): Time in seconds to wait before next attempt.
+            start_mode (int): Initial mode.
 
         Returns:
             None
         """
-        LOG.debug("_terminate(%d, retry_delay=%0.2f)", pid, retry_delay)
+        LOG.debug("_terminate(%d, retry_delay=%0.2f, start_mode=%d)", pid, retry_delay, start_mode)
         procs = get_processes(pid)
-        for mode in range(3):
+        for mode in range(start_mode, 3):
             LOG.debug("%d running process(es)", len(procs))
             # iterate over and terminate/kill processes
             for proc in procs:
@@ -425,7 +430,10 @@ class FFPuppet(object):  # pylint: disable=too-many-instance-attributes
         # close processes
         if self.is_running():
             LOG.debug("browser needs to be terminated")
-            self._terminate(self._proc.pid)
+            # when running under a debugger be less agressive
+            self._terminate(
+                self._proc.pid,
+                start_mode=1 if self._dbg == self.DBG_NONE else 0)
             # wait for reports triggered by the call to _terminate()
             wait_on_files(self._crashreports(), timeout=10)
         # collect crash logs
