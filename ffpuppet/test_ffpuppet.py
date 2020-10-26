@@ -813,7 +813,7 @@ def test_ffpuppet_32(mocker, tmp_path):
             profile.mkdir(exist_ok=True)
             self.profile = str(profile)
         @staticmethod
-        def _terminate(pid, _=None):
+        def _terminate(pid, *_a, **_kw):  # pylint: disable=signature-differs
             assert isinstance(pid, int)
     fake_reports = mocker.patch("ffpuppet.core.FFPuppet._crashreports", autospec=True)
     fake_reports.return_value = ()
