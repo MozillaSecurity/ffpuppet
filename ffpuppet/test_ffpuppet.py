@@ -819,6 +819,7 @@ def test_ffpuppet_32(mocker, tmp_path):
     fake_reports.return_value = ()
     fake_wait_files = mocker.patch("ffpuppet.core.wait_on_files", autospec=True)
     fake_wait_files.return_value = True
+    mocker.patch("ffpuppet.core.wait_procs", autospec=True)
     # process exited - no crash
     with StubbedProc() as ffp:
         ffp.launch()
