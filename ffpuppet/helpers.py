@@ -15,7 +15,7 @@ from tempfile import mkdtemp
 from time import sleep, time
 
 from xml.etree import ElementTree
-from psutil import AccessDenied, NoSuchProcess, Process, process_iter
+from psutil import AccessDenied, NoSuchProcess, Process
 
 
 LOG = getLogger(__name__)
@@ -168,6 +168,7 @@ def configure_sanitizers(env, target_dir, log_path):
         ("handle_sigbus", "true"),  # set to be safe
         ("handle_sigfpe", "true"),  # set to be safe
         ("handle_sigill", "true"),  # set to be safe
+        #("max_allocation_size_mb", "256"),
         ("symbolize", "true"))
 
     # setup Address Sanitizer options if not set manually
@@ -448,7 +449,7 @@ def true_path(path):
     return normcase(realpath(path))
 
 
-def wait_on_files(wait_files, poll_rate=0.25, timeout=60):
+def wait_on_files(procs, wait_files, poll_rate=0.25, timeout=60):
     """Wait for files in wait_files to no longer be use by any process.
 
     Args:
@@ -464,26 +465,17 @@ def wait_on_files(wait_files, poll_rate=0.25, timeout=60):
     wait_files = {true_path(x) for x in wait_files if isfile(x)}
     if not wait_files:
         return True
-    deadline = time() + timeout
-    # collect all blocking processes
-    procs = list()
-    for proc in process_iter(attrs=["pid", "open_files"]):
-        if not proc.info["open_files"]:
-            continue
-        # WARNING: Process.open_files() has issues on Windows!
-        # https://psutil.readthedocs.io/en/latest/#psutil.Process.open_files
-        if wait_files.intersection({true_path(x.path) for x in proc.info["open_files"]}):
-            try:
-                procs.append(Process(proc.info["pid"]))
-            except (AccessDenied, NoSuchProcess):  # pragma: no cover
-                pass
-    # only check previously blocking processes
     poll_rate = min(poll_rate, timeout)
+    deadline = time() + timeout
     while procs:
         try:
-            if wait_files.intersection({true_path(x.path) for x in procs[-1].open_files()}):
+            # WARNING: Process.open_files() has issues on Windows!
+            # https://psutil.readthedocs.io/en/latest/#psutil.Process.open_files
+            open_files = {true_path(x.path) for x in procs[-1].open_files()}
+            if wait_files.intersection(open_files):
                 if deadline <= time():
-                    LOG.debug("wait_on_files(timeout=%d) timed out", timeout)
+                    LOG.debug("%d had %d open files after %ds",
+                              procs[-1].pid, len(open_files), timeout)
                     return False
                 sleep(poll_rate)
                 continue

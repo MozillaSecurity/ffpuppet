@@ -282,14 +282,17 @@ def test_helpers_07(tmp_path):
     """test wait_on_files()"""
     t_file = (tmp_path / "file.bin")
     t_file.touch()
+    procs = get_processes(os.getpid(), recursive=False)
     with tempfile.NamedTemporaryFile() as wait_fp:
-        assert not wait_on_files((wait_fp.name, str(t_file)), timeout=0.1)
+        assert not wait_on_files(procs, (wait_fp.name, str(t_file)), timeout=0.1)
     # existing but closed file
-    assert wait_on_files([str(t_file)], timeout=0.1)
+    procs = get_processes(os.getpid(), recursive=False)
+    assert wait_on_files(procs, [str(t_file)], timeout=0.1)
     # file that does not exist
-    assert wait_on_files(["no_file"], timeout=0.1)
+    procs = get_processes(os.getpid(), recursive=False)
+    assert wait_on_files(procs, ["no_file"], timeout=0.1)
     # empty file list
-    assert wait_on_files([])
+    assert wait_on_files([], [])
 
 # this needs to be here in order to work correctly on Windows
 def _dummy_process(is_alive, is_done):
