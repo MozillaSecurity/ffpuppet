@@ -356,7 +356,8 @@ class FFPuppet(object):  # pylint: disable=too-many-instance-attributes
         Returns:
             None
         """
-        LOG.debug("_terminate(%d, retry_delay=%0.2f, start_mode=%d)", pid, retry_delay, start_mode)
+        LOG.debug("_terminate(%d, retry_delay=%0.2f, start_mode=%d)",
+                  pid, retry_delay, start_mode)
         procs = get_processes(pid)
         for mode in range(start_mode, 3):
             LOG.debug("%d running process(es)", len(procs))
@@ -377,7 +378,8 @@ class FFPuppet(object):  # pylint: disable=too-many-instance-attributes
         else:
             for proc in procs:
                 try:
-                    LOG.warning("Failed to terminate process %d (%s)", proc.pid, proc.name())
+                    LOG.warning("Failed to terminate process %d (%s)",
+                                proc.pid, proc.name())
                 except (AccessDenied, NoSuchProcess):  # pragma: no cover
                     pass
             raise TerminateError("Failed to terminate browser")
@@ -403,18 +405,18 @@ class FFPuppet(object):  # pylint: disable=too-many-instance-attributes
 
         assert self._proc is not None
         pid = self.get_pid()
-        LOG.debug("browser pid: %r", pid)
+        procs = get_processes(pid) if pid is not None else list()
+        LOG.debug("browser pid: %r, %d proc(s)", pid, len(procs))
         # set reason code
         crash_reports = set(self._crashreports())
         if crash_reports:
             r_code = self.RC_ALERT
             while True:
                 LOG.debug("%d crash report(s) found", len(crash_reports))
-                # wait until all open files are closed (except stdout & stderr)
-                procs = get_processes(pid) if pid is not None else list()
+                # wait until crash report files are closed
                 report_wait = 300 if self._dbg == self.DBG_RR else 90
                 if not wait_on_files(procs, crash_reports, timeout=report_wait):
-                    LOG.warning("wait_on_files() Timed out (%ds)", report_wait)
+                    LOG.warning("Crash reports still open after %ds", report_wait)
                     break
                 new_reports = set(self._crashreports())
                 # verify no new reports have appeared
@@ -434,6 +436,9 @@ class FFPuppet(object):  # pylint: disable=too-many-instance-attributes
             LOG.debug("browser needs to be terminated")
             # when running under a debugger be less aggressive
             self._terminate(pid, start_mode=1 if self._dbg == self.DBG_NONE else 0)
+        # wait for any remaining processes to close
+        if wait_procs(procs, timeout=1 if force_close else 30)[1]:
+            LOG.warning("Some browser processes are still running!")
         # collect crash logs
         if not force_close:
             if self._logs.closed:  # pragma: no cover
