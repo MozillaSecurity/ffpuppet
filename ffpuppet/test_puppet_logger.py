@@ -218,7 +218,7 @@ def test_puppet_logger_10(mocker, tmp_path):
         plog.add_log("test")
         fake_rmtree.side_effect = OSError
         with pytest.raises(OSError):
-            plog.clean_up(wait_delay=0)
+            plog.clean_up()
         assert plog.working_path is not None
         fake_rmtree.side_effect = None
         plog.clean_up()

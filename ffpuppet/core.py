@@ -402,7 +402,8 @@ class FFPuppet(object):  # pylint: disable=too-many-instance-attributes
             return
 
         assert self._proc is not None
-        LOG.debug("browser pid: %r", self.get_pid())
+        pid = self.get_pid()
+        LOG.debug("browser pid: %r", pid)
         # set reason code
         crash_reports = set(self._crashreports())
         if crash_reports:
@@ -410,9 +411,10 @@ class FFPuppet(object):  # pylint: disable=too-many-instance-attributes
             while True:
                 LOG.debug("%d crash report(s) found", len(crash_reports))
                 # wait until all open files are closed (except stdout & stderr)
+                procs = get_processes(pid) if pid is not None else list()
                 report_wait = 300 if self._dbg == self.DBG_RR else 90
-                if not wait_on_files(crash_reports, timeout=report_wait):
-                    LOG.warning("wait_on_files(timeout=%d) Timed out", report_wait)
+                if not wait_on_files(procs, crash_reports, timeout=report_wait):
+                    LOG.warning("wait_on_files() Timed out (%ds)", report_wait)
                     break
                 new_reports = set(self._crashreports())
                 # verify no new reports have appeared
@@ -430,12 +432,8 @@ class FFPuppet(object):  # pylint: disable=too-many-instance-attributes
         # close processes
         if self.is_running():
             LOG.debug("browser needs to be terminated")
-            # when running under a debugger be less agressive
-            self._terminate(
-                self._proc.pid,
-                start_mode=1 if self._dbg == self.DBG_NONE else 0)
-            # wait for reports triggered by the call to _terminate()
-            wait_on_files(self._crashreports(), timeout=10)
+            # when running under a debugger be less aggressive
+            self._terminate(pid, start_mode=1 if self._dbg == self.DBG_NONE else 0)
         # collect crash logs
         if not force_close:
             if self._logs.closed:  # pragma: no cover

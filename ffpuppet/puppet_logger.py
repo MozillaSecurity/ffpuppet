@@ -10,7 +10,7 @@ from shutil import copy2, copyfileobj, copytree, rmtree
 from subprocess import CalledProcessError, check_output, STDOUT
 from tempfile import mkdtemp, mkstemp
 
-from .helpers import onerror, wait_on_files
+from .helpers import onerror
 
 LOG = getLogger(__name__)
 
@@ -89,14 +89,12 @@ class PuppetLogger(object):
         """
         return self._logs.keys()
 
-    def clean_up(self, ignore_errors=False, wait_delay=10):
+    def clean_up(self, ignore_errors=False):
         """Remove log files from disk.
 
         Args:
             ignore_errors (bool): Ignore errors triggered by removing files and
                                   directories will be ignored.
-            wait_delay (int): Maximum amount of time to wait for files to close
-                              if an error is hit before retrying.
 
         Returns:
             None
@@ -110,7 +108,6 @@ class PuppetLogger(object):
                 except OSError:
                     if attempt > 0:
                         raise
-                    wait_on_files(self.files, timeout=wait_delay)
                     continue
                 break
         self._logs.clear()
