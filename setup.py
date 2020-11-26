@@ -20,9 +20,10 @@ if __name__ == "__main__":
             'Programming Language :: Python :: 3.5',
             'Programming Language :: Python :: 3.6',
             'Programming Language :: Python :: 3.7',
-            'Programming Language :: Python :: 3.8'
+            'Programming Language :: Python :: 3.8',
+            'Programming Language :: Python :: 3.9'
         ],
-        description="A python module that aids in the automation of Firefox at the process level",
+        description="A Python module that aids in the automation of Firefox at the process level",
         entry_points={
             "console_scripts": ["ffpuppet = ffpuppet.main:main"]
         },
@@ -46,4 +47,4 @@ if __name__ == "__main__":
         packages=["ffpuppet"],
         package_data={"": ["cmds.gdb"]},
         url="https://github.com/MozillaSecurity/ffpuppet",
-        version="0.7.5")
+        version="0.7.6")
