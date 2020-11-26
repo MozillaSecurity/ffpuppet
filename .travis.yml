@@ -9,9 +9,6 @@ python:
   - 3.8
 jobs:
   include:
-    - os: osx
-      osx_image: xcode11.2
-      language: shell
     - os: windows
       python: 3.8
       language: shell
