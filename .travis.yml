@@ -7,14 +7,15 @@ python:
   - 3.6
   - 3.7
   - 3.8
+  - 3.9
 jobs:
   include:
     - os: windows
-      python: 3.8
+      python: 3.9
       language: shell
       before_install:
-        - choco install python --version 3.8
-      env: PATH=/c/Python38:/c/Python38/Scripts:$PATH
+        - choco install python --version 3.9
+      env: PATH=/c/Python39:/c/Python39/Scripts:$PATH
 before_install:
   - pip3 install --upgrade setuptools pip
 install:
