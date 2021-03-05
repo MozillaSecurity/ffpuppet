@@ -12,6 +12,7 @@ from pytest import raises
 from .bootstrapper import Bootstrapper
 from .exceptions import BrowserTerminatedError, BrowserTimeoutError, LaunchError
 
+
 def test_bootstrapper_01():
     """test simple Bootstrapper()"""
     with Bootstrapper() as bts:
@@ -22,6 +23,7 @@ def test_bootstrapper_01():
         bts.close()
         assert bts._socket is None
 
+
 def test_bootstrapper_02(mocker):
     """test Bootstrapper.wait() failure waiting for initial connection"""
     fake_sock = mocker.Mock(socket.socket)
@@ -29,16 +31,21 @@ def test_bootstrapper_02(mocker):
     mocker.patch("ffpuppet.bootstrapper.socket.socket", return_value=fake_sock)
     with Bootstrapper() as bts:
         # test failure
-        with raises(BrowserTerminatedError, match="Failure waiting for browser connection"):
+        with raises(
+            BrowserTerminatedError, match="Failure waiting for browser connection"
+        ):
             bts.wait(lambda: False)
         assert fake_sock.accept.call_count == 1
         fake_sock.reset_mock()
         # test timeout
         mocker.patch("ffpuppet.bootstrapper.time", side_effect=(1, 1, 1, 2))
-        with raises(BrowserTimeoutError, match="Timeout waiting for browser connection"):
+        with raises(
+            BrowserTimeoutError, match="Timeout waiting for browser connection"
+        ):
             bts.wait(lambda: True, timeout=0.1)
         # should call accept() at least 2x for positive and negative timeout check
         assert fake_sock.accept.call_count > 1
+
 
 def test_bootstrapper_03(mocker):
     """test Bootstrapper.wait() failure waiting for request"""
@@ -61,6 +68,7 @@ def test_bootstrapper_03(mocker):
         # should call recv() at least 2x for positive and negative timeout check
         assert fake_conn.recv.call_count > 1
         assert fake_conn.close.call_count == 1
+
 
 def test_bootstrapper_04(mocker):
     """test Bootstrapper.wait() failure sending response"""
@@ -85,6 +93,7 @@ def test_bootstrapper_04(mocker):
         assert fake_conn.sendall.call_count == 1
         assert fake_conn.close.call_count == 1
 
+
 def test_bootstrapper_05(mocker):
     """test Bootstrapper.wait() target crashed"""
     fake_sock = mocker.Mock(socket.socket)
@@ -98,6 +107,7 @@ def test_bootstrapper_05(mocker):
             bts.wait(lambda: False)
     assert fake_conn.close.call_count == 1
 
+
 def test_bootstrapper_06(mocker):
     """test Bootstrapper.wait() successful without redirect"""
     fake_sock = mocker.Mock(socket.socket)
@@ -110,6 +120,7 @@ def test_bootstrapper_06(mocker):
     assert fake_conn.close.call_count == 1
     assert fake_conn.recv.call_count == 2
     assert fake_conn.sendall.call_count == 1
+
 
 def test_bootstrapper_07(mocker):
     """test Bootstrapper.wait() successful with redirect"""
@@ -125,8 +136,10 @@ def test_bootstrapper_07(mocker):
     assert fake_conn.recv.call_count == 1
     assert fake_conn.sendall.call_count == 1
 
+
 def test_bootstrapper_08():
     """test Bootstrapper.wait() with a fake browser"""
+
     def _fake_browser(port, payload_size=5120):
         conn = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         # 50 x 0.1 = 5 seconds
@@ -155,6 +168,7 @@ def test_bootstrapper_08():
             bts.wait(lambda: True, timeout=10)
         finally:
             browser_thread.join()
+
 
 def test_bootstrapper_09(mocker):
     """test Bootstrapper() hit PORT_RETRIES"""

@@ -1,9 +1,10 @@
 # This Source Code Form is subject to the terms of the Mozilla Public
 # License, v. 2.0. If a copy of the MPL was not distributed with this
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
+"""ffpuppet checks module"""
 
 from abc import ABC, abstractmethod
-from os import stat, SEEK_SET
+from os import SEEK_SET, stat
 
 from psutil import AccessDenied, NoSuchProcess
 
@@ -17,6 +18,7 @@ class Check(ABC):
     """
     Check base class
     """
+
     name = None
 
     __slots__ = ("message",)
@@ -31,6 +33,14 @@ class Check(ABC):
         """
 
     def dump_log(self, dst_fp):
+        """Write log contents to file.
+
+        Args:
+            dst_fp (file): Open file object to write logs to.
+
+        Returns:
+            None
+        """
         if self.message is not None:
             dst_fp.write(self.message.encode("utf-8", "ignore"))
 
@@ -39,6 +49,7 @@ class CheckLogContents(Check):
     """
     CheckLogContents will search through the browser logs for a token.
     """
+
     buf_limit = 1024  # 1KB
     chunk_size = 0x20000  # 128KB
     name = "log_contents"
@@ -80,9 +91,9 @@ class CheckLogContents(Check):
             for token in self.tokens:
                 match = token.search(data)
                 if match:
-                    self.message = "TOKEN_LOCATED: %s\n" % match.group()
+                    self.message = "TOKEN_LOCATED: %s\n" % (match.group(),)
                     return True
-            log["buffer"] = data[-1 * self.buf_limit:]
+            log["buffer"] = data[-1 * self.buf_limit :]
         return False
 
 
@@ -90,6 +101,7 @@ class CheckLogSize(Check):
     """
     CheckLogSize will check the total file size of the browser logs.
     """
+
     name = "log_size"
 
     __slots__ = ("limit", "stderr_file", "stdout_file")
@@ -114,11 +126,21 @@ class CheckLogSize(Check):
         out_size = stat(self.stdout_file).st_size
         total_size = err_size + out_size
         if total_size > self.limit:
-            self.message = "".join([
-                "LOG_SIZE_LIMIT_EXCEEDED: %s\n" % format(total_size, ","),
-                "Limit: %s (%dMB)\n" % (format(self.limit, ","), self.limit/1048576),
-                "stderr log: %s (%dMB)\n" % (format(err_size, ","), err_size/1048576),
-                "stdout log: %s (%dMB)\n" % (format(out_size, ","), out_size/1048576)])
+            self.message = (
+                "LOG_SIZE_LIMIT_EXCEEDED: %s\n"
+                "Limit: %s (%dMB)\n"
+                "stderr log: %s (%dMB)\n"
+                "stdout log: %s (%dMB)\n"
+                % (
+                    format(total_size, ","),
+                    format(self.limit, ","),
+                    self.limit / 1048576,
+                    format(err_size, ","),
+                    err_size / 1048576,
+                    format(out_size, ","),
+                    out_size / 1048576,
+                )
+            )
         return self.message is not None
 
 
@@ -127,6 +149,7 @@ class CheckMemoryUsage(Check):
     CheckMemoryUsage is used to check the amount of memory used by the browser
     process and its descendants against a defined limit.
     """
+
     name = "memory_usage"
 
     __slots__ = ("limit", "pid")
@@ -146,10 +169,9 @@ class CheckMemoryUsage(Check):
             bool: True if the total usage is greater than or equal to
                   self.limit otherwise False.
         """
-        procs = get_processes(self.pid)
         proc_info = list()
         total_usage = 0
-        for proc in procs:
+        for proc in get_processes(self.pid):
             try:
                 cur_rss = proc.memory_info().rss
                 total_usage += cur_rss
@@ -158,9 +180,10 @@ class CheckMemoryUsage(Check):
                 pass
         if total_usage >= self.limit:
             msg = [
-                "MEMORY_LIMIT_EXCEEDED: %s\n" % format(total_usage, ","),
-                "Limit: %s (%dMB)\n" % (format(self.limit, ","), self.limit/1048576),
-                "Parent PID: %d\n" % self.pid]
+                "MEMORY_LIMIT_EXCEEDED: %s\n" % (format(total_usage, ","),),
+                "Limit: %s (%dMB)\n" % (format(self.limit, ","), self.limit / 1048576),
+                "Parent PID: %d\n" % (self.pid,),
+            ]
             for pid, usage in proc_info:
                 msg.append("-> PID %6d: %s\n" % (pid, format(usage, "14,")))
             self.message = "".join(msg)

@@ -1,31 +1,38 @@
 # This Source Code Form is subject to the terms of the Mozilla Public
 # License, v. 2.0. If a copy of the MPL was not distributed with this
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
+"""ffpuppet helper utilities"""
 
 from json import load as json_load
 from logging import getLogger
-from os import access, chmod, environ, mkdir, remove, W_OK
+from os import W_OK, access, chmod, environ, mkdir, remove
 from os.path import abspath, basename, expanduser, isdir, isfile
-from os.path import join as pathjoin, normcase, realpath
+from os.path import join as pathjoin
+from os.path import normcase, realpath
 from platform import system
 from re import compile as re_compile
 from shutil import copyfile, copytree, rmtree
 from stat import S_IWUSR
 from tempfile import mkdtemp
 from time import sleep, time
-
 from xml.etree import ElementTree
-from psutil import AccessDenied, NoSuchProcess, Process
 
+from psutil import AccessDenied, NoSuchProcess, Process
 
 LOG = getLogger(__name__)
 
 __author__ = "Tyson Smith"
-__all__ = ("check_prefs", "create_profile", "get_processes", "onerror",
-           "prepare_environment", "wait_on_files")
+__all__ = (
+    "check_prefs",
+    "create_profile",
+    "get_processes",
+    "onerror",
+    "prepare_environment",
+    "wait_on_files",
+)
 
 
-class SanitizerConfig(object):
+class SanitizerConfig:  # pylint: disable=missing-docstring
     re_delim = re_compile(r":(?![\\|/])")
 
     __slots__ = ("_options",)
@@ -62,7 +69,7 @@ class SanitizerConfig(object):
         """
         if token.startswith("'") and token.endswith("'"):
             return True
-        if token.startswith("\"") and token.endswith("\""):
+        if token.startswith('"') and token.endswith('"'):
             return True
         return False
 
@@ -82,7 +89,9 @@ class SanitizerConfig(object):
             try:
                 opt_name, opt_value = option.split("=")
                 if ":" in opt_value:
-                    assert self.is_quoted(opt_value), "%s value must be quoted" % opt_name
+                    assert self.is_quoted(opt_value), (
+                        "%s value must be quoted" % opt_name
+                    )
                 # add a sanity check for suppression files
                 if opt_name == "suppressions":
                     sup_file = abspath(expanduser(opt_value.strip("'\"")))
@@ -149,7 +158,7 @@ def check_prefs(prof_prefs, input_prefs):
 
 
 def configure_sanitizers(env, target_dir, log_path):
-    """Update *SAN_OPTIONS entires in env.
+    """Update *SAN_OPTIONS entries in env.
 
     Args:
         target_dir (str): Location to find llvm-symbolizer.
@@ -168,8 +177,9 @@ def configure_sanitizers(env, target_dir, log_path):
         ("handle_sigbus", "true"),  # set to be safe
         ("handle_sigfpe", "true"),  # set to be safe
         ("handle_sigill", "true"),  # set to be safe
-        #("max_allocation_size_mb", "256"),
-        ("symbolize", "true"))
+        # ("max_allocation_size_mb", "256"),
+        ("symbolize", "true"),
+    )
 
     # setup Address Sanitizer options if not set manually
     # https://github.com/google/sanitizers/wiki/AddressSanitizerFlags
@@ -177,21 +187,26 @@ def configure_sanitizers(env, target_dir, log_path):
     asan_config.load_options(env.get("ASAN_OPTIONS"))
     for flag in common_flags:
         asan_config.add(*flag)
-    #asan_config.add("alloc_dealloc_mismatch", "false")  # different defaults per OS
+    # different defaults per OS
+    # asan_config.add("alloc_dealloc_mismatch", "false")
     asan_config.add("check_initialization_order", "true")
-    #asan_config.add("detect_stack_use_after_return", "true")  # https://bugzil.la/1057551
-    #asan_config.add("detect_stack_use_after_scope", "true")
+    # https://bugzil.la/1057551
+    # asan_config.add("detect_stack_use_after_return", "true")
+    # asan_config.add("detect_stack_use_after_scope", "true")
     asan_config.add("detect_invalid_pointer_pairs", "1")
     asan_config.add("detect_leaks", "false")
     # log_path is required for FFPuppet logging to function properly
     if "log_path" in asan_config:
-        LOG.warning("ASAN_OPTIONS=log_path is used internally and cannot be set externally")
+        LOG.warning(
+            "ASAN_OPTIONS=log_path is used internally and cannot be set externally"
+        )
     asan_config.add("log_path", "'%s'" % log_path, overwrite=True)
     # attempt to save some memory during deep stack allocations
     asan_config.add("malloc_context_size", "20")
     asan_config.add("sleep_before_dying", "0")
     asan_config.add("strict_init_order", "true")
-    asan_config.add("strict_string_checks", "true")  # breaks old builds (esr52)
+    # breaks old builds (esr52)
+    asan_config.add("strict_string_checks", "true")
     env["ASAN_OPTIONS"] = asan_config.options
 
     # setup Leak Sanitizer options if not set manually
@@ -207,7 +222,9 @@ def configure_sanitizers(env, target_dir, log_path):
     tsan_config.load_options(env.get("TSAN_OPTIONS"))
     tsan_config.add("halt_on_error", "1")
     if "log_path" in tsan_config:
-        LOG.warning("TSAN_OPTIONS=log_path is used internally and cannot be set externally")
+        LOG.warning(
+            "TSAN_OPTIONS=log_path is used internally and cannot be set externally"
+        )
     tsan_config.add("log_path", "'%s'" % log_path, overwrite=True)
     env["TSAN_OPTIONS"] = tsan_config.options
 
@@ -217,7 +234,9 @@ def configure_sanitizers(env, target_dir, log_path):
     for flag in common_flags:
         ubsan_config.add(*flag)
     if "log_path" in ubsan_config:
-        LOG.warning("UBSAN_OPTIONS=log_path is used internally and cannot be set externally")
+        LOG.warning(
+            "UBSAN_OPTIONS=log_path is used internally and cannot be set externally"
+        )
     ubsan_config.add("log_path", "'%s'" % log_path, overwrite=True)
     ubsan_config.add("print_stacktrace", "1")
     env["UBSAN_OPTIONS"] = ubsan_config.options
@@ -292,8 +311,10 @@ def create_profile(extension=None, prefs_js=None, template=None):
                         LOG.debug("Failed to parse manifest.json: %s", exc)
                 elif isfile(pathjoin(ext, "install.rdf")):
                     try:
-                        xmlns = {"x": "http://www.w3.org/1999/02/22-rdf-syntax-ns#",
-                                 "em": "http://www.mozilla.org/2004/em-rdf#"}
+                        xmlns = {
+                            "x": "http://www.w3.org/1999/02/22-rdf-syntax-ns#",
+                            "em": "http://www.mozilla.org/2004/em-rdf#",
+                        }
                         tree = ElementTree.parse(pathjoin(ext, "install.rdf"))
                         assert tree.getroot().tag == "{%s}RDF" % xmlns["x"]
                         ids = tree.findall("./x:Description/em:id", namespaces=xmlns)
@@ -302,11 +323,13 @@ def create_profile(extension=None, prefs_js=None, template=None):
                     except (AssertionError, IOError, ElementTree.ParseError) as exc:
                         LOG.debug("Failed to parse install.rdf: %s", exc)
                 if ext_name is None:
-                    raise RuntimeError("Failed to find extension id in manifest: %r" % ext)
+                    raise RuntimeError(
+                        "Failed to find extension id in manifest: %r" % ext
+                    )
                 copytree(abspath(ext), pathjoin(profile, "extensions", ext_name))
             else:
                 raise RuntimeError("Unknown extension: %r" % ext)
-    except:
+    except Exception:
         # cleanup on failure
         rmtree(profile, True)
         raise
@@ -405,15 +428,21 @@ def prepare_environment(target_dir, sanitizer_log, env_mod=None):
     # https://developer.mozilla.org/en-US/docs/Mozilla/Debugging/XPCOM_DEBUG_BREAK
     base["XPCOM_DEBUG_BREAK"] = "warn"
     base["XRE_NO_WINDOWS_CRASH_DIALOG"] = "1"
-    # apply envionment modifications
+    # apply environment modifications
     if env_mod is not None:
         assert isinstance(env_mod, dict)
         base.update(env_mod)
     # environment variables to skip if previously set in environ
     optional = (
-        "_RR_TRACE_DIR", "MOZ_CRASHREPORTER", "MOZ_CRASHREPORTER_NO_DELETE_DUMP",
-        "MOZ_CRASHREPORTER_NO_REPORT", "MOZ_CRASHREPORTER_SHUTDOWN",
-        "MOZ_SKIA_DISABLE_ASSERTS", "RUST_BACKTRACE", "XPCOM_DEBUG_BREAK")
+        "_RR_TRACE_DIR",
+        "MOZ_CRASHREPORTER",
+        "MOZ_CRASHREPORTER_NO_DELETE_DUMP",
+        "MOZ_CRASHREPORTER_NO_REPORT",
+        "MOZ_CRASHREPORTER_SHUTDOWN",
+        "MOZ_SKIA_DISABLE_ASSERTS",
+        "RUST_BACKTRACE",
+        "XPCOM_DEBUG_BREAK",
+    )
     # merge presets and modifications
     for env_name, env_value in base.items():
         if env_value is None:
@@ -474,8 +503,12 @@ def wait_on_files(procs, wait_files, poll_rate=0.25, timeout=60):
             open_files = {true_path(x.path) for x in procs[-1].open_files()}
             if wait_files.intersection(open_files):
                 if deadline <= time():
-                    LOG.debug("%d had %d open files after %ds",
-                              procs[-1].pid, len(open_files), timeout)
+                    LOG.debug(
+                        "%d had %d open files after %ds",
+                        procs[-1].pid,
+                        len(open_files),
+                        timeout,
+                    )
                     return False
                 sleep(poll_rate)
                 continue

@@ -1,11 +1,13 @@
 # This Source Code Form is subject to the terms of the Mozilla Public
 # License, v. 2.0. If a copy of the MPL was not distributed with this
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
+"""ffpuppet main.py"""
 
 from argparse import ArgumentParser
-from logging import basicConfig, getLogger, DEBUG, ERROR, INFO, WARNING
+from logging import DEBUG, ERROR, INFO, WARNING, basicConfig, getLogger
 from os import listdir, stat
-from os.path import abspath, exists, isdir, isfile, join as pathjoin
+from os.path import abspath, exists, isdir, isfile
+from os.path import join as pathjoin
 from platform import system
 from shutil import rmtree
 from tempfile import mkdtemp
@@ -61,83 +63,104 @@ def dump_to_console(log_dir, log_quota=0x8000):
     return "".join(lines)
 
 
-def parse_args(argv=None):
-    log_level_map = {
-        "ERROR": ERROR,
-        "WARN": WARNING,
-        "INFO": INFO,
-        "DEBUG": DEBUG}
+def parse_args(argv=None):  # pylint: disable=missing-docstring
+    log_level_map = {"ERROR": ERROR, "WARN": WARNING, "INFO": INFO, "DEBUG": DEBUG}
 
     parser = ArgumentParser(
-        description="FFPuppet - Firefox process launcher and log collector. Happy bug hunting!")
+        description="FFPuppet - Firefox process launcher and log collector. "
+        "Happy bug hunting!"
+    )
+    parser.add_argument("binary", help="Firefox binary to launch")
     parser.add_argument(
-        "binary",
-        help="Firefox binary to launch")
+        "-d",
+        "--display-logs",
+        action="store_true",
+        help="Display summary of browser logs on process exit.",
+    )
     parser.add_argument(
-        "-d", "--display-logs", action="store_true",
-        help="Display summary of browser logs on process exit.")
-    parser.add_argument(
-        "--log-level", default="INFO",
-        help="Configure console logging. Options: %s (default: %%(default)s)" %
-        ", ".join(k for k, v in sorted(log_level_map.items(), key=lambda x: x[1])))
+        "--log-level",
+        default="INFO",
+        help="Configure console logging. Options: %s (default: %%(default)s)"
+        % ", ".join(k for k, v in sorted(log_level_map.items(), key=lambda x: x[1])),
+    )
 
     cfg_group = parser.add_argument_group("Browser Configuration")
     cfg_group.add_argument(
-        "-e", "--extension", action="append",
-        help="Install extensions. Specify the path to the xpi or the directory " \
-             "containing the unpacked extension.")
+        "-e",
+        "--extension",
+        action="append",
+        help="Install extensions. Specify the path to the xpi or the directory "
+        "containing the unpacked extension.",
+    )
     cfg_group.add_argument(
-        "-p", "--prefs",
-        help="Custom prefs.js file to use (default: profile default)")
+        "-p", "--prefs", help="Custom prefs.js file to use (default: profile default)"
+    )
     cfg_group.add_argument(
-        "-P", "--profile",
-        help="Profile to use. This is non-destructive. A copy of the target profile " \
-             "will be used. (default: temporary profile)")
+        "-P",
+        "--profile",
+        help="Profile to use. This is non-destructive. A copy of the target profile "
+        "will be used. (default: temporary profile)",
+    )
     cfg_group.add_argument(
-        "-u", "--url",
-        help="Server URL or path to local file to load.")
+        "-u", "--url", help="Server URL or path to local file to load."
+    )
     if system().startswith("Linux"):
-        cfg_group.add_argument(
-            "--xvfb", action="store_true",
-            help="Use Xvfb")
+        cfg_group.add_argument("--xvfb", action="store_true", help="Use Xvfb")
 
     report_group = parser.add_argument_group("Issue Detection & Reporting")
     report_group.add_argument(
-        "-a", "--abort-token", action="append", default=list(),
-        help="Scan the browser logs for the given value and close browser if detected. " \
-             "For example '-a ###!!! ASSERTION:' would be used to detect soft assertions.")
+        "-a",
+        "--abort-token",
+        action="append",
+        default=list(),
+        help="Scan the browser logs for the given value and close browser if detected. "
+        "For example '-a ###!!! ASSERTION:' would be used to detect soft assertions.",
+    )
     report_group.add_argument(
-        "--launch-timeout", type=int, default=300,
-        help="Number of seconds to wait for the browser to become " \
-             "responsive after launching. (default: %(default)s)")
+        "--launch-timeout",
+        type=int,
+        default=300,
+        help="Number of seconds to wait for the browser to become "
+        "responsive after launching. (default: %(default)s)",
+    )
     report_group.add_argument(
-        "-l", "--logs", default=".",
-        help="Location to save browser logs. A sub-directory containing the browser logs" \
-             " will be created.")
+        "-l",
+        "--logs",
+        default=".",
+        help="Location to save browser logs."
+        "A sub-directory containing the browser logs will be created.",
+    )
     report_group.add_argument(
-        "--log-limit", type=int, default=0,
-        help="Browser log file size limit in MBs (default: %(default)s, no limit)")
+        "--log-limit",
+        type=int,
+        default=0,
+        help="Browser log file size limit in MBs (default: %(default)s, no limit)",
+    )
     report_group.add_argument(
-        "-m", "--memory", type=int, default=0,
-        help="Browser memory limit in MBs (default: %(default)s, no limit)")
+        "-m",
+        "--memory",
+        type=int,
+        default=0,
+        help="Browser memory limit in MBs (default: %(default)s, no limit)",
+    )
     report_group.add_argument(
-        "--poll-interval", type=float, default=0.5,
-        help="Delay between checks for results (default: %(default)s)")
+        "--poll-interval",
+        type=float,
+        default=0.5,
+        help="Delay between checks for results (default: %(default)s)",
+    )
     report_group.add_argument(
-        "--save-all", action="store_true",
-        help="Always save logs. By default logs are saved only when an issue is detected.")
+        "--save-all",
+        action="store_true",
+        help="Always save logs."
+        " By default logs are saved only when an issue is detected.",
+    )
 
     if system().startswith("Linux"):
         dbg_group = parser.add_argument_group("Available Debuggers")
-        dbg_group.add_argument(
-            "--gdb", action="store_true",
-            help="Use GDB")
-        dbg_group.add_argument(
-            "--rr", action="store_true",
-            help="Use rr")
-        dbg_group.add_argument(
-            "--valgrind", action="store_true",
-            help="Use Valgrind")
+        dbg_group.add_argument("--gdb", action="store_true", help="Use GDB")
+        dbg_group.add_argument("--rr", action="store_true", help="Use rr")
+        dbg_group.add_argument("--valgrind", action="store_true", help="Use Valgrind")
 
     args = parser.parse_args(argv)
 
@@ -189,7 +212,8 @@ def main(argv=None):  # pylint: disable=missing-docstring
         use_valgrind=getattr(args, "valgrind", False),
         use_xvfb=getattr(args, "xvfb", False),
         use_gdb=getattr(args, "gdb", False),
-        use_rr=getattr(args, "rr", False))
+        use_rr=getattr(args, "rr", False),
+    )
     for a_token in args.abort_token:
         ffp.add_abort_token(a_token)
 
@@ -203,7 +227,8 @@ def main(argv=None):  # pylint: disable=missing-docstring
             log_limit=args.log_limit,
             memory_limit=args.memory,
             prefs_js=args.prefs,
-            extension=args.extension)
+            extension=args.extension,
+        )
         if args.prefs and isfile(args.prefs):
             check_prefs(pathjoin(ffp.profile, "prefs.js"), args.prefs)
         LOG.info("Running Firefox (pid: %d)...", ffp.get_pid())
@@ -217,8 +242,8 @@ def main(argv=None):  # pylint: disable=missing-docstring
         ffp.close()
         LOG.info("Firefox process is closed. (Reason: %r)", ffp.reason)
         log_path = mkdtemp(
-            prefix=strftime("%Y%m%d-%H%M%S_ffp_logs_", localtime()),
-            dir=args.logs)
+            prefix=strftime("%Y%m%d-%H%M%S_ffp_logs_", localtime()), dir=args.logs
+        )
         ffp.save_logs(log_path, logs_only=user_exit)
         if args.display_logs:
             LOG.info("Displaying logs...%s", dump_to_console(log_path))

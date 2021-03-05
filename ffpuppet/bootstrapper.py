@@ -1,15 +1,15 @@
 # This Source Code Form is subject to the terms of the Mozilla Public
 # License, v. 2.0. If a copy of the MPL was not distributed with this
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
+"""ffpuppet bootstrapper module"""
+import socket
 from errno import EADDRINUSE
 from logging import getLogger
 from platform import system
 from random import randint
-import socket
 from time import time
 
 from .exceptions import BrowserTerminatedError, BrowserTimeoutError, LaunchError
-
 
 LOG = getLogger(__name__)
 
@@ -17,7 +17,7 @@ __author__ = "Tyson Smith"
 __all__ = ("Bootstrapper",)
 
 
-class Bootstrapper(object):
+class Bootstrapper:  # pylint: disable=missing-docstring
     BUF_SIZE = 4096  # receive buffer size
     POLL_WAIT = 1  # duration of initial blocking socket operations
     PORT_MAX = 0xFFFF  # bootstrap range
@@ -32,7 +32,8 @@ class Bootstrapper(object):
             self._socket.setsockopt(
                 socket.SOL_SOCKET,
                 socket.SO_EXCLUSIVEADDRUSE,  # pylint: disable=no-member
-                1)
+                1,
+            )
         self._socket.settimeout(self.POLL_WAIT)
         for _ in range(self.PORT_RETRIES):
             try:
@@ -78,7 +79,7 @@ class Bootstrapper(object):
             str: Location.
         """
         assert self._socket is not None
-        return "http://127.0.0.1:%d" % self.port
+        return "http://127.0.0.1:%d" % (self.port,)
 
     @property
     def port(self):
@@ -121,7 +122,9 @@ class Bootstrapper(object):
                 if conn is not None:
                     break
                 if not cb_continue():
-                    raise BrowserTerminatedError("Failure waiting for browser connection")
+                    raise BrowserTerminatedError(
+                        "Failure waiting for browser connection"
+                    )
                 if time() >= time_limit:
                     raise BrowserTimeoutError("Timeout waiting for browser connection")
             conn.settimeout(1)
@@ -132,9 +135,13 @@ class Bootstrapper(object):
                     request = conn.recv(self.BUF_SIZE)
                 except socket.timeout:
                     if not cb_continue():
-                        raise BrowserTerminatedError("Failure waiting for request") from None
+                        raise BrowserTerminatedError(
+                            "Failure waiting for request"
+                        ) from None
                     if time() >= time_limit:
-                        raise BrowserTimeoutError("Timeout waiting for request") from None
+                        raise BrowserTimeoutError(
+                            "Timeout waiting for request"
+                        ) from None
                     if not received:
                         continue
                 if not received and not request:
@@ -148,9 +155,11 @@ class Bootstrapper(object):
             if url is None:
                 resp = "HTTP/1.1 204 No Content\r\nConnection: close\r\n\r\n"
             else:
-                resp = "HTTP/1.1 301 Moved Permanently\r\n" \
-                       "Location: %s\r\n" \
-                       "Connection: close\r\n\r\n" % url
+                resp = (
+                    "HTTP/1.1 301 Moved Permanently\r\n"
+                    "Location: %s\r\n"
+                    "Connection: close\r\n\r\n" % (url,)
+                )
             conn.settimeout(max(int(time_limit - time()), 1))
             LOG.debug("sending response (redirect %r)", url)
             try:
@@ -165,7 +174,9 @@ class Bootstrapper(object):
                 raise BrowserTimeoutError("Timeout sending response")
             LOG.debug("bootstrap complete (%0.2fs)", time() - start_time)
         except socket.error as soc_e:  # pragma: no cover
-            raise LaunchError("Error attempting to launch browser: %s" % soc_e) from soc_e
+            raise LaunchError(
+                "Error attempting to launch browser: %s" % (soc_e,)
+            ) from soc_e
         finally:
             if conn is not None:
                 conn.close()
