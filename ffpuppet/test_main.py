@@ -20,7 +20,7 @@ def test_main_01(mocker, tmp_path):
     out_logs.mkdir()
     prefs = tmp_path / "prefs.js"
     prefs.touch()
-    fake_bin = (tmp_path / "fake.bin")
+    fake_bin = tmp_path / "fake.bin"
     fake_bin.touch()
     main([str(fake_bin), "-d", "-l", str(out_logs), "-p", str(prefs), "--save-all"])
     assert fake_ffp.return_value.add_abort_token.call_count == 0
@@ -30,6 +30,7 @@ def test_main_01(mocker, tmp_path):
     assert fake_ffp.return_value.save_logs.call_count == 1
     assert fake_ffp.return_value.clean_up.call_count == 1
 
+
 def test_main_02(mocker, tmp_path):
     """test main() with user exit"""
     fake_ffp = mocker.patch("ffpuppet.main.FFPuppet", autospec=True)
@@ -38,7 +39,7 @@ def test_main_02(mocker, tmp_path):
     fake_ffp.return_value.reason = "CLOSED"
     fake_sleep = mocker.patch("ffpuppet.main.sleep", autospec=True)
     fake_sleep.side_effect = KeyboardInterrupt
-    fake_bin = (tmp_path / "fake.bin")
+    fake_bin = tmp_path / "fake.bin"
     fake_bin.touch()
     main([str(fake_bin), "-l", str(tmp_path), "-a", "token", "--log-level", "DEBUG"])
     assert fake_ffp.return_value.add_abort_token.call_count == 1
@@ -48,6 +49,7 @@ def test_main_02(mocker, tmp_path):
     assert fake_ffp.return_value.save_logs.call_count == 1
     assert fake_ffp.return_value.clean_up.call_count == 1
 
+
 def test_parse_args_01(tmp_path):
     """test parse_args()"""
     with pytest.raises(SystemExit):
@@ -55,7 +57,7 @@ def test_parse_args_01(tmp_path):
     # invalid/missing binary
     with pytest.raises(SystemExit):
         parse_args(["fake_bin"])
-    fake_bin = (tmp_path / "fake.bin")
+    fake_bin = tmp_path / "fake.bin"
     fake_bin.touch()
     # invalid log-limit
     with pytest.raises(SystemExit):
@@ -81,6 +83,7 @@ def test_parse_args_01(tmp_path):
         parse_args([str(fake_bin), "--log-level", "bad"])
     # success
     assert parse_args([str(fake_bin)])
+
 
 def test_dump_to_console_01(tmp_path):
     """test dump_to_console()"""

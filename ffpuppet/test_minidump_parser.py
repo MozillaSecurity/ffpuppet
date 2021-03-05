@@ -24,6 +24,7 @@ def test_minidump_parser_01(mocker, tmp_path):
     mdp.collect_logs(callback, str(tmp_path))
     assert callback.call_count == 0
 
+
 def test_minidump_parser_02(mocker, tmp_path):
     """test MinidumpParser() with empty minidumps (ignore mdsw failures)"""
     md_path = tmp_path / "minidumps"
@@ -41,8 +42,10 @@ def test_minidump_parser_02(mocker, tmp_path):
     assert callback.return_value.tell.call_count == 1
     assert callback.return_value.write.call_count == 1
 
+
 def test_minidump_parser_03(mocker, tmp_path):
     """test MinidumpParser._read_registers()"""
+
     def fake_call_mdsw(_, out_fp):
         out_fp.write(b"Crash reason:  SIGSEGV\n")
         out_fp.write(b"Crash address: 0x0\n")
@@ -61,7 +64,8 @@ def test_minidump_parser_03(mocker, tmp_path):
         out_fp.write(b"    Found by: given as instruction pointer in context\n")
         out_fp.write(b" 1  libxul.so + 0x1f4361c]\n\n")
         out_fp.seek(0)
-    mocker.patch.object(MinidumpParser, '_call_mdsw', side_effect=fake_call_mdsw)
+
+    mocker.patch.object(MinidumpParser, "_call_mdsw", side_effect=fake_call_mdsw)
     mdp = MinidumpParser(str(tmp_path))
     md_lines = list()
     with tempfile.TemporaryFile() as log_fp:
@@ -71,10 +75,12 @@ def test_minidump_parser_03(mocker, tmp_path):
             if b"=" not in line:
                 break
             md_lines.append(line)
-    assert len(md_lines) == 9   # only register info should be in here
+    assert len(md_lines) == 9  # only register info should be in here
+
 
 def test_minidump_parser_04(mocker, tmp_path):
     """test MinidumpParser._read_stacktrace()"""
+
     def fake_call_mdsw(_, out_fp, extra_flags=None):  # pylint: disable=unused-argument
         out_fp.write(b"OS|Linux|0.0.0 sys info...\n")
         out_fp.write(b"CPU|amd64|more info|8\n")
@@ -98,7 +104,8 @@ def test_minidump_parser_04(mocker, tmp_path):
         out_fp.write(b"2|1|libpthread-2.23.so||||0x76ba\n")
         out_fp.write(b"2|3|libc-2.23.so||||0x1073dd\n\n")
         out_fp.seek(0)
-    mocker.patch.object(MinidumpParser, '_call_mdsw', side_effect=fake_call_mdsw)
+
+    mocker.patch.object(MinidumpParser, "_call_mdsw", side_effect=fake_call_mdsw)
     mdp = MinidumpParser(str(tmp_path))
     MinidumpParser.MDSW_MAX_STACK = 7
     with tempfile.TemporaryFile() as log_fp:
@@ -122,6 +129,7 @@ def test_minidump_parser_04(mocker, tmp_path):
     assert len(md_lines) == 8
     assert md_lines[-1].startswith(b"0|3|")
 
+
 def test_minidump_parser_05(mocker, tmp_path):
     """test MinidumpParser.collect_logs()"""
     (tmp_path / "dummy.dmp").touch()
@@ -142,13 +150,16 @@ def test_minidump_parser_05(mocker, tmp_path):
     mdp.collect_logs(callback, str(tmp_path))
     assert callback.call_count == 2
 
+
 def test_minidump_parser_06(mocker, tmp_path):
     """test MinidumpParser._call_mdsw()"""
-    fake_call = mocker.patch("ffpuppet.minidump_parser.call", autospec=True, return_value=0)
-    working = (tmp_path / "fake_tmpd")
+    fake_call = mocker.patch(
+        "ffpuppet.minidump_parser.call", autospec=True, return_value=0
+    )
+    working = tmp_path / "fake_tmpd"
     working.mkdir()
     mocker.patch("ffpuppet.minidump_parser.mkdtemp", return_value=str(working))
-    dmp_path = (tmp_path / "dmps")
+    dmp_path = tmp_path / "dmps"
     dmp_path.mkdir()
     mdp = MinidumpParser(str(dmp_path))
     fake_file = mocker.mock_open()
@@ -167,12 +178,16 @@ def test_minidump_parser_06(mocker, tmp_path):
     assert len(tuple(working.glob("**/mdsw_*.txt"))) == 3
     assert any(working.glob("**/test.dmp"))
 
+
 def test_minidump_parser_07(mocker):
     """test MinidumpParser.mdsw_available()"""
-    fake_call = mocker.patch("ffpuppet.minidump_parser.call", autospec=True, return_value=0)
+    fake_call = mocker.patch(
+        "ffpuppet.minidump_parser.call", autospec=True, return_value=0
+    )
     assert MinidumpParser.mdsw_available()
     fake_call.side_effect = OSError
     assert not MinidumpParser.mdsw_available()
+
 
 def test_process_minidumps_01(mocker, tmp_path):
     """test process_minidumps()"""

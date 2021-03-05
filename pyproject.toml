@@ -21,7 +21,7 @@ exclude_lines = [
 
 [tool.isort]
 known_first_party = "ffpuppet"
-#profile = "black"
+profile = "black"
 
 [tool.pylint.format]
 max-line-length = 88

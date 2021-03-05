@@ -32,6 +32,7 @@ def test_puppet_logger_01(tmp_path):
         plog.add_log("test")
     assert plog.log_length("missing") is None
 
+
 def test_puppet_logger_02(tmp_path):
     """test PuppetLogger.add_log() and PuppetLogger.available_logs()"""
     with PuppetLogger(base_path=str(tmp_path)) as plog:
@@ -47,6 +48,7 @@ def test_puppet_logger_02(tmp_path):
         assert os.path.isfile(plog.get_fp("test_existing").name)
         assert plog.log_length("test_new") == 0
         assert plog.log_length("test_existing") == 4
+
 
 def test_puppet_logger_03(tmp_path):
     """test PuppetLogger.clean_up()"""
@@ -65,6 +67,7 @@ def test_puppet_logger_03(tmp_path):
         assert plog.closed
         assert not plog._logs
 
+
 def test_puppet_logger_04(tmp_path):
     """test PuppetLogger.reset()"""
     with PuppetLogger(base_path=str(tmp_path)) as plog:
@@ -76,6 +79,7 @@ def test_puppet_logger_04(tmp_path):
         assert os.path.isdir(plog.working_path)
         assert plog._base is not None
         assert len(os.listdir(plog._base)) == 1
+
 
 def test_puppet_logger_05(tmp_path):
     """test PuppetLogger.clone_log()"""
@@ -119,6 +123,7 @@ def test_puppet_logger_05(tmp_path):
         assert os.path.isfile(cloned)
         assert not os.stat(cloned).st_size
 
+
 def test_puppet_logger_06(tmp_path):
     """test PuppetLogger.save_logs()"""
     with PuppetLogger(base_path=str(tmp_path)) as plog:
@@ -158,7 +163,7 @@ def test_puppet_logger_06(tmp_path):
         assert len(plog.available_logs()) == 5
         assert len(tuple(dest.glob("*"))) == 6
         # verify meta data was copied
-        meta_file = (dest / PuppetLogger.META_FILE)
+        meta_file = dest / PuppetLogger.META_FILE
         assert meta_file.is_file()
         meta_map = json.loads(meta_file.read_text())
         assert len(meta_map) == 5
@@ -167,6 +172,7 @@ def test_puppet_logger_06(tmp_path):
         assert os.stat(plog.get_fp("test_1").name).st_size == 12
         assert os.stat(plog.get_fp("test_2").name).st_size == 7
         assert os.stat(plog.get_fp("test_3").name).st_size == 500 * 1234
+
 
 def test_puppet_logger_07(mocker, tmp_path):
     """test PuppetLogger.save_logs() rr trace directory"""
@@ -185,6 +191,7 @@ def test_puppet_logger_07(mocker, tmp_path):
         assert fake_ck.call_count == 2
         assert plog._rr_packed
 
+
 def test_puppet_logger_08(tmp_path):
     """test PuppetLogger.add_log() with file not on disk"""
     with PuppetLogger(base_path=str(tmp_path)) as plog:
@@ -192,6 +199,7 @@ def test_puppet_logger_08(tmp_path):
             plog.add_log("test", logfp=log_fp)
             with pytest.raises(IOError, match="log file None does not exist"):
                 plog.get_fp("test")
+
 
 def test_puppet_logger_09(tmp_path):
     """test PuppetLogger.clean_up() with inaccessible directory"""
@@ -211,6 +219,7 @@ def test_puppet_logger_09(tmp_path):
         finally:
             os.chmod(working_path, stat.S_IRWXU)
 
+
 def test_puppet_logger_10(mocker, tmp_path):
     """test PuppetLogger.clean_up() with in-use file"""
     fake_rmtree = mocker.patch("ffpuppet.puppet_logger.rmtree", autospec=True)
@@ -223,6 +232,7 @@ def test_puppet_logger_10(mocker, tmp_path):
         fake_rmtree.side_effect = None
         plog.clean_up()
         plog.close()
+
 
 def test_puppet_logger_11(tmp_path):
     """test PuppetLogger.add_path()"""

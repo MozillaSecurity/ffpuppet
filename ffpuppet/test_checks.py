@@ -12,7 +12,7 @@ from .checks import CheckLogContents, CheckLogSize, CheckMemoryUsage
 
 def test_check_01(mocker, tmp_path):
     """test CheckLogContents()"""
-    test_log = (tmp_path / "test.log")
+    test_log = tmp_path / "test.log"
     # input contains token
     test_log.write_text("blah\nfoo\ntest\n123")
     checker = CheckLogContents([str(test_log)], [re_compile("test")])
@@ -40,18 +40,21 @@ def test_check_01(mocker, tmp_path):
         lfp.write("test123")
         lfp.write("A" * 20)
     checker = CheckLogContents([str(test_log)], [re_compile("test123")])
-    mocker.patch("ffpuppet.checks.CheckLogContents.chunk_size", CheckLogContents.buf_limit)
+    mocker.patch(
+        "ffpuppet.checks.CheckLogContents.chunk_size", CheckLogContents.buf_limit
+    )
     assert not checker.check()
     assert checker.check()
     with test_log.open("wb") as lfp:
         checker.dump_log(lfp)
         assert lfp.tell()
 
+
 def test_check_02(tmp_path):
     """test CheckLogSize()"""
-    stde = (tmp_path / "stderr")
+    stde = tmp_path / "stderr"
     stde.write_text("test\n")
-    stdo = (tmp_path / "stdout")
+    stdo = tmp_path / "stdout"
     stdo.write_text("test\n")
     # exceed limit
     checker = CheckLogSize(1, str(stde), str(stdo))
@@ -65,6 +68,7 @@ def test_check_02(tmp_path):
     with (tmp_path / "log").open("wb") as lfp:
         checker.dump_log(lfp)
         assert not lfp.tell()
+
 
 def test_check_03(tmp_path):
     """test CheckMemoryUsage()"""

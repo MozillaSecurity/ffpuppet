@@ -1,13 +1,15 @@
 # This Source Code Form is subject to the terms of the Mozilla Public
 # License, v. 2.0. If a copy of the MPL was not distributed with this
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
+"""ffpuppet minidump parsing module"""
 
 from logging import getLogger
 from os import devnull, getenv, listdir
-from os.path import getmtime, isdir, join as pathjoin
+from os.path import getmtime, isdir
+from os.path import join as pathjoin
 from shutil import copy, copyfileobj
 from subprocess import call
-from tempfile import mkdtemp, TemporaryFile
+from tempfile import TemporaryFile, mkdtemp
 
 LOG = getLogger(__name__)
 
@@ -15,7 +17,7 @@ __author__ = "Tyson Smith"
 __all__ = ("process_minidumps",)
 
 
-class MinidumpParser(object):
+class MinidumpParser:  # pylint: disable=missing-docstring
     MDSW_BIN = "minidump_stackwalk"
     MDSW_MAX_STACK = 150
 
@@ -137,7 +139,9 @@ class MinidumpParser(object):
                 log_fp.write(line)
                 line_count += 1
                 if line_count >= self.MDSW_MAX_STACK:
-                    LOG.warning("MDSW_MAX_STACK (%d) limit reached", self.MDSW_MAX_STACK)
+                    LOG.warning(
+                        "MDSW_MAX_STACK (%d) limit reached", self.MDSW_MAX_STACK
+                    )
                     log_fp.write(b"WARNING: Hit line output limit!")
                     break
 
@@ -158,7 +162,9 @@ class MinidumpParser(object):
             log_fp = cb_create_log("minidump_%02d" % count)
             self._read_registers(file_path, log_fp)
             # create log for raw mdsw stack output if needed
-            raw_fp = cb_create_log("raw_mdsw_%02d" % count) if self._include_raw else None
+            raw_fp = (
+                cb_create_log("raw_mdsw_%02d" % count) if self._include_raw else None
+            )
             self._read_stacktrace(file_path, log_fp, raw_fp)
             if log_fp.tell() < 1:
                 LOG.warning("minidump_stackwalk log was empty (minidump_%02d)", count)
@@ -209,7 +215,9 @@ def process_minidumps(scan_path, symbols_path, cb_create_log):
         LOG.warning("symbols_path not found: %r", symbols_path)
         return
     if not parser.mdsw_available():
-        LOG.warning("Found a minidump, but can't process it without minidump_stackwalk."
-                    " See README.md for how to obtain it.")
+        LOG.warning(
+            "Found a minidump, but can't process it without minidump_stackwalk."
+            " See README.md for how to obtain it."
+        )
         return
     parser.collect_logs(cb_create_log, symbols_path)

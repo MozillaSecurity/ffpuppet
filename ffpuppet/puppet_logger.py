@@ -1,13 +1,17 @@
 # This Source Code Form is subject to the terms of the Mozilla Public
 # License, v. 2.0. If a copy of the MPL was not distributed with this
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
+"""browser and debugger log management"""
 
 from json import dump as json_dump
 from logging import getLogger
-from os import close as os_close, getpid, listdir, makedirs, mkdir, stat, stat_result
-from os.path import abspath, isdir, isfile, join as pathjoin, realpath
+from os import close as os_close
+from os import getpid, listdir, makedirs, mkdir, stat, stat_result
+from os.path import abspath, isdir, isfile
+from os.path import join as pathjoin
+from os.path import realpath
 from shutil import copy2, copyfileobj, copytree, rmtree
-from subprocess import CalledProcessError, check_output, STDOUT
+from subprocess import STDOUT, CalledProcessError, check_output
 from tempfile import mkdtemp, mkstemp
 
 from .helpers import onerror
@@ -20,7 +24,7 @@ __credits__ = ["Tyson Smith"]
 __all__ = ("PuppetLogger",)
 
 
-class PuppetLogger(object):
+class PuppetLogger:  # pylint: disable=missing-docstring
     BUF_SIZE = 0x10000  # buffer size used to copy logs
     META_FILE = "log_metadata.json"
     PATH_RR = "rr-traces"
@@ -104,7 +108,9 @@ class PuppetLogger(object):
         if self.working_path is not None and isdir(self.working_path):
             for attempt in range(2):
                 try:
-                    rmtree(self.working_path, ignore_errors=ignore_errors, onerror=onerror)
+                    rmtree(
+                        self.working_path, ignore_errors=ignore_errors, onerror=onerror
+                    )
                 except OSError:
                     if attempt > 0:
                         raise
@@ -218,10 +224,7 @@ class PuppetLogger(object):
         Returns:
             file: An open file object.
         """
-        tmp_fd, log_file = mkstemp(
-            suffix=".txt",
-            prefix="ffp_log_",
-            dir=base_dir)
+        tmp_fd, log_file = mkstemp(suffix=".txt", prefix="ffp_log_", dir=base_dir)
         os_close(tmp_fd)
         # use open() so the file object 'name' attribute is correct
         return open(log_file, mode)
@@ -266,8 +269,11 @@ class PuppetLogger(object):
             out_name = "log_%s.txt" % log_id
             if meta:
                 file_stat = stat(log_fp.name)
-                meta_map[out_name] = {field: getattr(file_stat, field)
-                                      for field in dir(stat_result) if field.startswith("st_")}
+                meta_map[out_name] = {
+                    field: getattr(file_stat, field)
+                    for field in dir(stat_result)
+                    if field.startswith("st_")
+                }
             copy2(log_fp.name, pathjoin(dest, out_name))
 
         if not logs_only:

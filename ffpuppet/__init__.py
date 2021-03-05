@@ -5,7 +5,7 @@
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
 from .core import FFPuppet
-from .exceptions import BrowserTimeoutError, BrowserTerminatedError, LaunchError
+from .exceptions import BrowserTerminatedError, BrowserTimeoutError, LaunchError
 
 __all__ = ("FFPuppet", "BrowserTimeoutError", "BrowserTerminatedError", "LaunchError")
 __author__ = "Tyson Smith"
