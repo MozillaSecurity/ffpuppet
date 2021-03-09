@@ -133,125 +133,6 @@ class FFPuppet:
     def __exit__(self, *exc):
         self.clean_up()
 
-    @classmethod
-    def _dbg_sanity_check(cls, dbg_id):
-        """Check requested debugger is supported and available.
-
-        Args:
-            dbg_id (int): Debugger to sanity check.
-
-        Returns:
-            None
-        """
-        if dbg_id == cls.DBG_GDB:
-            if not system().startswith("Linux"):
-                raise EnvironmentError("GDB is only supported on Linux")
-            try:
-                check_output(["gdb", "--version"])
-            except OSError:
-                raise EnvironmentError("Please install GDB") from None
-        elif dbg_id == cls.DBG_RR:
-            if not system().startswith("Linux"):
-                raise EnvironmentError("rr is only supported on Linux")
-            try:
-                check_output(["rr", "--version"])
-            except OSError:
-                raise EnvironmentError("Please install rr") from None
-        elif dbg_id == cls.DBG_VALGRIND:
-            if not system().startswith("Linux"):
-                raise EnvironmentError("Valgrind is only supported on Linux")
-            try:
-                match = re_match(
-                    b"valgrind-(?P<ver>\\d+\\.\\d+)",
-                    check_output(["valgrind", "--version"]),
-                )
-            except OSError:
-                raise EnvironmentError("Please install Valgrind") from None
-            if not match or float(match.group("ver")) < cls.VALGRIND_MIN_VERSION:
-                raise EnvironmentError(
-                    "Valgrind >= %0.2f is required" % cls.VALGRIND_MIN_VERSION
-                )
-
-    def add_abort_token(self, token):
-        """Add a token that when present in the browser log will have the
-        browser process terminated.
-
-        Args:
-            token (str): Value to search for in the browser logs.
-
-        Returns:
-            None
-        """
-        assert token and isinstance(token, str)
-        self._abort_tokens.add(re_compile(token))
-
-    def available_logs(self):
-        """List of IDs for the currently available logs.
-
-        Args:
-            None
-
-        Returns:
-            list: A list contains log IDs (str).
-        """
-        return list(self._logs.available_logs())
-
-    def clone_log(self, log_id, offset=None, target_file=None):
-        """Create a copy of the selected browser log.
-
-        Args:
-            log_id (str): ID (key) of the log to clone (stderr, stdout... etc).
-            target_file (str): The log contents will be saved to target_file.
-            offset (int):
-
-        Returns:
-            str: Name of the file containing the cloned log or None on failure.
-        """
-        return self._logs.clone_log(log_id, offset=offset, target_file=target_file)
-
-    def cpu_usage(self):
-        """Collect percentage of CPU usage per process.
-
-        Args:
-            None
-
-        Yields:
-            tuple: PID and the CPU usage as a percentage.
-        """
-        pid = self.get_pid()
-        if pid is not None:
-            for proc in get_processes(pid):
-                try:
-                    yield proc.pid, proc.cpu_percent(interval=0.1)
-                except (AccessDenied, NoSuchProcess):  # pragma: no cover
-                    continue
-
-    def is_healthy(self):
-        """Verify the browser is in a good state by performing a series
-        of checks.
-
-        Args:
-            None
-
-        Returns:
-            bool: True if the browser is running and determined to be
-                  in a valid functioning state otherwise False.
-        """
-        if self.reason is not None:
-            LOG.debug("reason is set to %r", self.reason)
-            return False
-        if not self.is_running():
-            LOG.debug("is_running() returned False")
-            return False
-        if any(self._crashreports()):
-            LOG.debug("crash report found")
-            return False
-        for check in self._checks:
-            if check.check():
-                LOG.debug("%r check abort conditions met", check.name)
-                return False
-        return True
-
     def _crashreports(self, skip_md=False):
         """Collect crash logs/reports.
 
@@ -312,65 +193,44 @@ class FFPuppet:
                 if ".dmp" in fname:
                     yield pathjoin(md_path, fname)
 
-    def log_length(self, log_id):
-        """Get the length of the selected browser log.
+    @classmethod
+    def _dbg_sanity_check(cls, dbg_id):
+        """Check requested debugger is supported and available.
 
         Args:
-            log_id (str): ID (key) of the log (stderr, stdout... etc).
-
-        Returns:
-            int: Length of the log in bytes.
-        """
-        return self._logs.log_length(log_id)
-
-    def save_logs(self, dest, logs_only=False, meta=False):
-        """The browser logs will be saved to dest. This can only be called
-        after close().
-
-        Args:
-            dest (str): Destination path for log data. Existing files will
-                        be overwritten.
-            logs_only (bool): Do not include other data such as debugger
-                              output files.
-            meta (bool): Output JSON file containing log file meta data.
+            dbg_id (int): Debugger to sanity check.
 
         Returns:
             None
         """
-        LOG.debug("save_logs(%r, logs_only=%r, meta=%r)", dest, logs_only, meta)
-        assert self._launches > -1, "clean_up() has been called"
-        assert self._logs.closed, "Logs are still in use. Call close() first!"
-        self._logs.save_logs(dest, logs_only=logs_only, meta=meta)
-
-    def clean_up(self):
-        """Remove all remaining files created during execution. This will also
-        clear some state information and should only be called once the FFPuppet
-        object is no longer needed. Using the FFPuppet object after calling
-        clean_up() is not supported.
-
-        Args:
-            None
-
-        Returns:
-            None
-        """
-        if self._launches < 0:
-            LOG.debug("clean_up() call ignored")
-            return
-        LOG.debug("clean_up() called")
-        self.close(force_close=True)
-        self._logs.clean_up(ignore_errors=True)
-        # close Xvfb
-        if self._xvfb is not None:
-            self._xvfb.stop()
-            self._xvfb = None
-        # at this point everything should be cleaned up
-        assert self.reason is not None
-        assert self._logs.closed
-        assert self._proc is None
-        assert self.profile is None
-        # negative 'self._launches' indicates clean_up() has been called
-        self._launches = -1
+        if dbg_id == cls.DBG_GDB:
+            if not system().startswith("Linux"):
+                raise EnvironmentError("GDB is only supported on Linux")
+            try:
+                check_output(["gdb", "--version"])
+            except OSError:
+                raise EnvironmentError("Please install GDB") from None
+        elif dbg_id == cls.DBG_RR:
+            if not system().startswith("Linux"):
+                raise EnvironmentError("rr is only supported on Linux")
+            try:
+                check_output(["rr", "--version"])
+            except OSError:
+                raise EnvironmentError("Please install rr") from None
+        elif dbg_id == cls.DBG_VALGRIND:
+            if not system().startswith("Linux"):
+                raise EnvironmentError("Valgrind is only supported on Linux")
+            try:
+                match = re_match(
+                    b"valgrind-(?P<ver>\\d+\\.\\d+)",
+                    check_output(["valgrind", "--version"]),
+                )
+            except OSError:
+                raise EnvironmentError("Please install Valgrind") from None
+            if not match or float(match.group("ver")) < cls.VALGRIND_MIN_VERSION:
+                raise EnvironmentError(
+                    "Valgrind >= %0.2f is required" % cls.VALGRIND_MIN_VERSION
+                )
 
     @staticmethod
     def _terminate(pid, retry_delay=30, start_mode=0):
@@ -423,135 +283,29 @@ class FFPuppet:
                     pass
             raise TerminateError("Failed to terminate browser")
 
-    def close(self, force_close=False):
-        """Terminate the browser process(es) and set `self.reason`. The reason
-        code indicates how/why the browser process was terminated.
+    def add_abort_token(self, token):
+        """Add a token that when present in the browser log will have the
+        browser process terminated.
 
         Args:
-            force_close (bool): Do not collect logs, etc, just make sure
-                                everything is closed.
+            token (str): Value to search for in the browser logs.
 
         Returns:
             None
         """
-        LOG.debug("close(force_close=%r) called", force_close)
-        assert self._launches > -1, "clean_up() has been called"
-        if self.reason is not None:
-            # make sure browser logs are closed
-            self._logs.close()
-            return
+        assert token and isinstance(token, str)
+        self._abort_tokens.add(re_compile(token))
 
-        assert self._proc is not None
-        pid = self.get_pid()
-        procs = get_processes(pid) if pid is not None else list()
-        LOG.debug("browser pid: %r, %d proc(s)", pid, len(procs))
-        # set reason code
-        crash_reports = set(self._crashreports())
-        if crash_reports:
-            r_code = self.RC_ALERT
-            while True:
-                LOG.debug("%d crash report(s) found", len(crash_reports))
-                # wait until crash report files are closed
-                report_wait = 300 if self._dbg == self.DBG_RR else 90
-                if not wait_on_files(procs, crash_reports, timeout=report_wait):
-                    LOG.warning("Crash reports still open after %ds", report_wait)
-                    break
-                new_reports = set(self._crashreports())
-                # verify no new reports have appeared
-                if not new_reports - crash_reports:
-                    break
-                LOG.debug("more reports have appeared")
-                crash_reports = new_reports
-        elif self.is_running():
-            r_code = self.RC_CLOSED
-        elif self._proc.poll() not in (0, -1, 1, -2):
-            r_code = self.RC_ALERT
-            LOG.debug("poll() returned %r", self._proc.poll())
-        else:
-            r_code = self.RC_EXITED
-        # close processes
-        if self.is_running():
-            LOG.debug("browser needs to be terminated")
-            # when running under a debugger be less aggressive
-            self._terminate(pid, start_mode=1 if self._dbg == self.DBG_NONE else 0)
-        # wait for any remaining processes to close
-        if wait_procs(procs, timeout=1 if force_close else 30)[1]:
-            LOG.warning("Some browser processes are still running!")
-        # collect crash logs
-        if not force_close:
-            if self._logs.closed:  # pragma: no cover
-                # This should not happen while everything is working as expected.
-                # This is here to prevent additional unexpected issues.
-                # Since this should never happen in normal operation this assert
-                # will help verify that.
-                # If '_proc' is not None this is the first call to close()
-                # in this situation the PuppetLogger should still be available.
-                assert self._proc is None, "PuppetLogger is closed!"
-            else:
-                LOG.debug("reviewing %d check(s)", len(self._checks))
-                for check in self._checks:
-                    if check.message is not None:
-                        r_code = self.RC_WORKER
-                        check.dump_log(
-                            dst_fp=self._logs.add_log("ffp_worker_%s" % check.name)
-                        )
-                # collect logs (excluding minidumps)
-                for fname in self._crashreports(skip_md=True):
-                    self._logs.add_log(basename(fname), open(fname, "rb"))
-                # check for minidumps in the profile and dump them if possible
-                process_minidumps(
-                    pathjoin(self.profile, "minidumps"),
-                    pathjoin(self._bin_path, "symbols"),
-                    self._logs.add_log,
-                )
-                if self._logs.get_fp("stderr"):
-                    self._logs.get_fp("stderr").write(
-                        ("[ffpuppet] Reason code: %s\n" % r_code).encode("utf-8")
-                    )
-        # reset remaining to closed state
-        try:
-            self._proc = None
-            self._logs.close()
-            self._checks = list()
-            # remove temporary profile directory if necessary
-            try:
-                rmtree(self.profile, onerror=onerror)
-            except OSError:  # pragma: no cover
-                LOG.error("Failed to remove profile %r", self.profile)
-                if not force_close:
-                    raise
-            finally:
-                self.profile = None
-        finally:
-            LOG.debug("exit reason code %r", r_code)
-            self.reason = r_code
-
-    @property
-    def launches(self):
-        """Number of successful launches.
+    def available_logs(self):
+        """List of IDs for the currently available logs.
 
         Args:
             None
 
         Returns:
-            int: Successful launch count.
+            list: A list contains log IDs (str).
         """
-        assert self._launches > -1, "clean_up() has been called"
-        return self._launches
-
-    def get_pid(self):
-        """Get the browser process ID.
-
-        Args:
-            None
-
-        Returns:
-            int: Browser PID.
-        """
-        try:
-            return self._proc.pid
-        except AttributeError:
-            return None
+        return list(self._logs.available_logs())
 
     def build_launch_cmd(self, bin_path, additional_args=None):
         """Build a command that can be used to launch the browser.
@@ -659,6 +413,223 @@ class FFPuppet:
             ] + cmd
 
         return cmd
+
+    def clean_up(self):
+        """Remove all remaining files created during execution. This will also
+        clear some state information and should only be called once the FFPuppet
+        object is no longer needed. Using the FFPuppet object after calling
+        clean_up() is not supported.
+
+        Args:
+            None
+
+        Returns:
+            None
+        """
+        if self._launches < 0:
+            LOG.debug("clean_up() call ignored")
+            return
+        LOG.debug("clean_up() called")
+        self.close(force_close=True)
+        self._logs.clean_up(ignore_errors=True)
+        # close Xvfb
+        if self._xvfb is not None:
+            self._xvfb.stop()
+            self._xvfb = None
+        # at this point everything should be cleaned up
+        assert self.reason is not None
+        assert self._logs.closed
+        assert self._proc is None
+        assert self.profile is None
+        # negative 'self._launches' indicates clean_up() has been called
+        self._launches = -1
+
+    def clone_log(self, log_id, offset=None, target_file=None):
+        """Create a copy of the selected browser log.
+
+        Args:
+            log_id (str): ID (key) of the log to clone (stderr, stdout... etc).
+            target_file (str): The log contents will be saved to target_file.
+            offset (int):
+
+        Returns:
+            str: Name of the file containing the cloned log or None on failure.
+        """
+        return self._logs.clone_log(log_id, offset=offset, target_file=target_file)
+
+    def close(self, force_close=False):
+        """Terminate the browser process(es) and set `self.reason`. The reason
+        code indicates how/why the browser process was terminated.
+
+        Args:
+            force_close (bool): Do not collect logs, etc, just make sure
+                                everything is closed.
+
+        Returns:
+            None
+        """
+        LOG.debug("close(force_close=%r) called", force_close)
+        assert self._launches > -1, "clean_up() has been called"
+        if self.reason is not None:
+            # make sure browser logs are closed
+            self._logs.close()
+            return
+
+        assert self._proc is not None
+        pid = self.get_pid()
+        procs = get_processes(pid) if pid is not None else list()
+        LOG.debug("browser pid: %r, %d proc(s)", pid, len(procs))
+        # set reason code
+        crash_reports = set(self._crashreports())
+        if crash_reports:
+            r_code = self.RC_ALERT
+            while True:
+                LOG.debug("%d crash report(s) found", len(crash_reports))
+                # wait until crash report files are closed
+                report_wait = 300 if self._dbg == self.DBG_RR else 90
+                if not wait_on_files(procs, crash_reports, timeout=report_wait):
+                    LOG.warning("Crash reports still open after %ds", report_wait)
+                    break
+                new_reports = set(self._crashreports())
+                # verify no new reports have appeared
+                if not new_reports - crash_reports:
+                    break
+                LOG.debug("more reports have appeared")
+                crash_reports = new_reports
+        elif self.is_running():
+            r_code = self.RC_CLOSED
+        elif self._proc.poll() not in (0, -1, 1, -2):
+            r_code = self.RC_ALERT
+            LOG.debug("poll() returned %r", self._proc.poll())
+        else:
+            r_code = self.RC_EXITED
+        # close processes
+        if self.is_running():
+            LOG.debug("browser needs to be terminated")
+            # when running under a debugger be less aggressive
+            self._terminate(pid, start_mode=1 if self._dbg == self.DBG_NONE else 0)
+        # wait for any remaining processes to close
+        if wait_procs(procs, timeout=1 if force_close else 30)[1]:
+            LOG.warning("Some browser processes are still running!")
+        # collect crash logs
+        if not force_close:
+            if self._logs.closed:  # pragma: no cover
+                # This should not happen while everything is working as expected.
+                # This is here to prevent additional unexpected issues.
+                # Since this should never happen in normal operation this assert
+                # will help verify that.
+                # If '_proc' is not None this is the first call to close()
+                # in this situation the PuppetLogger should still be available.
+                assert self._proc is None, "PuppetLogger is closed!"
+            else:
+                LOG.debug("reviewing %d check(s)", len(self._checks))
+                for check in self._checks:
+                    if check.message is not None:
+                        r_code = self.RC_WORKER
+                        check.dump_log(
+                            dst_fp=self._logs.add_log("ffp_worker_%s" % check.name)
+                        )
+                # collect logs (excluding minidumps)
+                for fname in self._crashreports(skip_md=True):
+                    self._logs.add_log(basename(fname), open(fname, "rb"))
+                # check for minidumps in the profile and dump them if possible
+                process_minidumps(
+                    pathjoin(self.profile, "minidumps"),
+                    pathjoin(self._bin_path, "symbols"),
+                    self._logs.add_log,
+                )
+                if self._logs.get_fp("stderr"):
+                    self._logs.get_fp("stderr").write(
+                        ("[ffpuppet] Reason code: %s\n" % r_code).encode("utf-8")
+                    )
+        # reset remaining to closed state
+        try:
+            self._proc = None
+            self._logs.close()
+            self._checks = list()
+            # remove temporary profile directory if necessary
+            try:
+                rmtree(self.profile, onerror=onerror)
+            except OSError:  # pragma: no cover
+                LOG.error("Failed to remove profile %r", self.profile)
+                if not force_close:
+                    raise
+            finally:
+                self.profile = None
+        finally:
+            LOG.debug("exit reason code %r", r_code)
+            self.reason = r_code
+
+    def cpu_usage(self):
+        """Collect percentage of CPU usage per process.
+
+        Args:
+            None
+
+        Yields:
+            tuple: PID and the CPU usage as a percentage.
+        """
+        pid = self.get_pid()
+        if pid is not None:
+            for proc in get_processes(pid):
+                try:
+                    yield proc.pid, proc.cpu_percent(interval=0.1)
+                except (AccessDenied, NoSuchProcess):  # pragma: no cover
+                    continue
+
+    def get_pid(self):
+        """Get the browser process ID.
+
+        Args:
+            None
+
+        Returns:
+            int: Browser PID.
+        """
+        try:
+            return self._proc.pid
+        except AttributeError:
+            return None
+
+    def is_healthy(self):
+        """Verify the browser is in a good state by performing a series
+        of checks.
+
+        Args:
+            None
+
+        Returns:
+            bool: True if the browser is running and determined to be
+                  in a valid functioning state otherwise False.
+        """
+        if self.reason is not None:
+            LOG.debug("reason is set to %r", self.reason)
+            return False
+        if not self.is_running():
+            LOG.debug("is_running() returned False")
+            return False
+        if any(self._crashreports()):
+            LOG.debug("crash report found")
+            return False
+        for check in self._checks:
+            if check.check():
+                LOG.debug("%r check abort conditions met", check.name)
+                return False
+        return True
+
+    def is_running(self):
+        """Check if the browser process is running.
+
+        Args:
+            None
+
+        Returns:
+            bool: True if the process is running otherwise False.
+        """
+        try:
+            return self._proc.poll() is None
+        except AttributeError:
+            return False
 
     def launch(
         self,
@@ -817,19 +788,48 @@ class FFPuppet:
 
         self._launches += 1
 
-    def is_running(self):
-        """Check if the browser process is running.
+    @property
+    def launches(self):
+        """Number of successful launches.
 
         Args:
             None
 
         Returns:
-            bool: True if the process is running otherwise False.
+            int: Successful launch count.
         """
-        try:
-            return self._proc.poll() is None
-        except AttributeError:
-            return False
+        assert self._launches > -1, "clean_up() has been called"
+        return self._launches
+
+    def log_length(self, log_id):
+        """Get the length of the selected browser log.
+
+        Args:
+            log_id (str): ID (key) of the log (stderr, stdout... etc).
+
+        Returns:
+            int: Length of the log in bytes.
+        """
+        return self._logs.log_length(log_id)
+
+    def save_logs(self, dest, logs_only=False, meta=False):
+        """The browser logs will be saved to dest. This can only be called
+        after close().
+
+        Args:
+            dest (str): Destination path for log data. Existing files will
+                        be overwritten.
+            logs_only (bool): Do not include other data such as debugger
+                              output files.
+            meta (bool): Output JSON file containing log file meta data.
+
+        Returns:
+            None
+        """
+        LOG.debug("save_logs(%r, logs_only=%r, meta=%r)", dest, logs_only, meta)
+        assert self._launches > -1, "clean_up() has been called"
+        assert self._logs.closed, "Logs are still in use. Call close() first!"
+        self._logs.save_logs(dest, logs_only=logs_only, meta=meta)
 
     def wait(self, timeout=None):
         """Wait for browser process(es) to terminate. This call will block until
