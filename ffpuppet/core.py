@@ -312,7 +312,7 @@ class FFPuppet:
 
         Args:
             bin_path (str): Path to the browser binary.
-            additional_args (list): Additional arguments to pass to the browser.
+            additional_args (list(str)): Additional arguments to pass to the browser.
 
         Returns:
             list: List of arguments that make up the launch command.
@@ -450,7 +450,7 @@ class FFPuppet:
         Args:
             log_id (str): ID (key) of the log to clone (stderr, stdout... etc).
             target_file (str): The log contents will be saved to target_file.
-            offset (int):
+            offset (int): Location to begin reading the file from.
 
         Returns:
             str: Name of the file containing the cloned log or None on failure.
