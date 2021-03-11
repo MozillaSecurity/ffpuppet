@@ -4,7 +4,7 @@
 """ffpuppet module"""
 
 from logging import getLogger
-from os import X_OK, access, getenv, listdir, stat
+from os import X_OK, access, getenv, scandir
 from os.path import abspath, basename, dirname, isfile
 from os.path import join as pathjoin
 from os.path import realpath
@@ -144,20 +144,19 @@ class FFPuppet:
         """
         assert self._logs is not None
         try:
-            files = listdir(self._logs.working_path)
+            contents = scandir(self._logs.working_path)
         except OSError:  # pragma: no cover
-            files = tuple()
-        for fname in files:
+            contents = tuple()
+        for entry in contents:
             # scan for sanitizer logs
-            if fname.startswith(self._logs.PREFIX_SAN):
-                full_name = pathjoin(self._logs.working_path, fname)
-                size = self._logs.watching.get(full_name)
+            if entry.name.startswith(self._logs.PREFIX_SAN):
+                size = self._logs.watching.get(entry.path)
                 # skip previously scanned files that have not been updated
-                if size is not None and size == stat(full_name).st_size:
+                if size is not None and size == entry.stat().st_size:
                     continue
                 try:
                     # WARNING: cannot open files that are already open on Windows
-                    with open(full_name, "rb") as log_fp:
+                    with open(entry.path, "rb") as log_fp:
                         # NOTE: add only benign single line warnings here
                         for line in log_fp:
                             line = line.rstrip()
@@ -169,29 +168,26 @@ class FFPuppet:
                                 continue
                             break
                         else:
-                            self._logs.watching[full_name] = log_fp.tell()
+                            self._logs.watching[entry.path] = log_fp.tell()
                             continue
                 except OSError:
-                    LOG.debug("failed to scan log %r", full_name)
-                yield full_name
+                    LOG.debug("failed to scan log %r", entry.path)
+                yield entry.path
             # scan for Valgrind logs
-            elif self._dbg == self.DBG_VALGRIND and fname.startswith(
+            elif self._dbg == self.DBG_VALGRIND and entry.name.startswith(
                 self._logs.PREFIX_VALGRIND
             ):
-                full_name = pathjoin(self._logs.working_path, fname)
-                if stat(full_name).st_size:
-                    yield full_name
+                if entry.stat().st_size:
+                    yield entry.path
         # check for minidumps
         if not skip_md:
             assert self.profile is not None
-            md_path = pathjoin(self.profile, "minidumps")
             try:
-                files = listdir(md_path)
-            except OSError:
-                files = tuple()
-            for fname in files:
-                if ".dmp" in fname:
-                    yield pathjoin(md_path, fname)
+                for entry in scandir(pathjoin(self.profile, "minidumps")):
+                    if ".dmp" in entry.name:
+                        yield entry.path
+            except OSError:  # pragma: no cover
+                pass
 
     @classmethod
     def _dbg_sanity_check(cls, dbg_id):
