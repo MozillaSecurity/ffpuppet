@@ -4,11 +4,11 @@
 """ffpuppet minidump parsing module"""
 
 from logging import getLogger
-from os import devnull, getenv, listdir
+from os import getenv, listdir
 from os.path import getmtime, isdir
 from os.path import join as pathjoin
 from shutil import copy, copyfileobj
-from subprocess import call
+from subprocess import DEVNULL, call
 from tempfile import TemporaryFile, mkdtemp
 
 LOG = getLogger(__name__)
@@ -178,12 +178,10 @@ class MinidumpParser:  # pylint: disable=missing-docstring
             None
 
         Returns:
-            bool: True if minidump_stack walk is available otherwise False.
+            bool: True if minidump_stackwalk is available otherwise False.
         """
-        cmd = [cls.MDSW_BIN]
         try:
-            with open(devnull, "w") as null_fp:
-                call(cmd, stdout=null_fp, stderr=null_fp)
+            call([cls.MDSW_BIN], stdout=DEVNULL, stderr=DEVNULL)
         except OSError:
             return False
         return True
