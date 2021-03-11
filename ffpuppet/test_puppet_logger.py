@@ -38,6 +38,7 @@ def test_puppet_logger_02(tmp_path):
     with PuppetLogger(base_path=str(tmp_path)) as plog:
         assert not plog._logs
         assert not plog.available_logs()
+        assert not any(plog.files)
         plog.add_log("test_new")  # non-existing log
         assert "test_new" in plog.available_logs()
         assert os.path.isfile(plog.get_fp("test_new").name)
@@ -45,6 +46,7 @@ def test_puppet_logger_02(tmp_path):
             in_fp.write(b"blah")
             plog.add_log("test_existing", logfp=in_fp)
         assert len(plog.available_logs()) == 2
+        assert len(tuple(plog.files)) == 2
         assert os.path.isfile(plog.get_fp("test_existing").name)
         assert plog.log_length("test_new") == 0
         assert plog.log_length("test_existing") == 4
@@ -131,7 +133,7 @@ def test_puppet_logger_06(tmp_path):
         # save when there are no logs
         dest = tmp_path / "dest"
         plog.save_logs(str(dest))
-        assert not any(dest.glob("*"))
+        assert not any(dest.iterdir())
         plog.reset()
         dest.rmdir()
         # add small log
@@ -161,7 +163,7 @@ def test_puppet_logger_06(tmp_path):
         meta_test.unlink()
         # check saved file count
         assert len(plog.available_logs()) == 5
-        assert len(tuple(dest.glob("*"))) == 6
+        assert len(tuple(dest.iterdir())) == 6
         # verify meta data was copied
         meta_file = dest / PuppetLogger.META_FILE
         assert meta_file.is_file()
@@ -244,5 +246,5 @@ def test_puppet_logger_11(tmp_path):
         plog.close()
         dest = tmp_path / "dest"
         plog.save_logs(str(dest))
-        assert any(dest.glob("test"))
-        assert any(dest.glob("test/simple.txt"))
+        assert (dest / "test").is_dir()
+        assert (dest / "test" / "simple.txt").is_file()
