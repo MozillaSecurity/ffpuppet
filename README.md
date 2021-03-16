@@ -1,7 +1,7 @@
 FFPuppet
 ========
 
-[![Build Status](https://travis-ci.com/MozillaSecurity/ffpuppet.svg?branch=master)](https://travis-ci.com/MozillaSecurity/ffpuppet)
+[![Task Status](https://community-tc.services.mozilla.com/api/github/v1/repository/MozillaSecurity/ffpuppet/master/badge.svg)](https://community-tc.services.mozilla.com/api/github/v1/repository/MozillaSecurity/ffpuppet/master/latest)
 [![codecov](https://codecov.io/gh/MozillaSecurity/ffpuppet/branch/master/graph/badge.svg)](https://codecov.io/gh/MozillaSecurity/ffpuppet)
 [![Matrix](https://img.shields.io/badge/dynamic/json?color=green&label=chat&query=%24.chunk[%3F(%40.canonical_alias%3D%3D%22%23fuzzing%3Amozilla.org%22)].num_joined_members&suffix=%20users&url=https%3A%2F%2Fmozilla.modular.im%2F_matrix%2Fclient%2Fr0%2FpublicRooms&style=flat&logo=matrix)](https://riot.im/app/#/room/#fuzzing:mozilla.org)
 [![PyPI](https://img.shields.io/pypi/v/ffpuppet)](https://pypi.org/project/ffpuppet)
@@ -13,9 +13,9 @@ Are you [fuzzing](https://firefox-source-docs.mozilla.org/tools/fuzzing/index.ht
 Installation
 ------------
 
-##### To install after cloning the repository
+##### To install the latest version from PyPI
 
-    pip install --user -e <ffpuppet_repository>
+    pip install ffpuppet
 
 ##### Xvfb on Linux
 
