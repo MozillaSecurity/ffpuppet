@@ -7,13 +7,12 @@
 
 import json
 import os
-import stat
 import tempfile
 import time
 
 import pytest
 
-from .puppet_logger import PuppetLogger
+from .puppet_logger import PuppetLogger, onerror
 
 
 def test_puppet_logger_01(tmp_path):
@@ -203,40 +202,33 @@ def test_puppet_logger_08(tmp_path):
                 plog.get_fp("test")
 
 
-def test_puppet_logger_09(tmp_path):
-    """test PuppetLogger.clean_up() with inaccessible directory"""
-    with PuppetLogger(base_path=str(tmp_path)) as plog:
-        plog.add_log("test")
-        os.chmod(plog.working_path, stat.S_IRUSR)
-        working_path = plog.working_path
-        plog.close()
-        try:
-            assert os.path.isdir(plog.working_path)
-            with pytest.raises(OSError):
-                plog.clean_up()
-            assert plog.working_path is not None
-            plog.clean_up(ignore_errors=True)
-            assert plog.working_path is None
-            assert os.path.isdir(working_path)
-        finally:
-            os.chmod(working_path, stat.S_IRWXU)
-
-
-def test_puppet_logger_10(mocker, tmp_path):
-    """test PuppetLogger.clean_up() with in-use file"""
+def test_puppet_logger_09(mocker, tmp_path):
+    """test PuppetLogger.clean_up() with in-use file or inaccessible directory"""
     fake_rmtree = mocker.patch("ffpuppet.puppet_logger.rmtree", autospec=True)
     with PuppetLogger(base_path=str(tmp_path)) as plog:
         plog.add_log("test")
+        working_path = plog.working_path
+        # test with ignore_errors=False
         fake_rmtree.side_effect = OSError
         with pytest.raises(OSError):
             plog.clean_up()
+        assert fake_rmtree.call_count == 2
+        fake_rmtree.assert_called_with(
+            working_path, ignore_errors=False, onerror=onerror
+        )
         assert plog.working_path is not None
+        fake_rmtree.reset_mock()
+        # test with ignore_errors=True
         fake_rmtree.side_effect = None
-        plog.clean_up()
-        plog.close()
+        plog.clean_up(ignore_errors=True)
+        assert fake_rmtree.call_count == 1
+        fake_rmtree.assert_called_with(
+            working_path, ignore_errors=True, onerror=onerror
+        )
+        assert plog.working_path is None
 
 
-def test_puppet_logger_11(tmp_path):
+def test_puppet_logger_10(tmp_path):
     """test PuppetLogger.add_path()"""
     with PuppetLogger(base_path=str(tmp_path)) as plog:
         path = plog.add_path("test")
