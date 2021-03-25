@@ -5,13 +5,13 @@
 
 from argparse import ArgumentParser
 from logging import DEBUG, ERROR, INFO, WARNING, basicConfig, getLogger
-from os import listdir, stat
+from os import scandir
 from os.path import abspath, exists, isdir, isfile
 from os.path import join as pathjoin
 from platform import system
 from shutil import rmtree
 from tempfile import mkdtemp
-from time import localtime, sleep, strftime
+from time import sleep, strftime
 
 from .core import FFPuppet
 from .helpers import check_prefs
@@ -31,16 +31,17 @@ def dump_to_console(log_dir, log_quota=0x8000):
     Returns:
         str: Merged log data to be displayed on the console.
     """
-    logs = list(x for x in listdir(log_dir) if isfile(pathjoin(log_dir, x)))
+
+    logs = list(x for x in scandir(log_dir) if x.is_file())
     if not logs:
         return ""
     # display stdout and stderr last to avoid the need to scroll back
     # this assumes stderr contains the most relevant information
     for l_order in ("log_stdout", "log_stderr"):
         found = None
-        for fname in logs:
-            if fname.startswith(l_order):
-                found = fname
+        for log in logs:
+            if log.name.startswith(l_order):
+                found = log
                 break
         # move to the end of the print list
         if found and logs[-1] != found:
@@ -48,12 +49,11 @@ def dump_to_console(log_dir, log_quota=0x8000):
             logs.append(found)
     # merge logs
     lines = list()
-    for fname in logs:
-        full_path = pathjoin(log_dir, fname)
-        fsize = stat(full_path).st_size
+    for log in logs:
+        fsize = log.stat().st_size
         lines.append("\n===\n")
-        lines.append("=== Dumping %r (%0.2fKB)" % (fname, fsize / 1024.0))
-        with open(full_path, "rb") as log_fp:
+        lines.append("=== Dumping %r (%0.2fKB)" % (log.name, fsize / 1024.0))
+        with open(log.path, "rb") as log_fp:
             # tail log if needed
             log_fp.seek(max(fsize - log_quota, 0))
             if log_fp.tell() > 0:
@@ -241,9 +241,7 @@ def main(argv=None):  # pylint: disable=missing-docstring
         LOG.info("Shutting down...")
         ffp.close()
         LOG.info("Firefox process is closed. (Reason: %r)", ffp.reason)
-        log_path = mkdtemp(
-            prefix=strftime("%Y%m%d-%H%M%S_ffp_logs_", localtime()), dir=args.logs
-        )
+        log_path = mkdtemp(prefix=strftime("%Y%m%d-%H%M%S_ffp_logs_"), dir=args.logs)
         ffp.save_logs(log_path, logs_only=user_exit)
         if args.display_logs:
             LOG.info("Displaying logs...%s", dump_to_console(log_path))
