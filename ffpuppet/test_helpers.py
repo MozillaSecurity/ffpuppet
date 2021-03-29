@@ -57,28 +57,27 @@ def test_helpers_01(mocker, tmp_path):
 def test_helpers_02(tmp_path):
     """test check_prefs()"""
     dummy_prefs = tmp_path / "dummy.js"
-    dummy_prefs.touch()
-    with dummy_prefs.open("wb") as prefs_fp:
-        prefs_fp.write(b"// comment line\n")
-        prefs_fp.write(b"# comment line\n")
-        prefs_fp.write(b" \n\n")
-        prefs_fp.write(b'user_pref("a.a", 0);\n')
-        prefs_fp.write(b'user_pref("a.b", "test");\n')
-        prefs_fp.write(b'user_pref("a.c", true);\n')
+    dummy_prefs.write_text(
+        "// comment line\n"
+        "# comment line\n"
+        " \n\n"
+        'user_pref("a.a", 0);\n'
+        'user_pref("a.b", "test");\n'
+        'user_pref("a.c", true);\n'
+    )
     custom_prefs = tmp_path / "custom.js"
-    with custom_prefs.open("wb") as prefs_fp:
-        prefs_fp.write(b"// comment line\n")
-        prefs_fp.write(b"# comment line\n")
-        prefs_fp.write(b"/* comment block.\n")
-        prefs_fp.write(b"*\n")
-        prefs_fp.write(b" \n\n")
-        prefs_fp.write(b'user_pref("a.a", 0); // test comment\n')
-        prefs_fp.write(b'user_pref("a.c", true);\n')
+    custom_prefs.write_text(
+        "// comment line\n"
+        "# comment line\n"
+        "/* comment block.\n"
+        "*\n"
+        " \n\n"
+        'user_pref("a.a", 0); // test comment\n'
+        'user_pref("a.c", true);\n'
+    )
     assert check_prefs(str(dummy_prefs), str(custom_prefs))
     # test detecting missing prefs
-    with custom_prefs.open("wb") as prefs_fp:
-        prefs_fp.write(b'user_pref("a.a", 0);\n')
-        prefs_fp.write(b'user_pref("b.a", false);\n')
+    custom_prefs.write_text('user_pref("a.a", 0);\nuser_pref("b.a", false);\n')
     assert not check_prefs(str(dummy_prefs), str(custom_prefs))
 
 
@@ -123,16 +122,15 @@ def test_helpers_03(mocker, tmp_path):
     (tmp_path / "dst").mkdir()
     good_legacy = tmp_path / "good_legacy"
     good_legacy.mkdir()
-    with (good_legacy / "install.rdf").open("wb") as manifest:
-        manifest.write(
-            b"""<?xml version="1.0"?>
-                           <RDF xmlns="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
-                                xmlns:em="http://www.mozilla.org/2004/em-rdf#">
-                             <Description about="urn:mozilla:install-manifest">
-                               <em:id>good-ext-id</em:id>
-                             </Description>
-                           </RDF>"""
-        )
+    (good_legacy / "install.rdf").write_text(
+        '<?xml version="1.0"?>'
+        '<RDF xmlns="http://www.w3.org/1999/02/22-rdf-syntax-ns#"\n'
+        '     xmlns:em="http://www.mozilla.org/2004/em-rdf#">\n'
+        '  <Description about="urn:mozilla:install-manifest">\n'
+        "    <em:id>good-ext-id</em:id>\n"
+        "  </Description>\n"
+        "</RDF>"
+    )
     (good_legacy / "example.js").touch()
     prof = create_profile(extension=str(good_legacy))
     assert "extensions" in os.listdir(prof)
@@ -245,6 +243,7 @@ def test_helpers_04(tmp_path):
     # test overwrite log_path
     env = {
         "ASAN_OPTIONS": "log_path='overwrite'",
+        "TSAN_OPTIONS": "log_path='overwrite'",
         "UBSAN_OPTIONS": "log_path='overwrite'",
     }
     configure_sanitizers(env, str(tmp_path), "blah")
@@ -332,6 +331,7 @@ def test_helpers_07(tmp_path):
     """test wait_on_files()"""
     t_file = tmp_path / "file.bin"
     t_file.touch()
+    # test with open file
     procs = get_processes(os.getpid(), recursive=False)
     with tempfile.NamedTemporaryFile() as wait_fp:
         assert not wait_on_files(procs, (wait_fp.name, str(t_file)), timeout=0.1)
