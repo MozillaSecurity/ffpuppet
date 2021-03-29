@@ -4,7 +4,7 @@
 """ffpuppet minidump parsing module"""
 
 from logging import getLogger
-from os import getenv, listdir
+from os import getenv, scandir
 from os.path import getmtime, isdir
 from os.path import join as pathjoin
 from shutil import copy, copyfileobj
@@ -25,9 +25,9 @@ class MinidumpParser:  # pylint: disable=missing-docstring
 
     def __init__(self, scan_path, record_failures=True):
         self.md_files = list()
-        for fname in listdir(scan_path):
-            if fname.endswith(".dmp"):
-                self.md_files.append(pathjoin(scan_path, fname))
+        for entry in scandir(scan_path):
+            if entry.name.endswith(".dmp"):
+                self.md_files.append(entry.path)
         self.symbols_path = None
         self._include_raw = getenv("FFP_DEBUG_MDSW") is not None
         self._record_failures = record_failures  # mdsw failure reporting
@@ -38,7 +38,7 @@ class MinidumpParser:  # pylint: disable=missing-docstring
         Args:
             dump_file (str): Path to dmp file.
             out_fp (file): File to write output to.
-            extra_flags (list): Arguments to add to call to minidump_stackwalk.
+            extra_flags (list(str)): Arguments to pass to minidump_stackwalk.
 
         Returns:
             None
@@ -47,8 +47,10 @@ class MinidumpParser:  # pylint: disable=missing-docstring
         if extra_flags:
             cmd += extra_flags
         cmd.append(dump_file)
-        cmd.append(self.symbols_path)
+        if self.symbols_path is not None:
+            cmd.append(self.symbols_path)
 
+        LOG.debug("calling %r", " ".join(cmd))
         with TemporaryFile() as err_fp:
             ret_val = call(cmd, stdout=out_fp, stderr=err_fp)
             if ret_val != 0:
@@ -80,7 +82,6 @@ class MinidumpParser:  # pylint: disable=missing-docstring
         Returns:
             None
         """
-        LOG.debug("calling minidump_stackwalk on %s", dump_file)
         with TemporaryFile() as out_fp:
             self._call_mdsw(dump_file, out_fp)
             found_registers = False
@@ -110,7 +111,6 @@ class MinidumpParser:  # pylint: disable=missing-docstring
         Returns:
             None
         """
-        LOG.debug("calling minidump_stackwalk -m on %s", dump_file)
         with TemporaryFile() as out_fp:
             self._call_mdsw(dump_file, out_fp, extra_flags=["-m"])
             if raw_fp is not None:
@@ -209,13 +209,13 @@ def process_minidumps(scan_path, symbols_path, cb_create_log):
     if not parser.md_files:
         LOG.debug("scan_path %r did not contain '.dmp' files", scan_path)
         return
-    if not isdir(symbols_path):
-        LOG.warning("symbols_path not found: %r", symbols_path)
-        return
     if not parser.mdsw_available():
         LOG.warning(
             "Found a minidump, but can't process it without minidump_stackwalk."
             " See README.md for how to obtain it."
         )
         return
+    if not isdir(symbols_path):
+        LOG.warning("Symbols path not found: %r", symbols_path)
+        symbols_path = None
     parser.collect_logs(cb_create_log, symbols_path)

@@ -47,22 +47,24 @@ def test_minidump_parser_03(mocker, tmp_path):
     """test MinidumpParser._read_registers()"""
 
     def fake_call_mdsw(_, out_fp):
-        out_fp.write(b"Crash reason:  SIGSEGV\n")
-        out_fp.write(b"Crash address: 0x0\n")
-        out_fp.write(b"Process uptime: not available\n\n")
-        out_fp.write(b"Thread 0 (crashed)\n")
-        out_fp.write(b" 0  libxul.so + 0x123456788\n")
-        out_fp.write(b"    rax = 0xe5423423423fffe8   rdx = 0x0000000000000000\n")
-        out_fp.write(b"    rcx = 0x0000000000000000   rbx = 0xe54234234233e5e5\n")
-        out_fp.write(b"    rsi = 0x0000000000000000   rdi = 0x00007fedc31fe308\n")
-        out_fp.write(b"    rbp = 0x00007fffca0dab00   rsp = 0x00007fffca0daad0\n")
-        out_fp.write(b"     r8 = 0x0000000000000000    r9 = 0x0000000000000008\n")
-        out_fp.write(b"    r10 = 0xffff00ffffffffff   r11 = 0xffffff00ffffffff\n")
-        out_fp.write(b"    r12 = 0x0000743564566308   r13 = 0x00007fedce9d8000\n")
-        out_fp.write(b"    r14 = 0x0000000000000001   r15 = 0x0000000000000000\n")
-        out_fp.write(b"    rip = 0x0000745666666ac\n")
-        out_fp.write(b"    Found by: given as instruction pointer in context\n")
-        out_fp.write(b" 1  libxul.so + 0x1f4361c]\n\n")
+        out_fp.write(
+            b"Crash reason:  SIGSEGV\n"
+            b"Crash address: 0x0\n"
+            b"Process uptime: not available\n\n"
+            b"Thread 0 (crashed)\n"
+            b" 0  libxul.so + 0x123456788\n"
+            b"    rax = 0xe5423423423fffe8   rdx = 0x0000000000000000\n"
+            b"    rcx = 0x0000000000000000   rbx = 0xe54234234233e5e5\n"
+            b"    rsi = 0x0000000000000000   rdi = 0x00007fedc31fe308\n"
+            b"    rbp = 0x00007fffca0dab00   rsp = 0x00007fffca0daad0\n"
+            b"     r8 = 0x0000000000000000    r9 = 0x0000000000000008\n"
+            b"    r10 = 0xffff00ffffffffff   r11 = 0xffffff00ffffffff\n"
+            b"    r12 = 0x0000743564566308   r13 = 0x00007fedce9d8000\n"
+            b"    r14 = 0x0000000000000001   r15 = 0x0000000000000000\n"
+            b"    rip = 0x0000745666666ac\n"
+            b"    Found by: given as instruction pointer in context\n"
+            b" 1  libxul.so + 0x1f4361c]\n\n"
+        )
         out_fp.seek(0)
 
     mocker.patch.object(MinidumpParser, "_call_mdsw", side_effect=fake_call_mdsw)
@@ -82,27 +84,29 @@ def test_minidump_parser_04(mocker, tmp_path):
     """test MinidumpParser._read_stacktrace()"""
 
     def fake_call_mdsw(_, out_fp, extra_flags=None):  # pylint: disable=unused-argument
-        out_fp.write(b"OS|Linux|0.0.0 sys info...\n")
-        out_fp.write(b"CPU|amd64|more info|8\n")
-        out_fp.write(b"GPU|||\n")
-        out_fp.write(b"Crash|SIGSEGV|0x7fff27aaeff8|0\n")
-        out_fp.write(b"Module|firefox||firefox|a|0x1|0x1|1\n")
-        out_fp.write(b"Module|firefox||firefox|a|0x1|0x2|1\n")
-        out_fp.write(b"Module|firefox||firefox|a|0x1|0x3|1\n")
-        out_fp.write(b"  \n\n")
-        out_fp.write(b"0|0|blah|foo|a/bar.c|123|0x0\n")
-        out_fp.write(b"0|1|blat|foo|a/bar.c|223|0x0\n")
-        out_fp.write(b"junk\n")
-        out_fp.write(b"0|2|blas|foo|a/bar.c|423|0x0\n")
-        out_fp.write(b"0|3|blas|foo|a/bar.c|423|0x0\n")
-        out_fp.write(b"1|0|libpthread-2.23.so||||0xd360\n")
-        out_fp.write(b"junk\n")
-        out_fp.write(b"1|1|swrast_dri.so||||0x7237f3\n")
-        out_fp.write(b"1|2|libplds4.so|_fini|||0x163\n")
-        out_fp.write(b"2|0|swrast_dri.so||||0x723657\n")
-        out_fp.write(b"junk\n")
-        out_fp.write(b"2|1|libpthread-2.23.so||||0x76ba\n")
-        out_fp.write(b"2|3|libc-2.23.so||||0x1073dd\n\n")
+        out_fp.write(
+            b"OS|Linux|0.0.0 sys info...\n"
+            b"CPU|amd64|more info|8\n"
+            b"GPU|||\n"
+            b"Crash|SIGSEGV|0x7fff27aaeff8|0\n"
+            b"Module|firefox||firefox|a|0x1|0x1|1\n"
+            b"Module|firefox||firefox|a|0x1|0x2|1\n"
+            b"Module|firefox||firefox|a|0x1|0x3|1\n"
+            b"  \n\n"
+            b"0|0|blah|foo|a/bar.c|123|0x0\n"
+            b"0|1|blat|foo|a/bar.c|223|0x0\n"
+            b"junk\n"
+            b"0|2|blas|foo|a/bar.c|423|0x0\n"
+            b"0|3|blas|foo|a/bar.c|423|0x0\n"
+            b"1|0|libpthread-2.23.so||||0xd360\n"
+            b"junk\n"
+            b"1|1|swrast_dri.so||||0x7237f3\n"
+            b"1|2|libplds4.so|_fini|||0x163\n"
+            b"2|0|swrast_dri.so||||0x723657\n"
+            b"junk\n"
+            b"2|1|libpthread-2.23.so||||0x76ba\n"
+            b"2|3|libc-2.23.so||||0x1073dd\n\n"
+        )
         out_fp.seek(0)
 
     mocker.patch.object(MinidumpParser, "_call_mdsw", side_effect=fake_call_mdsw)
@@ -134,15 +138,16 @@ def test_minidump_parser_05(mocker, tmp_path):
     """test MinidumpParser.collect_logs()"""
     (tmp_path / "dummy.dmp").touch()
     (tmp_path / "dummy.txt").touch()
-    with (tmp_path / "test.dmp").open("wb") as out_fp:
-        out_fp.write(b"Crash reason:  SIGSEGV\n")
-        out_fp.write(b"Crash address: 0x0\n")
-        out_fp.write(b"Thread 0 (crashed)\n")
-        out_fp.write(b" 0  libxul.so + 0x123456788\n")
-        out_fp.write(b"    rax = 0xe5423423423fffe8   rdx = 0x0000000000000000\n")
-        out_fp.write(b"OS|Linux|0.0.0 sys info...\n")
-        out_fp.write(b"Crash|SIGSEGV|0x7fff27aaeff8|0\n")
-        out_fp.write(b"0|0|blah|foo|a/bar.c|123|0x0\n")
+    (tmp_path / "test.dmp").write_text(
+        "Crash reason:  SIGSEGV\n"
+        "Crash address: 0x0\n"
+        "Thread 0 (crashed)\n"
+        " 0  libxul.so + 0x123456788\n"
+        "    rax = 0xe5423423423fffe8   rdx = 0x0000000000000000\n"
+        "OS|Linux|0.0.0 sys info...\n"
+        "Crash|SIGSEGV|0x7fff27aaeff8|0\n"
+        "0|0|blah|foo|a/bar.c|123|0x0\n"
+    )
     mocker.patch("ffpuppet.minidump_parser.call", autospec=True, return_value=0)
     mdp = MinidumpParser(str(tmp_path))
     callback = mocker.mock_open()
@@ -192,22 +197,37 @@ def test_minidump_parser_07(mocker):
 def test_process_minidumps_01(mocker, tmp_path):
     """test process_minidumps()"""
     fake_mdp = mocker.patch("ffpuppet.minidump_parser.MinidumpParser", autospec=True)
-    fake_mdp.return_value.mdsw_available.return_value = False
+    fake_mdp.return_value.mdsw_available.return_value = True
+    callback = mocker.Mock()
     # test scan_path does not exist
-    process_minidumps("/missing/path/", "symbols_path", mocker.Mock())
+    process_minidumps("/missing/path/", "symbols_path", callback)
+    assert fake_mdp.call_count == 0
+    assert fake_mdp.return_value.mdsw_available.call_count == 0
+    assert fake_mdp.return_value.collect_logs.call_count == 0
     # test empty scan_path (no .dmp files)
     fake_mdp.return_value.md_files = []
-    process_minidumps(str(tmp_path), "symbols_path", mocker.Mock())
+    process_minidumps(str(tmp_path), "symbols_path", callback)
+    assert fake_mdp.call_count == 1
+    assert fake_mdp.call_args[0][0] == str(tmp_path)
+    assert fake_mdp.return_value.mdsw_available.call_count == 0
+    assert fake_mdp.return_value.collect_logs.call_count == 0
+    fake_mdp.reset_mock()
     # test symbols_path does not exist
     fake_mdp.return_value.md_files = [mocker.Mock()]
-    process_minidumps(str(tmp_path), "symbols_path", mocker.Mock())
-    assert fake_mdp.return_value.mdsw_available.call_count == 0
-    assert not fake_mdp.return_value.mdsw_available.return_value
+    process_minidumps(str(tmp_path), "symbols_path", callback)
+    assert fake_mdp.return_value.mdsw_available.call_count == 1
+    assert fake_mdp.return_value.collect_logs.call_count == 1
+    assert fake_mdp.return_value.collect_logs.call_args[0][-1] is None
+    fake_mdp.reset_mock()
     # test minidump_stackwalk not available
-    process_minidumps(str(tmp_path), str(tmp_path), mocker.Mock())
+    fake_mdp.return_value.mdsw_available.return_value = False
+    process_minidumps(str(tmp_path), str(tmp_path), callback)
     assert fake_mdp.return_value.mdsw_available.call_count == 1
     assert fake_mdp.return_value.collect_logs.call_count == 0
+    fake_mdp.reset_mock()
     # test success
     fake_mdp.return_value.mdsw_available.return_value = True
-    process_minidumps(str(tmp_path), str(tmp_path), mocker.Mock())
+    process_minidumps(str(tmp_path), str(tmp_path), callback)
     assert fake_mdp.return_value.collect_logs.call_count == 1
+    assert fake_mdp.return_value.collect_logs.call_args[0][0] == callback
+    assert fake_mdp.return_value.collect_logs.call_args[0][-1] == str(tmp_path)
