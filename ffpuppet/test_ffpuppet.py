@@ -153,7 +153,7 @@ def test_ffpuppet_03(tmp_path):
         logs = tmp_path / "logs"  # nonexistent directory
         ffp.save_logs(str(logs), meta=True)
         assert logs.is_dir()
-        assert len(tuple(logs.glob("*"))) == 3
+        assert len(tuple(logs.iterdir())) == 3
         log_data = (logs / "log_stderr.txt").read_text()
         assert "[ffpuppet] Launch command:" in log_data
         assert "[ffpuppet] Reason code:" in log_data
@@ -278,13 +278,14 @@ def test_ffpuppet_09():
     """test calling launch() multiple times"""
     with FFPuppet() as ffp:
         with HTTPTestServer() as srv:
+            # call launch() then close() multiple times
             for _ in range(10):
                 ffp.launch(TESTFF_BIN, location=srv.get_addr())
                 ffp.close()
             # call 2x without calling close()
             ffp.launch(TESTFF_BIN, location=srv.get_addr())
-        with pytest.raises(LaunchError, match="Process is already running"):
-            ffp.launch(TESTFF_BIN)
+            with pytest.raises(LaunchError, match="Process is already running"):
+                ffp.launch(TESTFF_BIN)
         assert ffp.launches == 11
         ffp.close()
 
@@ -508,7 +509,7 @@ def test_ffpuppet_21(tmp_path):
         assert ffp.reason == ffp.RC_WORKER
         logs = tmp_path / "logs"
         ffp.save_logs(str(logs))
-        logfiles = tuple(logs.glob("*"))
+        logfiles = tuple(logs.iterdir())
         assert len(logfiles) == 3
         assert sum(x.stat().st_size for x in logfiles) > limit
         assert (
@@ -554,7 +555,7 @@ def test_ffpuppet_22(tmp_path):
         ffp.close()
         logs = tmp_path / "logs"
         ffp.save_logs(str(logs))
-        logfiles = tuple(logs.glob("*"))
+        logfiles = tuple(logs.iterdir())
         assert len(logfiles) == 5
         for logfile in logfiles:
             if "log_ffp_asan_" not in str(logfile):

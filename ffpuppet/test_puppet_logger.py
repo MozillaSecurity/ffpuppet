@@ -23,9 +23,9 @@ def test_puppet_logger_01(tmp_path):
     assert plog.working_path is not None
     assert os.path.isdir(plog.working_path)
     assert plog._base is not None
-    assert os.listdir(plog._base)
+    assert any(os.scandir(plog._base))
     plog.close()
-    assert os.listdir(plog._base)
+    assert any(os.scandir(plog._base))
     assert plog.closed
     with pytest.raises(AssertionError):
         plog.add_log("test")
@@ -59,11 +59,11 @@ def test_puppet_logger_03(tmp_path):
         assert plog.working_path is not None
         assert os.path.isdir(plog.working_path)
         assert plog._base is not None
-        assert os.listdir(plog._base)
+        assert any(os.scandir(plog._base))
         plog.add_log("test_new")
         plog.clean_up()
         assert plog.closed
-        assert not os.listdir(plog._base)
+        assert not any(os.scandir(plog._base))
         assert plog.working_path is None
         assert plog.closed
         assert not plog._logs
