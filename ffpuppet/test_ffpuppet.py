@@ -761,12 +761,11 @@ def test_ffpuppet_29():
         assert not any(ffp.cpu_usage())
         with HTTPTestServer() as srv:
             ffp.launch(TESTFF_BIN, location=srv.get_addr())
-            usage = tuple(ffp.cpu_usage())
-            assert len(usage) == 1
-            assert len(usage[0]) == 2
-            assert usage[0][0] == ffp.get_pid()
-            assert usage[0][1] <= 100
-            assert usage[0][1] >= 0
+            usage = next(ffp.cpu_usage())
+            assert usage
+            assert usage[0] == ffp.get_pid()
+            assert usage[1] <= 100
+            assert usage[1] >= 0
         ffp.close()
         assert ffp.wait(timeout=10)
 
