@@ -346,7 +346,7 @@ class FFPuppet:
                 "--show-possibly-lost=no",
                 "--smc-check=all-non-file",
                 "--trace-children=yes",
-                "--trace-children-skip=python*",
+                "--trace-children-skip=python*,*/lsb_release",
                 "--track-origins=yes",
                 "--vex-iropt-register-updates=allregs-at-mem-access",
             ]
@@ -728,7 +728,6 @@ class FFPuppet:
                     env_mod = dict()
                 # https://developer.gimp.org/api/2.0/glib/glib-running.html#G_DEBUG
                 env_mod["G_DEBUG"] = "gc-friendly"
-                env_mod["MOZ_AVOID_OPENGL_ALTOGETHER"] = "1"
                 env_mod["MOZ_CRASHREPORTER_DISABLE"] = "1"
 
             # open logs
