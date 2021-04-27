@@ -740,6 +740,7 @@ class FFPuppet:
             sanitizer_logs = pathjoin(self._logs.working_path, self._logs.PREFIX_SAN)
             # launch the browser
             LOG.debug("launch command: %r", " ".join(cmd))
+            # pylint: disable=consider-using-with
             self._proc = Popen(
                 cmd,
                 bufsize=0,  # unbuffered (for log scanners)

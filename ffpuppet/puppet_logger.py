@@ -142,6 +142,7 @@ class PuppetLogger:  # pylint: disable=missing-docstring
                 cpyfp = PuppetLogger.open_unique()
                 target_file = cpyfp.name
             else:
+                # pylint: disable=consider-using-with
                 cpyfp = open(target_file, "wb")
             try:
                 copyfileobj(in_fp, cpyfp, self.BUF_SIZE)
@@ -227,7 +228,7 @@ class PuppetLogger:  # pylint: disable=missing-docstring
         tmp_fd, log_file = mkstemp(suffix=".txt", prefix="ffp_log_", dir=base_dir)
         os_close(tmp_fd)
         # use open() so the file object 'name' attribute is correct
-        return open(log_file, mode)
+        return open(log_file, mode)  # pylint: disable=consider-using-with
 
     def reset(self):
         """Reset logger for reuse.
