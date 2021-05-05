@@ -25,6 +25,7 @@ __author__ = "Tyson Smith"
 __all__ = (
     "check_prefs",
     "create_profile",
+    "files_in_use",
     "get_processes",
     "onerror",
     "prepare_environment",
@@ -336,8 +337,33 @@ def create_profile(extension=None, prefs_js=None, template=None):
     return profile
 
 
+def files_in_use(check_files, path_fix, procs):
+    """Check if any of the given files are open by any of the given processes.
+
+    Args:
+        check_files (iterable(str)): Files path to check.
+        path_fix (callable): Function to format paths.
+        procs (iterable(Process)): Processes to scan for open files.
+
+    Yields:
+        tuple: Path of file, pid of process and process name.
+    """
+    if check_files:
+        for proc in procs:
+            try:
+                # WARNING: Process.open_files() has issues on Windows!
+                # https://psutil.readthedocs.io/en/latest/#psutil.Process.open_files
+                proc_files = tuple(path_fix(x.path) for x in proc.open_files())
+                if proc_files:
+                    for efile in check_files:
+                        if efile in proc_files:
+                            yield efile, proc.pid, proc.name()
+            except (AccessDenied, NoSuchProcess):  # pragma: no cover
+                pass
+
+
 def get_processes(pid, recursive=True):
-    """From a given PID create a psutil.Process object and lookup all of it's
+    """From a given PID create a psutil.Process object and lookup all of its
     children.
 
     Args:
@@ -496,23 +522,13 @@ def wait_on_files(procs, wait_files, poll_rate=0.25, timeout=60):
         return True
     poll_rate = min(poll_rate, timeout)
     deadline = time() + timeout
-    while procs:
-        try:
-            # WARNING: Process.open_files() has issues on Windows!
-            # https://psutil.readthedocs.io/en/latest/#psutil.Process.open_files
-            open_files = {true_path(x.path) for x in procs[-1].open_files()}
-            if wait_files.intersection(open_files):
-                if deadline <= time():
-                    LOG.debug(
-                        "%d had %d open files after %ds",
-                        procs[-1].pid,
-                        len(open_files),
-                        timeout,
-                    )
-                    return False
-                sleep(poll_rate)
-                continue
-        except (AccessDenied, NoSuchProcess):  # pragma: no cover
-            pass
-        procs.pop()
-    return True
+    while any(files_in_use(wait_files, true_path, procs)):
+        if deadline <= time():
+            LOG.debug("wait_on_files timeout (%ds)", timeout)
+            break
+        sleep(poll_rate)
+    else:
+        return True
+    for entry in files_in_use(wait_files, true_path, procs=procs):
+        LOG.debug("%r open by %r (%d)", entry[0], entry[2], entry[1])
+    return False

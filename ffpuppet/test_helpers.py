@@ -10,6 +10,7 @@ import shutil
 import sys
 import tempfile
 
+import psutil
 import pytest
 
 from .helpers import (
@@ -18,6 +19,7 @@ from .helpers import (
     check_prefs,
     configure_sanitizers,
     create_profile,
+    files_in_use,
     get_processes,
     prepare_environment,
     wait_on_files,
@@ -379,3 +381,17 @@ def test_helpers_09(tmp_path):
     assert "user_pref('pre.existing', 1);" in data
     assert "user_pref('test.enabled', true);" in data
     assert "user_pref('foo', 'a1b2c3');" in data
+
+
+def test_helpers_10(tmp_path):
+    """test files_in_use()"""
+    t_file = tmp_path / "file.bin"
+    t_file.touch()
+    procs = [psutil.Process(os.getpid())]
+    # test with open file
+    with tempfile.NamedTemporaryFile() as wait_fp:
+        check = [os.path.abspath(wait_fp.name), os.path.abspath(t_file)]
+        assert any(files_in_use(check, os.path.abspath, procs))
+    # existing but closed file
+    check = [os.path.abspath(t_file)]
+    assert not any(files_in_use(check, os.path.abspath, procs))
