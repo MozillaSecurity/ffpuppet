@@ -6,7 +6,7 @@
 from json import dump as json_dump
 from logging import getLogger
 from os import close as os_close
-from os import getpid, listdir, makedirs, mkdir, stat, stat_result
+from os import getpid, makedirs, mkdir, scandir, stat, stat_result
 from os.path import abspath, isdir, isfile
 from os.path import join as pathjoin
 from os.path import realpath
@@ -287,11 +287,9 @@ class PuppetLogger:  # pylint: disable=missing-docstring
                 except (OSError, CalledProcessError):
                     LOG.warning("Error calling 'rr pack %s'", rr_trace)
 
-            for path in listdir(self.working_path):
-                full_path = pathjoin(self.working_path, path)
-                if not isdir(full_path):
-                    continue
-                copytree(full_path, pathjoin(dest, path), symlinks=True)
+            for entry in scandir(self.working_path):
+                if entry.is_dir():
+                    copytree(entry.path, pathjoin(dest, entry.name), symlinks=True)
 
         if meta_map:
             with open(pathjoin(dest, self.META_FILE), "w") as json_fp:
