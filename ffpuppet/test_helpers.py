@@ -391,17 +391,15 @@ def test_helpers_10(tmp_path):
     procs = [psutil.Process(os.getpid())]
     # test with open file
     with tempfile.NamedTemporaryFile() as wait_fp:
-        check = [os.path.abspath(wait_fp.name), os.path.abspath(t_file)]
+        check = [os.path.abspath(wait_fp.name), os.path.abspath(str(t_file))]
         assert any(files_in_use(check, os.path.abspath, procs))
     # existing but closed file
-    check = [os.path.abspath(t_file)]
+    check = [os.path.abspath(str(t_file))]
     assert not any(files_in_use(check, os.path.abspath, procs))
 
 
 def test_helpers_11(tmp_path):
     """test warn_open()"""
-    t_file = tmp_path / "file.bin"
-    t_file.touch()
-    # test with open file
+    (tmp_path / "file.bin").touch()
     with tempfile.NamedTemporaryFile(dir=str(tmp_path)) as _:
         warn_open(str(tmp_path))
