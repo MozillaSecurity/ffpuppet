@@ -5,7 +5,7 @@
 
 from json import load as json_load
 from logging import getLogger
-from os import W_OK, access, chmod, environ, mkdir, remove
+from os import W_OK, access, chmod, environ, mkdir, remove, scandir
 from os.path import abspath, basename, expanduser, isdir, isfile
 from os.path import join as pathjoin
 from os.path import normcase, realpath
@@ -17,7 +17,7 @@ from tempfile import mkdtemp
 from time import sleep, time
 from xml.etree import ElementTree
 
-from psutil import AccessDenied, NoSuchProcess, Process
+from psutil import AccessDenied, NoSuchProcess, Process, process_iter
 
 LOG = getLogger(__name__)
 
@@ -30,6 +30,7 @@ __all__ = (
     "onerror",
     "prepare_environment",
     "wait_on_files",
+    "warn_open",
 )
 
 
@@ -508,7 +509,8 @@ def wait_on_files(procs, wait_files, poll_rate=0.25, timeout=60):
     """Wait for files in wait_files to no longer be use by any process.
 
     Args:
-        path (iterable): Files that must no longer be open by a process.
+        procs (iterable(Process)): Processes to scan for open files.
+        wait_files (iterable(str)): Files that must no longer be open by a process.
         poll_rate (float): Amount of time in seconds to wait between checks.
         timeout (int): Amount of time in seconds to poll.
 
@@ -529,6 +531,22 @@ def wait_on_files(procs, wait_files, poll_rate=0.25, timeout=60):
         sleep(poll_rate)
     else:
         return True
-    for entry in files_in_use(wait_files, true_path, procs=procs):
+    for entry in files_in_use(wait_files, true_path, procs):
         LOG.debug("%r open by %r (%d)", entry[0], entry[2], entry[1])
     return False
+
+
+def warn_open(path):
+    """Output a message via `LOG.warning` for each file found to be open by a Process.
+    On Windows open files cannot be removed. Hopefully this can be used to help identify
+    the processes using the files and the underlying issue.
+
+    Args:
+        path (str): Path to scan for initial files.
+
+    Returns:
+        None
+    """
+    check = tuple(abspath(x.path) for x in scandir(path))
+    for entry in files_in_use(check, abspath, process_iter()):
+        LOG.warning("%s open by %r (%d)", entry[0], entry[2], entry[1])
