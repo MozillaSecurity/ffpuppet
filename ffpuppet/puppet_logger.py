@@ -14,7 +14,7 @@ from shutil import copy2, copyfileobj, copytree, rmtree
 from subprocess import STDOUT, CalledProcessError, check_output
 from tempfile import mkdtemp, mkstemp
 
-from .helpers import onerror
+from .helpers import onerror, warn_open
 
 LOG = getLogger(__name__)
 
@@ -113,6 +113,7 @@ class PuppetLogger:  # pylint: disable=missing-docstring
                     )
                 except OSError:
                     if attempt > 0:
+                        warn_open(self.working_path)
                         raise
                     continue
                 break

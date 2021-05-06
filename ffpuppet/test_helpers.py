@@ -23,6 +23,7 @@ from .helpers import (
     get_processes,
     prepare_environment,
     wait_on_files,
+    warn_open,
 )
 
 
@@ -395,3 +396,12 @@ def test_helpers_10(tmp_path):
     # existing but closed file
     check = [os.path.abspath(t_file)]
     assert not any(files_in_use(check, os.path.abspath, procs))
+
+
+def test_helpers_11(tmp_path):
+    """test warn_open()"""
+    t_file = tmp_path / "file.bin"
+    t_file.touch()
+    # test with open file
+    with tempfile.NamedTemporaryFile(dir=str(tmp_path)) as _:
+        warn_open(str(tmp_path))
