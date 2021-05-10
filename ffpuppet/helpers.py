@@ -179,7 +179,7 @@ def configure_sanitizers(env, target_dir, log_path):
         ("handle_sigbus", "true"),  # set to be safe
         ("handle_sigfpe", "true"),  # set to be safe
         ("handle_sigill", "true"),  # set to be safe
-        # ("max_allocation_size_mb", "256"),
+        ("max_allocation_size_mb", "512"),
         ("soft_rss_limit_mb", "5000"),
         ("symbolize", "true"),
     )
