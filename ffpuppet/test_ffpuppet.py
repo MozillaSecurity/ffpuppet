@@ -684,11 +684,16 @@ def test_ffpuppet_27(mocker, tmp_path):
     with StubbedLaunch(use_valgrind=is_linux) as ffp:
         ffp.launch()
         assert not any(ffp._crashreports())
-        # ignored sanitizer warnings
+        # benign sanitizer warnings
         ign_log = "%s.1" % (ffp._logs.PREFIX_SAN,)
         with open(os.path.join(ffp._logs.working_path, ign_log), "w") as ofp:
-            ofp.write("==123==WARNING: Symbolizer buffer too small\n\n")
-            ofp.write("==123==WARNING: Symbolizer buffer too small\n\n")
+            ofp.write(
+                "==123==WARNING: Symbolizer buffer too small\n\n"
+                "==123==WARNING: Symbolizer buffer too small\n\n"
+                "==123==WARNING: AddressSanitizer failed to allocate 0xFFFFFF bytes\n"
+                "==123==AddressSanitizer: soft rss limit exhausted (5000Mb vs 5026Mb)\n"
+            )
+        assert any(ffp._crashreports(skip_benign=False))
         # valid sanitizer log
         san_log = "%s.2" % (ffp._logs.PREFIX_SAN,)
         with open(os.path.join(ffp._logs.working_path, san_log), "w") as ofp:
