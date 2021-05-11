@@ -133,11 +133,13 @@ class FFPuppet:
     def __exit__(self, *exc):
         self.clean_up()
 
-    def _crashreports(self, skip_md=False):
+    def _crashreports(self, skip_md=False, skip_benign=True):
         """Collect crash logs/reports.
 
         Args:
             skip_md (bool): Do not scan for minidumps.
+            skip_benign (bool): Skip reports that only contain benign non-fatal
+                                warnings.
 
         Yields:
             str: Path to log on the filesystem.
@@ -150,28 +152,43 @@ class FFPuppet:
         for entry in contents:
             # scan for sanitizer logs
             if entry.name.startswith(self._logs.PREFIX_SAN):
-                size = self._logs.watching.get(entry.path)
-                # skip previously scanned files that have not been updated
-                if size is not None and size == entry.stat().st_size:
-                    continue
-                try:
-                    # WARNING: cannot open files that are already open on Windows
-                    with open(entry.path, "rb") as log_fp:
-                        # NOTE: add only benign single line warnings here
-                        for line in log_fp:
-                            line = line.rstrip()
-                            if not line:
+                if skip_benign:
+                    size = self._logs.watching.get(entry.path)
+                    # skip previously scanned files that have not been updated
+                    if size is not None and size == entry.stat().st_size:
+                        continue
+                    try:
+                        # WARNING: cannot open files that are already open on Windows
+                        with open(entry.path, "rb") as log_fp:
+                            # NOTE: add only benign single line warnings here
+                            # This should not include any fatal errors
+                            for line in log_fp:
+                                line = line.rstrip()
+                                if not line:
+                                    continue
+                                # entries to ignores
+                                if line.endswith(
+                                    b"==WARNING: Symbolizer buffer too small"
+                                ):
+                                    # frequently emitted by TSan
+                                    continue
+                                if (
+                                    b"Sanitizer failed to allocate" in line
+                                    and b"==WARNING: " in line
+                                ):
+                                    # emitted by *SAN_OPTIONS=max_allocation_size_mb
+                                    continue
+                                if b"Sanitizer: soft rss limit exhausted" in line:
+                                    # emitted by *SAN_OPTIONS=soft_rss_limit_mb
+                                    continue
+                                # the file contains something interesting
+                                break
+                            else:
+                                self._logs.watching[entry.path] = log_fp.tell()
+                                LOG.debug("skipping benign log %r", entry.path)
                                 continue
-                            # entries to ignores
-                            if line.endswith(b"==WARNING: Symbolizer buffer too small"):
-                                # frequently emitted by TSan
-                                continue
-                            break
-                        else:
-                            self._logs.watching[entry.path] = log_fp.tell()
-                            continue
-                except OSError:
-                    LOG.debug("failed to scan log %r", entry.path)
+                    except OSError:
+                        LOG.debug("failed to scan log %r", entry.path)
                 yield entry.path
             # scan for Valgrind logs
             elif self._dbg == self.DBG_VALGRIND and entry.name.startswith(
@@ -476,7 +493,7 @@ class FFPuppet:
         procs = get_processes(pid) if pid is not None else list()
         LOG.debug("browser pid: %r, %d proc(s)", pid, len(procs))
         # set reason code
-        crash_reports = set(self._crashreports())
+        crash_reports = set(self._crashreports(skip_benign=False))
         if crash_reports:
             r_code = self.RC_ALERT
             while True:
@@ -486,7 +503,7 @@ class FFPuppet:
                 if not wait_on_files(procs, crash_reports, timeout=report_wait):
                     LOG.warning("Crash reports still open after %ds", report_wait)
                     break
-                new_reports = set(self._crashreports())
+                new_reports = set(self._crashreports(skip_benign=False))
                 # verify no new reports have appeared
                 if not new_reports - crash_reports:
                     break
@@ -526,7 +543,7 @@ class FFPuppet:
                             dst_fp=self._logs.add_log("ffp_worker_%s" % check.name)
                         )
                 # collect logs (excluding minidumps)
-                for fname in self._crashreports(skip_md=True):
+                for fname in self._crashreports(skip_md=True, skip_benign=False):
                     self._logs.add_log(basename(fname), open(fname, "rb"))
                 # check for minidumps in the profile and dump them if possible
                 process_minidumps(
