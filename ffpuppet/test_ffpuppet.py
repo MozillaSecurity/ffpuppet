@@ -524,14 +524,18 @@ def test_ffpuppet_22(tmp_path):
     with FFPuppet() as ffp:
         ffp.launch(TESTFF_BIN)
         asan_prefix = os.path.join(ffp._logs.working_path, ffp._logs.PREFIX_SAN)
-        for i in range(3):
+        for i in range(4):
             test_logs.append(".".join([asan_prefix, str(i)]))
-        # small log with nothing interesting
+        # ignore benign ASan warning
         with open(test_logs[0], "w") as log_fp:
+            log_fp.write("==123==WARNING: Symbolizer buffer too small")
+        assert ffp.is_healthy()
+        # small log with nothing interesting
+        with open(test_logs[1], "w") as log_fp:
             log_fp.write("SHORT LOG\n")
             log_fp.write("filler line")
         # crash on another thread
-        with open(test_logs[1], "w") as log_fp:
+        with open(test_logs[2], "w") as log_fp:
             log_fp.write("GOOD LOG\n")
             log_fp.write(
                 "==70811==ERROR: AddressSanitizer:"
@@ -541,7 +545,7 @@ def test_ffpuppet_22(tmp_path):
             for _ in range(4):  # pad out to 6 lines
                 log_fp.write("filler line\n")
         # child log that should be ignored (created when parent crashes)
-        with open(test_logs[2], "w") as log_fp:
+        with open(test_logs[3], "w") as log_fp:
             log_fp.write("BAD LOG\n")
             log_fp.write(
                 "==70811==ERROR: AddressSanitizer:"
@@ -553,16 +557,22 @@ def test_ffpuppet_22(tmp_path):
         assert not ffp.is_healthy()
         assert ffp.is_running()
         ffp.close()
+        assert ffp.reason == ffp.RC_ALERT
         logs = tmp_path / "logs"
         ffp.save_logs(str(logs))
         logfiles = tuple(logs.iterdir())
-        assert len(logfiles) == 5
+        assert len(logfiles) == 6
         for logfile in logfiles:
             if "log_ffp_asan_" not in str(logfile):
                 assert logfile.name in ("log_stderr.txt", "log_stdout.txt")
                 continue
             with logfile.open("r") as log_fp:
-                assert log_fp.readline() in ("BAD LOG\n", "GOOD LOG\n", "SHORT LOG\n")
+                assert log_fp.readline() in (
+                    "BAD LOG\n",
+                    "GOOD LOG\n",
+                    "SHORT LOG\n",
+                    "==123==WARNING: Symbolizer buffer too small",
+                )
     assert not any(os.path.isfile(f) for f in test_logs)
 
 
@@ -958,3 +968,18 @@ def test_ffpuppet_32(mocker, tmp_path):
         assert ffp._proc is None
         assert ffp._logs.closed
         assert ffp.reason == FFPuppet.RC_ALERT
+
+
+def test_ffpuppet_33():
+    """test ignoring benign sanitizer logs"""
+    with FFPuppet() as ffp:
+        ffp.launch(TESTFF_BIN)
+        san_log = "%s.1" % os.path.join(ffp._logs.working_path, ffp._logs.PREFIX_SAN)
+        assert not ffp._logs.watching
+        # ignore benign ASan warning
+        with open(san_log, "w") as log_fp:
+            log_fp.write("==123==WARNING: Symbolizer buffer too small")
+        assert ffp.is_healthy()
+        assert san_log in ffp._logs.watching
+        ffp.close()
+        assert ffp.reason == ffp.RC_CLOSED

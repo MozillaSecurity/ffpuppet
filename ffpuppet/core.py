@@ -185,7 +185,7 @@ class FFPuppet:
                                 break
                             else:
                                 self._logs.watching[entry.path] = log_fp.tell()
-                                LOG.debug("skipping benign log %r", entry.path)
+                                LOG.debug("benign log has changed %r", entry.path)
                                 continue
                     except OSError:
                         LOG.debug("failed to scan log %r", entry.path)
@@ -493,7 +493,7 @@ class FFPuppet:
         procs = get_processes(pid) if pid is not None else list()
         LOG.debug("browser pid: %r, %d proc(s)", pid, len(procs))
         # set reason code
-        crash_reports = set(self._crashreports(skip_benign=False))
+        crash_reports = set(self._crashreports(skip_benign=True))
         if crash_reports:
             r_code = self.RC_ALERT
             while True:
@@ -503,7 +503,7 @@ class FFPuppet:
                 if not wait_on_files(procs, crash_reports, timeout=report_wait):
                     LOG.warning("Crash reports still open after %ds", report_wait)
                     break
-                new_reports = set(self._crashreports(skip_benign=False))
+                new_reports = set(self._crashreports(skip_benign=True))
                 # verify no new reports have appeared
                 if not new_reports - crash_reports:
                     break
