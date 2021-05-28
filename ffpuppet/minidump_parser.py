@@ -7,7 +7,13 @@ from logging import getLogger
 from os import getenv, scandir
 from os.path import getmtime, isdir
 from os.path import join as pathjoin
+from platform import system
 from shutil import copy, copyfileobj
+
+try:
+    from subprocess import CREATE_NEW_PROCESS_GROUP
+except ImportError:
+    pass
 from subprocess import DEVNULL, call
 from tempfile import TemporaryFile, mkdtemp
 
@@ -50,9 +56,10 @@ class MinidumpParser:  # pylint: disable=missing-docstring
         if self.symbols_path is not None:
             cmd.append(self.symbols_path)
 
+        flags = CREATE_NEW_PROCESS_GROUP if system().startswith("Windows") else 0
         LOG.debug("calling %r", " ".join(cmd))
         with TemporaryFile() as err_fp:
-            ret_val = call(cmd, stdout=out_fp, stderr=err_fp)
+            ret_val = call(cmd, creationflags=flags, stdout=out_fp, stderr=err_fp)
             if ret_val != 0:
                 # mdsw failed
                 LOG.warning("%r returned %r", " ".join(cmd), ret_val)
