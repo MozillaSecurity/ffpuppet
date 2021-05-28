@@ -5,17 +5,16 @@
 # You can obtain one at http://mozilla.org/MPL/2.0/.
 # pylint: disable=protected-access
 
-import os
-import tempfile
+from os import SEEK_END
 
-import pytest
+from pytest import raises
 
 from .minidump_parser import MinidumpParser, process_minidumps
 
 
 def test_minidump_parser_01(mocker, tmp_path):
     """test MinidumpParser() with missing and empty scan path"""
-    with pytest.raises(IOError):
+    with raises(IOError):
         MinidumpParser("/path/does/not/exist/")
     mdp = MinidumpParser(str(tmp_path))
     assert not mdp.md_files
@@ -70,7 +69,7 @@ def test_minidump_parser_03(mocker, tmp_path):
     mocker.patch.object(MinidumpParser, "_call_mdsw", side_effect=fake_call_mdsw)
     mdp = MinidumpParser(str(tmp_path))
     md_lines = list()
-    with tempfile.TemporaryFile() as log_fp:
+    with (tmp_path / "md_out").open("w+b") as log_fp:
         mdp._read_registers("fake.dmp", log_fp)
         log_fp.seek(0)
         for line in log_fp:
@@ -112,7 +111,7 @@ def test_minidump_parser_04(mocker, tmp_path):
     mocker.patch.object(MinidumpParser, "_call_mdsw", side_effect=fake_call_mdsw)
     mdp = MinidumpParser(str(tmp_path))
     MinidumpParser.MDSW_MAX_STACK = 7
-    with tempfile.TemporaryFile() as log_fp:
+    with (tmp_path / "md_out").open("w+b") as log_fp:
         mdp._read_stacktrace("fake.dmp", log_fp)
         log_fp.seek(0)
         md_lines = log_fp.readlines()
@@ -121,14 +120,15 @@ def test_minidump_parser_04(mocker, tmp_path):
     assert md_lines[-2].startswith(b"0|2|")
     # test raw_fp set
     MinidumpParser.MDSW_MAX_STACK = 150
-    with tempfile.TemporaryFile() as log_fp, tempfile.TemporaryFile() as raw_fp:
-        mdp._read_stacktrace("fake.dmp", log_fp, raw_fp=raw_fp)
-        raw_size = raw_fp.tell()
+    with (tmp_path / "md_out").open("w+b") as log_fp:
+        with (tmp_path / "md_raw").open("w+b") as raw_fp:
+            mdp._read_stacktrace("fake.dmp", log_fp, raw_fp=raw_fp)
+            raw_size = raw_fp.tell()
         log_fp.seek(0)
         md_lines = log_fp.readlines()
-    with tempfile.TemporaryFile() as log_fp:
+    with (tmp_path / "md_out").open("w+b") as log_fp:
         fake_call_mdsw("x", log_fp)
-        log_fp.seek(0, os.SEEK_END)
+        log_fp.seek(0, SEEK_END)
         assert raw_size == log_fp.tell()
     assert len(md_lines) == 8
     assert md_lines[-1].startswith(b"0|3|")
@@ -177,7 +177,7 @@ def test_minidump_parser_06(mocker, tmp_path):
     mdp._record_failures = True
     mdp.symbols_path = "sympath"
     fake_call.return_value = 1
-    with pytest.raises(RuntimeError, match="MDSW Error"):
+    with raises(RuntimeError, match="MDSW Error"):
         mdp._call_mdsw(str(dmp_file), fake_file())
     assert fake_call.call_count == 1
     assert len(tuple(working.glob("**/mdsw_*.txt"))) == 3
