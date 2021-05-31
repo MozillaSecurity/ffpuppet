@@ -27,14 +27,12 @@ from .helpers import (
 )
 
 
-def test_helpers_01(mocker, tmp_path):
+def test_helpers_01(tmp_path):
     """test create_profile()"""
-    fake_mkdtemp = mocker.patch("ffpuppet.helpers.mkdtemp", autospec=True)
     # try creating a profile from scratch
     # does nothing but create a directory to be populated
     (tmp_path / "dst1").mkdir()
-    fake_mkdtemp.return_value = str(tmp_path / "dst1")
-    prof = create_profile()
+    prof = create_profile(working_path=str(tmp_path / "dst1"))
     assert os.path.isdir(prof)
     assert not os.listdir(prof)
     # try creating a profile from a template profile
@@ -42,8 +40,11 @@ def test_helpers_01(mocker, tmp_path):
     invalid_js = tmp_path / "profile" / "Invalidprefs.js"
     invalid_js.write_bytes(b"blah!")
     (tmp_path / "dst2").mkdir()
-    fake_mkdtemp.return_value = str(tmp_path / "dst2")
-    prof = create_profile(prefs_js=str(invalid_js), template=str(tmp_path / "profile"))
+    prof = create_profile(
+        prefs_js=str(invalid_js),
+        template=str(tmp_path / "profile"),
+        working_path=str(tmp_path / "dst2"),
+    )
     assert os.path.isdir(prof)
     contents = os.listdir(prof)
     assert "prefs.js" in contents
@@ -51,10 +52,9 @@ def test_helpers_01(mocker, tmp_path):
     assert "Invalidprefs.js" not in contents
     # cleanup on failure
     (tmp_path / "dst3").mkdir()
-    fake_mkdtemp.return_value = str(tmp_path / "dst3")
     with pytest.raises(OSError):
-        create_profile(prefs_js="fake")
-    assert not (tmp_path / "dst3").is_dir()
+        create_profile(prefs_js="fake", working_path=str(tmp_path / "dst3"))
+    assert not any((tmp_path / "dst3").iterdir())
 
 
 def test_helpers_02(tmp_path):

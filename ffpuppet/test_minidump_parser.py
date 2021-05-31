@@ -34,12 +34,15 @@ def test_minidump_parser_02(mocker, tmp_path):
     callback.return_value.tell.return_value = 0
     log_path = tmp_path / "logs"
     log_path.mkdir()
+    working = tmp_path / "working"
+    working.mkdir()
     mocker.patch("ffpuppet.minidump_parser.call", autospec=True, return_value=0)
-    mdp = MinidumpParser(str(md_path), record_failures=False)
+    mdp = MinidumpParser(str(md_path), record_failures=False, working_path=str(working))
     assert len(mdp.md_files) == 1
     mdp.collect_logs(callback, str(log_path))
     assert callback.return_value.tell.call_count == 1
     assert callback.return_value.write.call_count == 1
+    assert not any(working.iterdir())
 
 
 def test_minidump_parser_03(mocker, tmp_path):

@@ -59,6 +59,7 @@ class FFPuppet:
         use_xvfb (bool): Use Xvfb.
         use_gdb (bool): Use gdb (cannot be used with other debuggers).
         use_rr (bool): Use rr (cannot be used with other debuggers).
+        working_path (str): Path to use as base directory for temporary files.
     """
 
     DBG_NONE = 0
@@ -82,6 +83,7 @@ class FFPuppet:
         "_proc",
         "_profile_template",
         "_xvfb",
+        "_working_path",
         "profile",
         "reason",
     )
@@ -93,6 +95,7 @@ class FFPuppet:
         use_xvfb=False,
         use_gdb=False,
         use_rr=False,
+        working_path=None,
     ):
         # tokens used to notify log scanner to kill the browser process
         self._abort_tokens = set()
@@ -109,10 +112,11 @@ class FFPuppet:
             self._dbg = self.DBG_NONE
         self._dbg_sanity_check(self._dbg)
         self._launches = 0  # number of successful browser launches
-        self._logs = PuppetLogger()
+        self._logs = PuppetLogger(base_path=working_path)
         self._proc = None
         self._profile_template = use_profile  # profile that is used as a template
         self._xvfb = None
+        self._working_path = working_path
         self.profile = None  # path to profile
         self.reason = self.RC_CLOSED  # why the target process was terminated
 
@@ -550,6 +554,7 @@ class FFPuppet:
                     pathjoin(self.profile, "minidumps"),
                     pathjoin(self._bin_path, "symbols"),
                     self._logs.add_log,
+                    working_path=self._working_path,
                 )
                 if self._logs.get_fp("stderr"):
                     self._logs.get_fp("stderr").write(
@@ -703,7 +708,10 @@ class FFPuppet:
 
         # create and modify a profile
         self.profile = create_profile(
-            extension=extension, prefs_js=prefs_js, template=self._profile_template
+            extension=extension,
+            prefs_js=prefs_js,
+            template=self._profile_template,
+            working_path=self._working_path,
         )
         LOG.debug("using profile %r", self.profile)
 
