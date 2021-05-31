@@ -579,7 +579,8 @@ def test_ffpuppet_22(tmp_path):
 def test_ffpuppet_23(mocker, tmp_path):
     """test multiple minidumps"""
 
-    def _fake_process_minidumps(dmps, _, add_log):
+    # pylint: disable=unused-argument
+    def _fake_process_minidumps(dmps, _, add_log, working_path=None):
         for num, _ in enumerate(x for x in os.listdir(dmps) if x.endswith(".dmp")):
             lfp = add_log("minidump_%02d" % (num + 1,))
             lfp.write(b"test")

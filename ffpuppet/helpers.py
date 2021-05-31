@@ -256,18 +256,19 @@ def configure_sanitizers(env, target_dir, log_path):
         LOG.warning("Invalid ASAN_SYMBOLIZER_PATH (%s)", env["ASAN_SYMBOLIZER_PATH"])
 
 
-def create_profile(extension=None, prefs_js=None, template=None):
+def create_profile(extension=None, prefs_js=None, template=None, working_path=None):
     """Create a profile to be used with Firefox.
 
     Args:
         extension (str): Path to an extension to be installed.
         prefs_js (str): Path to the prefs.js file to install in the profile.
         template (str): Path to an existing profile directory to use.
+        working_path (str): Used as base directory for temporary files.
 
     Returns:
         str: Path to directory to be used as a profile.
     """
-    profile = mkdtemp(prefix="ffprof_")
+    profile = mkdtemp(dir=working_path, prefix="ffprofile_")
     try:
         if template is not None:
             LOG.debug("using profile template: %r", template)

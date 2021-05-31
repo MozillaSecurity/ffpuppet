@@ -140,7 +140,7 @@ class PuppetLogger:  # pylint: disable=missing-docstring
             if offset is not None:
                 in_fp.seek(offset)
             if target_file is None:
-                cpyfp = PuppetLogger.open_unique()
+                cpyfp = PuppetLogger.open_unique(base_dir=self._base)
                 target_file = cpyfp.name
             else:
                 # pylint: disable=consider-using-with
