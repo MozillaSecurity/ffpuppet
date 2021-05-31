@@ -97,6 +97,7 @@ def test_puppet_logger_05(tmp_path):
         assert os.path.isfile(cloned)
         with open(cloned, "rb") as log_fp:
             assert log_fp.read() == b"test1"
+        os.remove(cloned)
         # test target exists
         target = tmp_path / "target.txt"
         target.touch()
@@ -116,6 +117,7 @@ def test_puppet_logger_05(tmp_path):
         with open(cloned, "rb") as log_fp:
             assert log_fp.read() == b"1test2test3"
         assert plog.log_length("test_new") == 15
+        os.remove(cloned)
         # test non existent log
         assert plog.clone_log("no_log") is None
         # test empty log
@@ -123,6 +125,7 @@ def test_puppet_logger_05(tmp_path):
         cloned = plog.clone_log("test_empty")
         assert os.path.isfile(cloned)
         assert not os.stat(cloned).st_size
+        os.remove(cloned)
 
 
 def test_puppet_logger_06(tmp_path):
