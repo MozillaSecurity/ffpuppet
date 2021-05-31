@@ -122,12 +122,12 @@ class FFPuppet:
 
         if use_xvfb:
             if not system().startswith("Linux"):
-                self._logs.close()
+                self._logs.clean_up(ignore_errors=True)
                 raise EnvironmentError("Xvfb is only supported on Linux")
             try:
                 self._xvfb = Xvfb(width=1280, height=1024)
             except NameError:
-                self._logs.close()
+                self._logs.clean_up(ignore_errors=True)
                 raise EnvironmentError("Please install xvfbwrapper") from None
             self._xvfb.start()
 
