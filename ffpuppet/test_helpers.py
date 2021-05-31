@@ -196,26 +196,17 @@ def test_helpers_04(tmp_path):
             opts[key] = value
         return opts
 
-    is_windows = sys.platform.startswith("win")
-    # create dummy llvm-symbolizer
-    if is_windows:
-        (tmp_path / "llvm-symbolizer.exe").touch()
-    else:
-        (tmp_path / "llvm-symbolizer").touch()
     # test with empty environment
     env = {}
     configure_sanitizers(env, str(tmp_path), "blah")
     assert "ASAN_OPTIONS" in env
     asan_opts = parse(env["ASAN_OPTIONS"])
+    assert "external_symbolizer_path" not in asan_opts
     assert "detect_leaks" in asan_opts
     assert asan_opts["detect_leaks"] == "false"
     assert asan_opts["log_path"] == "'blah'"
     assert "LSAN_OPTIONS" in env
     assert "UBSAN_OPTIONS" in env
-    if is_windows:
-        assert "ASAN_SYMBOLIZER_PATH" not in env
-    else:
-        assert "llvm-symbolizer" in env["ASAN_SYMBOLIZER_PATH"]
     # test with presets environment
     env = {
         "ASAN_OPTIONS": "detect_leaks=true",
@@ -231,11 +222,6 @@ def test_helpers_04(tmp_path):
     assert "UBSAN_OPTIONS" in env
     ubsan_opts = parse(env["UBSAN_OPTIONS"])
     assert "print_stacktrace" in ubsan_opts
-    # test previously set ASAN_SYMBOLIZER_PATH
-    env = {"ASAN_SYMBOLIZER_PATH": "blah"}
-    configure_sanitizers(env, "target_dir", "blah")
-    assert "ASAN_SYMBOLIZER_PATH" in env
-    assert env["ASAN_SYMBOLIZER_PATH"] in "blah"
     # test suppression file
     sup = tmp_path / "test.sup"
     sup.touch()
@@ -263,7 +249,7 @@ def test_helpers_04(tmp_path):
     # unquoted path containing ':'
     env = {"ASAN_OPTIONS": "strip_path_prefix=x:\\foo\\bar"}
     with pytest.raises(AssertionError):
-        configure_sanitizers(env, tmp_path, "blah")
+        configure_sanitizers(env, str(tmp_path), "blah")
     # multiple options
     env = {
         "ASAN_OPTIONS": "opt1=1:opt2=:opt3=test:opt4='x:\\foo':opt5=\"z:/bar\":opt6=''"
@@ -276,6 +262,16 @@ def test_helpers_04(tmp_path):
     assert asan_opts["opt4"] == "'x:\\foo'"
     assert asan_opts["opt5"] == '"z:/bar"'
     assert asan_opts["opt6"] == "''"
+    # test using packaged llvm-symbolizer
+    if sys.platform.startswith("win"):
+        llvm_sym_bin = tmp_path / "llvm-symbolizer.exe"
+    else:
+        llvm_sym_bin = tmp_path / "llvm-symbolizer"
+    llvm_sym_bin.touch()
+    configure_sanitizers(env, str(tmp_path), "blah")
+    asan_opts = parse(env["ASAN_OPTIONS"])
+    assert "external_symbolizer_path" in asan_opts
+    assert asan_opts["external_symbolizer_path"].strip("'") == str(llvm_sym_bin)
 
 
 def test_helpers_05():
