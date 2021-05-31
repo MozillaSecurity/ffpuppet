@@ -163,14 +163,14 @@ def configure_sanitizers(env, target_dir, log_path):
     """Update *SAN_OPTIONS entries in env.
 
     Args:
-        target_dir (str): Location to find llvm-symbolizer.
+        target_dir (str): Directory containing llvm-symbolizer.
         log_path (str): Location to write sanitizer logs to.
 
     Returns:
         None
     """
     # https://github.com/google/sanitizers/wiki/SanitizerCommonFlags
-    common_flags = (
+    common_flags = [
         ("abort_on_error", "false"),
         ("allocator_may_return_null", "true"),
         ("disable_coredump", "true"),
@@ -180,9 +180,27 @@ def configure_sanitizers(env, target_dir, log_path):
         ("handle_sigfpe", "true"),  # set to be safe
         ("handle_sigill", "true"),  # set to be safe
         ("max_allocation_size_mb", "512"),
+        # requires background thread so only works on Linux for now...
+        # https://github.com/llvm/llvm-project/blob/main/compiler-rt/lib/
+        # sanitizer_common/sanitizer_common_libcdep.cpp#L116
         ("soft_rss_limit_mb", "5000"),
         ("symbolize", "true"),
-    )
+    ]
+    if system().startswith("Windows"):
+        symbolizer_bin = "llvm-symbolizer.exe"
+    else:
+        symbolizer_bin = "llvm-symbolizer"
+    # use packaged llvm-symbolizer if available
+    if isfile(pathjoin(target_dir, symbolizer_bin)):
+        common_flags.append(
+            (
+                "external_symbolizer_path",
+                "'%s'" % (pathjoin(target_dir, symbolizer_bin),),
+            )
+        )
+    else:
+        # assume system llvm-symbolizer will be used
+        LOG.debug("llvm-symbolizer not found in %r", target_dir)
 
     # setup Address Sanitizer options if not set manually
     # https://github.com/google/sanitizers/wiki/AddressSanitizerFlags
@@ -243,17 +261,6 @@ def configure_sanitizers(env, target_dir, log_path):
     ubsan_config.add("log_path", "'%s'" % log_path, overwrite=True)
     ubsan_config.add("print_stacktrace", "1")
     env["UBSAN_OPTIONS"] = ubsan_config.options
-
-    if "ASAN_SYMBOLIZER_PATH" not in env:
-        # ASAN_SYMBOLIZER_PATH only needs to be set on platforms other than Windows
-        if not system().lower().startswith("windows"):
-            symbolizer_bin = pathjoin(target_dir, "llvm-symbolizer")
-            if isfile(symbolizer_bin):
-                env["ASAN_SYMBOLIZER_PATH"] = symbolizer_bin
-        elif not pathjoin(target_dir, "llvm-symbolizer.exe"):
-            LOG.warning("llvm-symbolizer.exe should be next to the target binary")
-    elif "ASAN_SYMBOLIZER_PATH" in env and not isfile(env["ASAN_SYMBOLIZER_PATH"]):
-        LOG.warning("Invalid ASAN_SYMBOLIZER_PATH (%s)", env["ASAN_SYMBOLIZER_PATH"])
 
 
 def create_profile(extension=None, prefs_js=None, template=None, working_path=None):
