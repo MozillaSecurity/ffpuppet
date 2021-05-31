@@ -65,7 +65,7 @@ class MinidumpParser:  # pylint: disable=missing-docstring
                 LOG.warning("%r returned %r", " ".join(cmd), ret_val)
                 if self._record_failures:
                     # save the dmp file and the logs
-                    report_dir = mkdtemp(prefix="mdsw_err_")
+                    report_dir = mkdtemp(dir=self._working_path, prefix="mdsw_err_")
                     copy(dump_file, report_dir)
                     with open(pathjoin(report_dir, "mdsw_cmd.txt"), "wb") as log_fp:
                         log_fp.write((" ".join(cmd)).encode("ascii"))
@@ -75,7 +75,7 @@ class MinidumpParser:  # pylint: disable=missing-docstring
                     out_fp.seek(0)
                     with open(pathjoin(report_dir, "mdsw_stdout.txt"), "wb") as log_fp:
                         copyfileobj(out_fp, log_fp, 0x10000)
-                    LOG.warning("mdsw failure can be found @ %r", report_dir)
+                    LOG.warning("mdsw logs can be found here %r", report_dir)
                     raise RuntimeError("MDSW Error")
         out_fp.seek(0)
 
