@@ -54,8 +54,21 @@ class SanitizerConfig:  # pylint: disable=missing-docstring
             overwrite (bool): Overwrite existing value.
 
         Returns:
-            str: Colon separated list of options.
+            None
         """
+        assert flag and isinstance(flag, str)
+        assert isinstance(value, str)
+        if ":" in value or " " in value:
+            assert self.is_quoted(value), "%s (%s) must be quoted" % (value, flag)
+        elif value and (
+            value[0] == "'" or value[0] == '"' or value[-1] == "'" or value[-1] == '"'
+        ):
+            assert self.is_quoted(value), "unbalanced quotes on %s (%s)" % (value, flag)
+        # sanity check paths
+        if flag in ("external_symbolizer_path", "suppressions"):
+            path = abspath(expanduser(value.strip("'\"")))
+            if not isfile(path):
+                raise IOError("%r (%s) does not exist" % (path, flag))
         if flag not in self._options or overwrite:
             self._options[flag] = value
 
@@ -84,24 +97,13 @@ class SanitizerConfig:  # pylint: disable=missing-docstring
         Returns:
             None
         """
+        self._options.clear()
         if not options:
             return
-        assert " " not in options, "*SAN_OPTIONS should not contain spaces"
         for option in self.re_delim.split(options):
             try:
-                opt_name, opt_value = option.split("=")
-                if ":" in opt_value:
-                    assert self.is_quoted(opt_value), (
-                        "%s value must be quoted" % opt_name
-                    )
-                # add a sanity check for suppression files
-                if opt_name == "suppressions":
-                    sup_file = abspath(expanduser(opt_value.strip("'\"")))
-                    if not isfile(sup_file):
-                        raise IOError("Suppressions file %r does not exist" % sup_file)
-                    opt_value = "'%s'" % sup_file
-                self._options[opt_name] = opt_value
-            except ValueError:
+                self.add(*option.split("=", maxsplit=1))
+            except TypeError:
                 LOG.warning("Malformed option %r", option)
 
     @property
