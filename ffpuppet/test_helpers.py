@@ -192,7 +192,10 @@ def test_helpers_04(tmp_path):
     def parse(opt_str):
         opts = dict()
         for entry in SanitizerConfig.re_delim.split(opt_str):
-            key, value = entry.split("=")
+            try:
+                key, value = entry.split("=", maxsplit=1)
+            except ValueError:
+                pass
             opts[key] = value
         return opts
 
@@ -210,7 +213,7 @@ def test_helpers_04(tmp_path):
     # test with presets environment
     env = {
         "ASAN_OPTIONS": "detect_leaks=true",
-        "LSAN_OPTIONS": "a=1=2",
+        "LSAN_OPTIONS": "a=1",
         "UBSAN_OPTIONS": "",
     }
     configure_sanitizers(env, str(tmp_path), "blah")
@@ -243,25 +246,29 @@ def test_helpers_04(tmp_path):
     ubsan_opts = parse(env["UBSAN_OPTIONS"])
     assert ubsan_opts["log_path"] == "'blah'"
     # test missing suppression file
-    env = {"ASAN_OPTIONS": "suppressions=no_a_file"}
-    with pytest.raises(IOError, match=r"Suppressions file '.+?' does not exist"):
+    env = {"ASAN_OPTIONS": "suppressions=not_a_file"}
+    with pytest.raises(IOError, match=r"not_a_file' \(suppressions\) does not exist"):
         configure_sanitizers(env, str(tmp_path), "blah")
     # unquoted path containing ':'
     env = {"ASAN_OPTIONS": "strip_path_prefix=x:\\foo\\bar"}
-    with pytest.raises(AssertionError):
+    with pytest.raises(AssertionError, match=r"\(strip_path_prefix\) must be quoted"):
         configure_sanitizers(env, str(tmp_path), "blah")
     # multiple options
-    env = {
-        "ASAN_OPTIONS": "opt1=1:opt2=:opt3=test:opt4='x:\\foo':opt5=\"z:/bar\":opt6=''"
-    }
+    options = (
+        "opt1=1",
+        "opt2=",
+        "opt3=test",
+        "opt4='x:\\foo'",
+        'opt5="z:/bar"',
+        "opt6=''",
+        "opt7='/with space/'",
+        "opt8='x:\\with a space\\or two'",
+    )
+    env = {"ASAN_OPTIONS": ":".join(options)}
     configure_sanitizers(env, str(tmp_path), "blah")
     asan_opts = parse(env["ASAN_OPTIONS"])
-    assert asan_opts["opt1"] == "1"
-    assert asan_opts["opt2"] == ""
-    assert asan_opts["opt3"] == "test"
-    assert asan_opts["opt4"] == "'x:\\foo'"
-    assert asan_opts["opt5"] == '"z:/bar"'
-    assert asan_opts["opt6"] == "''"
+    for key, value in (x.split(sep="=", maxsplit=1) for x in options):
+        assert asan_opts[key] == value
     # test using packaged llvm-symbolizer
     if sys.platform.startswith("win"):
         llvm_sym_bin = tmp_path / "llvm-symbolizer.exe"
@@ -272,6 +279,16 @@ def test_helpers_04(tmp_path):
     asan_opts = parse(env["ASAN_OPTIONS"])
     assert "external_symbolizer_path" in asan_opts
     assert asan_opts["external_symbolizer_path"].strip("'") == str(llvm_sym_bin)
+    # test unbalanced quotes
+    env = {"ASAN_OPTIONS": "test='a"}
+    with pytest.raises(AssertionError, match=r"unbalanced quotes on"):
+        configure_sanitizers(env, str(tmp_path), "blah")
+    # test malformed option pair
+    env = {"ASAN_OPTIONS": "a=b=c:x"}
+    configure_sanitizers(env, str(tmp_path), "blah")
+    asan_opts = parse(env["ASAN_OPTIONS"])
+    assert asan_opts["a"] == "b=c"
+    assert "x" not in asan_opts
 
 
 def test_helpers_05():
