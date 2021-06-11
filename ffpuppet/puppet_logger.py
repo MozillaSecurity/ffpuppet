@@ -245,7 +245,7 @@ class PuppetLogger:  # pylint: disable=missing-docstring
         self._rr_packed = False
         self.working_path = realpath(mkdtemp(prefix="ffplogs_", dir=self._base))
 
-    def save_logs(self, dest, logs_only=False, meta=False):
+    def save_logs(self, dest, logs_only=False, meta=False, bin_path=None):
         """The browser logs will be saved to dest. This can only be called
         after close() has been called.
 
@@ -255,6 +255,7 @@ class PuppetLogger:  # pylint: disable=missing-docstring
             logs_only (bool): Do not include other data, including debugger
                               output files.
             meta (bool): Output JSON file containing log file meta data.
+            bin_path (str): Path to Firefox binary.
 
         Returns:
             None
@@ -280,13 +281,22 @@ class PuppetLogger:  # pylint: disable=missing-docstring
 
         if not logs_only:
             rr_trace = pathjoin(self.working_path, self.PATH_RR, "latest-trace")
-            if not self._rr_packed and isdir(rr_trace):
-                LOG.debug("packing rr trace")
-                try:
-                    check_output(["rr", "pack", rr_trace], stderr=STDOUT)
-                    self._rr_packed = True
-                except (OSError, CalledProcessError):
-                    LOG.warning("Error calling 'rr pack %s'", rr_trace)
+            if isdir(rr_trace):
+                if not self._rr_packed:
+                    LOG.debug("packing rr trace")
+                    try:
+                        check_output(["rr", "pack", rr_trace], stderr=STDOUT)
+                        self._rr_packed = True
+                    except (OSError, CalledProcessError):
+                        LOG.warning("Error calling 'rr pack %s'", rr_trace)
+                # copy `taskcluster-build-task` for use if Pernosco if available
+                if bin_path is not None:
+                    task_info = pathjoin(bin_path, "taskcluster-build-task")
+                    if isfile(task_info):
+                        moz_rr = pathjoin(rr_trace, "files.mozilla")
+                        makedirs(moz_rr, exist_ok=True)
+                        copy2(task_info, moz_rr)
+                        LOG.debug("Copied 'taskcluster-build-task' to trace")
 
             for entry in scandir(self.working_path):
                 if entry.is_dir():

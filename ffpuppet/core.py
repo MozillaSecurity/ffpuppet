@@ -850,7 +850,12 @@ class FFPuppet:
         LOG.debug("save_logs(%r, logs_only=%r, meta=%r)", dest, logs_only, meta)
         assert self._launches > -1, "clean_up() has been called"
         assert self._logs.closed, "Logs are still in use. Call close() first!"
-        self._logs.save_logs(dest, logs_only=logs_only, meta=meta)
+        self._logs.save_logs(
+            dest,
+            logs_only=logs_only,
+            meta=meta,
+            bin_path=self._bin_path,
+        )
 
     def wait(self, timeout=None):
         """Wait for browser process(es) to terminate. This call will block until
