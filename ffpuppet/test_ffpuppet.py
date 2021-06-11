@@ -92,6 +92,7 @@ def test_ffpuppet_00(tmp_path):
 def test_ffpuppet_01():
     """test basic launch and close"""
     with FFPuppet() as ffp:
+        assert ffp._dbg == FFPuppet.DBG_NONE
         assert ffp.launches == 0
         assert ffp.reason == ffp.RC_CLOSED
         assert not ffp.is_running()
@@ -404,7 +405,8 @@ def test_ffpuppet_15(mocker, tmp_path):
     fake_proc = mocker.patch("ffpuppet.core.Popen", autospec=True)
     fake_proc.return_value.pid = 0xFFFF
     fake_proc.return_value.poll.return_value = None
-    with FFPuppet(use_gdb=True) as ffp:
+    with FFPuppet(debugger=FFPuppet.DBG_GDB) as ffp:
+        assert ffp._dbg == FFPuppet.DBG_GDB
         ffp.launch(TESTFF_BIN)
         ffp.close()
         assert ffp.reason == ffp.RC_CLOSED
@@ -437,7 +439,8 @@ def test_ffpuppet_17(mocker, tmp_path):
     fake_proc = mocker.patch("ffpuppet.core.Popen", autospec=True)
     fake_proc.return_value.pid = 0xFFFF
     fake_proc.return_value.poll.return_value = None
-    with FFPuppet(use_valgrind=True) as ffp:
+    with FFPuppet(debugger=FFPuppet.DBG_VALGRIND) as ffp:
+        assert ffp._dbg == FFPuppet.DBG_VALGRIND
         ffp.launch(TESTFF_BIN)
         ffp.close()
         assert ffp.reason == ffp.RC_CLOSED
@@ -619,7 +622,8 @@ def test_ffpuppet_24(mocker, tmp_path):
     fake_proc = mocker.patch("ffpuppet.core.Popen", autospec=True)
     fake_proc.return_value.pid = 0xFFFF
     fake_proc.return_value.poll.return_value = None
-    with FFPuppet(use_rr=True) as ffp:
+    with FFPuppet(debugger=FFPuppet.DBG_RR) as ffp:
+        assert ffp._dbg == FFPuppet.DBG_RR
         ffp.launch(TESTFF_BIN)
         ffp.close()
         assert ffp.reason == ffp.RC_CLOSED
@@ -692,7 +696,9 @@ def test_ffpuppet_27(mocker, tmp_path):
             self.profile = None
 
     is_linux = platform.system() == "Linux"
-    with StubbedLaunch(use_valgrind=is_linux) as ffp:
+    debugger = FFPuppet.DBG_VALGRIND if is_linux else FFPuppet.DBG_NONE
+    with StubbedLaunch(debugger=debugger) as ffp:
+        assert ffp._dbg == debugger
         ffp.launch()
         assert not any(ffp._crashreports())
         # benign sanitizer warnings
