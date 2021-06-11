@@ -184,14 +184,29 @@ def test_puppet_logger_07(mocker, tmp_path):
     with PuppetLogger(base_path=str(tmp_path)) as plog:
         os.makedirs(os.path.join(plog.working_path, plog.PATH_RR, "latest-trace"))
         plog.close()
-        # call to rr failed
+        # test call to rr failing
         fake_ck.side_effect = OSError
         plog.save_logs(str(tmp_path / "dest1"))
         assert fake_ck.call_count == 1
         assert not plog._rr_packed
-        # call to rr passed
+        # test call to rr passing
         fake_ck.side_effect = None
         plog.save_logs(str(tmp_path / "dest2"))
+        assert fake_ck.call_count == 2
+        assert plog._rr_packed
+        # test 'taskcluster-build-task' copied
+        bin_path = tmp_path / "bin_path"
+        bin_path.mkdir()
+        (bin_path / "taskcluster-build-task").write_text("task-info\n")
+        plog.save_logs(str(tmp_path / "dest3"), bin_path=str(bin_path))
+        assert (
+            tmp_path
+            / "dest3"
+            / "rr-traces"
+            / "latest-trace"
+            / "files.mozilla"
+            / "taskcluster-build-task"
+        ).is_file()
         assert fake_ck.call_count == 2
         assert plog._rr_packed
 
