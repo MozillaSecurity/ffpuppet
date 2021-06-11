@@ -207,12 +207,19 @@ def main(argv=None):  # pylint: disable=missing-docstring
         log_fmt = "[%(asctime)s] %(message)s"
     basicConfig(format=log_fmt, datefmt=date_fmt, level=args.log_level)
 
+    if args.gdb:  # pragma: no cover
+        debugger = FFPuppet.DBG_GDB
+    elif args.rr:  # pragma: no cover
+        debugger = FFPuppet.DBG_RR
+    elif args.valgrind:  # pragma: no cover
+        debugger = FFPuppet.DBG_VALGRIND
+    else:
+        debugger = FFPuppet.DBG_NONE
+
     ffp = FFPuppet(
+        debugger=debugger,
         use_profile=args.profile,
-        use_valgrind=getattr(args, "valgrind", False),
         use_xvfb=getattr(args, "xvfb", False),
-        use_gdb=getattr(args, "gdb", False),
-        use_rr=getattr(args, "rr", False),
     )
     for a_token in args.abort_token:
         ffp.add_abort_token(a_token)

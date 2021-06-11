@@ -54,11 +54,9 @@ class FFPuppet:
     This includes setting up the environment, collecting logs and some debugger support.
 
     Attributes:
+        debugger (int): ID of debugger to use.
         use_profile (str): Path to existing user profile.
-        use_valgrind (bool): Use Valgrind (cannot be used with other debuggers).
         use_xvfb (bool): Use Xvfb.
-        use_gdb (bool): Use gdb (cannot be used with other debuggers).
-        use_rr (bool): Use rr (cannot be used with other debuggers).
         working_path (str): Path to use as base directory for temporary files.
     """
 
@@ -90,26 +88,16 @@ class FFPuppet:
 
     def __init__(
         self,
+        debugger=DBG_NONE,
         use_profile=None,
-        use_valgrind=False,
         use_xvfb=False,
-        use_gdb=False,
-        use_rr=False,
         working_path=None,
     ):
         # tokens used to notify log scanner to kill the browser process
         self._abort_tokens = set()
         self._bin_path = None
         self._checks = list()
-        assert sum((use_gdb, use_rr, use_valgrind)) < 2, "multiple debuggers enabled"
-        if use_gdb:
-            self._dbg = self.DBG_GDB
-        elif use_rr:
-            self._dbg = self.DBG_RR
-        elif use_valgrind:
-            self._dbg = self.DBG_VALGRIND
-        else:
-            self._dbg = self.DBG_NONE
+        self._dbg = debugger
         self._dbg_sanity_check(self._dbg)
         self._launches = 0  # number of successful browser launches
         self._logs = PuppetLogger(base_path=working_path)
