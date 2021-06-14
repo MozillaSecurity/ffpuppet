@@ -245,7 +245,9 @@ class PuppetLogger:  # pylint: disable=missing-docstring
         self._rr_packed = False
         self.working_path = realpath(mkdtemp(prefix="ffplogs_", dir=self._base))
 
-    def save_logs(self, dest, logs_only=False, meta=False, bin_path=None):
+    def save_logs(
+        self, dest, logs_only=False, meta=False, bin_path=None, rr_pack=False
+    ):
         """The browser logs will be saved to dest. This can only be called
         after close() has been called.
 
@@ -256,6 +258,7 @@ class PuppetLogger:  # pylint: disable=missing-docstring
                               output files.
             meta (bool): Output JSON file containing log file meta data.
             bin_path (str): Path to Firefox binary.
+            rr_pack (bool): Pack rr trace if required.
 
         Returns:
             None
@@ -282,14 +285,14 @@ class PuppetLogger:  # pylint: disable=missing-docstring
         if not logs_only:
             rr_trace = pathjoin(self.working_path, self.PATH_RR, "latest-trace")
             if isdir(rr_trace):
-                if not self._rr_packed:
+                if rr_pack and not self._rr_packed:
                     LOG.debug("packing rr trace")
                     try:
                         check_output(["rr", "pack", rr_trace], stderr=STDOUT)
                         self._rr_packed = True
                     except (OSError, CalledProcessError):
                         LOG.warning("Error calling 'rr pack %s'", rr_trace)
-                # copy `taskcluster-build-task` for use if Pernosco if available
+                # copy `taskcluster-build-task` for use with Pernosco if available
                 if bin_path is not None:
                     task_info = pathjoin(bin_path, "taskcluster-build-task")
                     if isfile(task_info):

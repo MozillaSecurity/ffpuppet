@@ -62,8 +62,9 @@ class FFPuppet:
 
     DBG_NONE = 0
     DBG_GDB = 1
-    DBG_RR = 2
-    DBG_VALGRIND = 3
+    DBG_PERNOSCO = 2
+    DBG_RR = 3
+    DBG_VALGRIND = 4
     LAUNCH_TIMEOUT_MIN = 10  # minimum amount of time to wait for the browser to launch
     RC_ALERT = "ALERT"  # target crashed/aborted/triggered an assertion failure etc...
     RC_CLOSED = "CLOSED"  # target was closed by call to FFPuppet close()
@@ -215,7 +216,7 @@ class FFPuppet:
                 check_output(["gdb", "--version"])
             except OSError:
                 raise EnvironmentError("Please install GDB") from None
-        elif dbg_id == cls.DBG_RR:
+        elif dbg_id in (cls.DBG_PERNOSCO, cls.DBG_RR):
             if not system().startswith("Linux"):
                 raise EnvironmentError("rr is only supported on Linux")
             try:
@@ -409,13 +410,18 @@ class FFPuppet:
                 "--args",
             ] + cmd
 
-        elif self._dbg == self.DBG_RR:
-            cmd = [
+        elif self._dbg in (self.DBG_PERNOSCO, self.DBG_RR):
+            rr_cmd = [
                 "rr",
                 "record",
-                "--disable-cpuid-features-ext",
-                "0xdc230000,0x2c42,0xc",  # Pernosco support
-            ] + cmd
+            ]
+            if self._dbg == self.DBG_PERNOSCO:
+                rr_cmd += [
+                    "--chaos",
+                    "--disable-cpuid-features-ext",
+                    "0xdc230000,0x2c42,0xc",
+                ]
+            cmd = rr_cmd + cmd
 
         return cmd
 
@@ -719,7 +725,7 @@ class FFPuppet:
                 "capability.policy.localfilelinks.checkloaduri.enabled": "'allAccess'",
                 "privacy.partition.network_state": "false",
             }
-            if self._dbg in (self.DBG_RR, self.DBG_VALGRIND):
+            if self._dbg in (self.DBG_PERNOSCO, self.DBG_RR, self.DBG_VALGRIND):
                 # if the browser is running slowly socket reads can fail if this is > 0
                 prefs["network.http.speculative-parallel-limit"] = "0"
             append_prefs(self.profile, prefs)
@@ -732,7 +738,7 @@ class FFPuppet:
                 launch_args.append("-wait-for-browser")
             cmd = self.build_launch_cmd(bin_path, additional_args=launch_args)
 
-            if self._dbg == self.DBG_RR:
+            if self._dbg in (self.DBG_PERNOSCO, self.DBG_RR):
                 if env_mod is None:
                     env_mod = dict()
                 env_mod["_RR_TRACE_DIR"] = self._logs.add_path(self._logs.PATH_RR)
@@ -843,6 +849,7 @@ class FFPuppet:
             logs_only=logs_only,
             meta=meta,
             bin_path=self._bin_path,
+            rr_pack=self._dbg == self.DBG_RR,  # pernosco-submit performs packs
         )
 
     def wait(self, timeout=None):
