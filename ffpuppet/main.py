@@ -13,7 +13,7 @@ from shutil import rmtree
 from tempfile import mkdtemp
 from time import sleep, strftime
 
-from .core import FFPuppet
+from .core import Debugger, FFPuppet
 from .helpers import check_prefs
 
 LOG = getLogger(__name__)
@@ -158,14 +158,41 @@ def parse_args(argv=None):  # pylint: disable=missing-docstring
 
     if system().startswith("Linux"):
         dbg_group = parser.add_argument_group("Available Debuggers")
-        dbg_group.add_argument("--gdb", action="store_true", help="Use GDB.")
+        # Add the mutually exclusive group to a regular group
+        # because mutually exclusive groups don't accept a title
+        dbg_group = dbg_group.add_mutually_exclusive_group()
+        dbg_group.add_argument(
+            "--gdb",
+            action="store_const",
+            const=Debugger.GDB,
+            dest="debugger",
+            help="Use GDB.",
+        )
         dbg_group.add_argument(
             "--pernosco",
-            action="store_true",
+            action="store_const",
+            const=Debugger.PERNOSCO,
+            dest="debugger",
             help="Use rr. Trace intended to be submitted to Pernosco.",
         )
-        dbg_group.add_argument("--rr", action="store_true", help="Use rr.")
-        dbg_group.add_argument("--valgrind", action="store_true", help="Use Valgrind.")
+        dbg_group.add_argument(
+            "--rr",
+            action="store_const",
+            const=Debugger.RR,
+            dest="debugger",
+            help="Use rr.",
+        )
+        dbg_group.add_argument(
+            "--valgrind",
+            action="store_const",
+            const=Debugger.VALGRIND,
+            dest="debugger",
+            help="Use Valgrind.",
+        )
+
+    parser.set_defaults(
+        debugger=Debugger.NONE,
+    )
 
     args = parser.parse_args(argv)
 
@@ -190,20 +217,6 @@ def parse_args(argv=None):  # pylint: disable=missing-docstring
     args.memory *= 1048576
     if args.prefs is not None and not isfile(args.prefs):
         parser.error("Invalid prefs.js file %r" % args.prefs)
-    # NOTE: mutually_exclusive_group will fail if no arguments are added
-    # so sum() enabled debuggers instead
-    if (
-        sum(
-            (
-                getattr(args, "gdb", False),
-                getattr(args, "pernosco", False),
-                getattr(args, "rr", False),
-                getattr(args, "valgrind", False),
-            )
-        )
-        > 1
-    ):
-        parser.error("Only a single debugger can be enabled")
 
     return args
 
@@ -219,19 +232,8 @@ def main(argv=None):  # pylint: disable=missing-docstring
         log_fmt = "[%(asctime)s] %(message)s"
     basicConfig(format=log_fmt, datefmt=date_fmt, level=args.log_level)
 
-    if getattr(args, "gdb", False):  # pragma: no cover
-        debugger = FFPuppet.DBG_GDB
-    elif getattr(args, "pernosco", False):  # pragma: no cover
-        debugger = FFPuppet.DBG_PERNOSCO
-    elif getattr(args, "rr", False):  # pragma: no cover
-        debugger = FFPuppet.DBG_RR
-    elif getattr(args, "valgrind", False):  # pragma: no cover
-        debugger = FFPuppet.DBG_VALGRIND
-    else:
-        debugger = FFPuppet.DBG_NONE
-
     ffp = FFPuppet(
-        debugger=debugger,
+        debugger=args.debugger,
         use_profile=args.profile,
         use_xvfb=getattr(args, "xvfb", False),
     )
