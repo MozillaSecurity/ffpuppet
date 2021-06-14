@@ -19,7 +19,7 @@ import pytest
 from psutil import Process
 
 from .bootstrapper import Bootstrapper
-from .core import FFPuppet
+from .core import Debugger, FFPuppet
 from .exceptions import (
     BrowserTerminatedError,
     BrowserTimeoutError,
@@ -92,7 +92,7 @@ def test_ffpuppet_00(tmp_path):
 def test_ffpuppet_01():
     """test basic launch and close"""
     with FFPuppet() as ffp:
-        assert ffp._dbg == FFPuppet.DBG_NONE
+        assert ffp._dbg == Debugger.NONE
         assert ffp.launches == 0
         assert ffp.reason == ffp.RC_CLOSED
         assert not ffp.is_running()
@@ -405,8 +405,8 @@ def test_ffpuppet_15(mocker, tmp_path):
     fake_proc = mocker.patch("ffpuppet.core.Popen", autospec=True)
     fake_proc.return_value.pid = 0xFFFF
     fake_proc.return_value.poll.return_value = None
-    with FFPuppet(debugger=FFPuppet.DBG_GDB) as ffp:
-        assert ffp._dbg == FFPuppet.DBG_GDB
+    with FFPuppet(debugger=Debugger.GDB) as ffp:
+        assert ffp._dbg == Debugger.GDB
         ffp.launch(TESTFF_BIN)
         ffp.close()
         assert ffp.reason == ffp.RC_CLOSED
@@ -439,8 +439,8 @@ def test_ffpuppet_17(mocker, tmp_path):
     fake_proc = mocker.patch("ffpuppet.core.Popen", autospec=True)
     fake_proc.return_value.pid = 0xFFFF
     fake_proc.return_value.poll.return_value = None
-    with FFPuppet(debugger=FFPuppet.DBG_VALGRIND) as ffp:
-        assert ffp._dbg == FFPuppet.DBG_VALGRIND
+    with FFPuppet(debugger=Debugger.VALGRIND) as ffp:
+        assert ffp._dbg == Debugger.VALGRIND
         ffp.launch(TESTFF_BIN)
         ffp.close()
         assert ffp.reason == ffp.RC_CLOSED
@@ -622,8 +622,8 @@ def test_ffpuppet_24(mocker, tmp_path):
     fake_proc = mocker.patch("ffpuppet.core.Popen", autospec=True)
     fake_proc.return_value.pid = 0xFFFF
     fake_proc.return_value.poll.return_value = None
-    with FFPuppet(debugger=FFPuppet.DBG_RR) as ffp:
-        assert ffp._dbg == FFPuppet.DBG_RR
+    with FFPuppet(debugger=Debugger.RR) as ffp:
+        assert ffp._dbg == Debugger.RR
         ffp.launch(TESTFF_BIN)
         ffp.close()
         assert ffp.reason == ffp.RC_CLOSED
@@ -696,7 +696,7 @@ def test_ffpuppet_27(mocker, tmp_path):
             self.profile = None
 
     is_linux = platform.system() == "Linux"
-    debugger = FFPuppet.DBG_VALGRIND if is_linux else FFPuppet.DBG_NONE
+    debugger = Debugger.VALGRIND if is_linux else Debugger.NONE
     with StubbedLaunch(debugger=debugger) as ffp:
         assert ffp._dbg == debugger
         ffp.launch()
@@ -752,24 +752,24 @@ def test_ffpuppet_28(tmp_path):
         assert cmd[0] == "bin_path"
         assert cmd[-1] == "test"
         # GDB
-        ffp._dbg = FFPuppet.DBG_GDB
+        ffp._dbg = Debugger.GDB
         cmd = ffp.build_launch_cmd("bin_path")
         assert len(cmd) > 2
         assert cmd[0] == "gdb"
         # Pernosco
-        ffp._dbg = FFPuppet.DBG_PERNOSCO
+        ffp._dbg = Debugger.PERNOSCO
         cmd = ffp.build_launch_cmd("bin_path")
         assert len(cmd) > 2
         assert cmd[0] == "rr"
         assert "--chaos" in cmd
         # RR
-        ffp._dbg = FFPuppet.DBG_RR
+        ffp._dbg = Debugger.RR
         cmd = ffp.build_launch_cmd("bin_path")
         assert len(cmd) > 2
         assert cmd[0] == "rr"
         assert "--chaos" not in cmd
         # Valgrind
-        ffp._dbg = FFPuppet.DBG_VALGRIND
+        ffp._dbg = Debugger.VALGRIND
         try:
             os.environ["VALGRIND_SUP_PATH"] = "blah"
             with pytest.raises(IOError):
@@ -805,57 +805,57 @@ def test_ffpuppet_30(mocker):
     fake_chkout = mocker.patch("ffpuppet.core.check_output", autospec=True)
     # gdb - success
     fake_system.return_value = "Linux"
-    FFPuppet._dbg_sanity_check(FFPuppet.DBG_GDB)
+    FFPuppet._dbg_sanity_check(Debugger.GDB)
     assert fake_chkout.call_count == 1
     fake_chkout.reset_mock()
     # gdb - not installed
     fake_chkout.side_effect = OSError
     with pytest.raises(EnvironmentError, match="Please install GDB"):
-        FFPuppet._dbg_sanity_check(FFPuppet.DBG_GDB)
+        FFPuppet._dbg_sanity_check(Debugger.GDB)
     fake_chkout.reset_mock()
     fake_chkout.side_effect = None
     # gdb - unsupported OS
     fake_system.return_value = "Windows"
     with pytest.raises(EnvironmentError, match="GDB is only supported on Linux"):
-        FFPuppet._dbg_sanity_check(FFPuppet.DBG_GDB)
+        FFPuppet._dbg_sanity_check(Debugger.GDB)
     # rr - success
     fake_system.return_value = "Linux"
-    FFPuppet._dbg_sanity_check(FFPuppet.DBG_RR)
+    FFPuppet._dbg_sanity_check(Debugger.RR)
     assert fake_chkout.call_count == 1
     fake_chkout.reset_mock()
     # rr - not installed
     fake_chkout.side_effect = OSError
     with pytest.raises(EnvironmentError, match="Please install rr"):
-        FFPuppet._dbg_sanity_check(FFPuppet.DBG_RR)
+        FFPuppet._dbg_sanity_check(Debugger.RR)
     fake_chkout.reset_mock()
     fake_chkout.side_effect = None
     # rr - unsupported OS
     fake_system.return_value = "Windows"
     with pytest.raises(EnvironmentError, match="rr is only supported on Linux"):
-        FFPuppet._dbg_sanity_check(FFPuppet.DBG_RR)
+        FFPuppet._dbg_sanity_check(Debugger.RR)
     # valgrind - success
     fake_system.return_value = "Linux"
     fake_chkout.return_value = b"valgrind-%0.2f" % (FFPuppet.VALGRIND_MIN_VERSION)
-    FFPuppet._dbg_sanity_check(FFPuppet.DBG_VALGRIND)
+    FFPuppet._dbg_sanity_check(Debugger.VALGRIND)
     assert fake_chkout.call_count == 1
     fake_chkout.reset_mock()
     # valgrind - old version
     fake_system.return_value = "Linux"
     fake_chkout.return_value = b"valgrind-0.1"
     with pytest.raises(EnvironmentError, match=r"Valgrind >= \d+\.\d+ is required"):
-        FFPuppet._dbg_sanity_check(FFPuppet.DBG_VALGRIND)
+        FFPuppet._dbg_sanity_check(Debugger.VALGRIND)
     assert fake_chkout.call_count == 1
     fake_chkout.reset_mock()
     # valgrind - not installed
     fake_chkout.side_effect = OSError
     with pytest.raises(EnvironmentError, match="Please install Valgrind"):
-        FFPuppet._dbg_sanity_check(FFPuppet.DBG_VALGRIND)
+        FFPuppet._dbg_sanity_check(Debugger.VALGRIND)
     fake_chkout.reset_mock()
     fake_chkout.side_effect = None
     # valgrind - unsupported OS
     fake_system.return_value = "Windows"
     with pytest.raises(EnvironmentError, match="Valgrind is only supported on Linux"):
-        FFPuppet._dbg_sanity_check(FFPuppet.DBG_VALGRIND)
+        FFPuppet._dbg_sanity_check(Debugger.VALGRIND)
 
 
 def test_ffpuppet_31(mocker):

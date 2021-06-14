@@ -3,6 +3,7 @@
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
 """ffpuppet module"""
 
+from enum import Enum, unique
 from logging import getLogger
 from os import X_OK, access, getenv, scandir
 from os.path import abspath, basename, dirname, isfile
@@ -49,22 +50,28 @@ __author__ = "Tyson Smith"
 __all__ = ("FFPuppet",)
 
 
+@unique
+class Debugger(Enum):
+    """Available "debuggers" to run the browser with"""
+
+    NONE = 0
+    GDB = 1
+    PERNOSCO = 2
+    RR = 3
+    VALGRIND = 4
+
+
 class FFPuppet:
     """FFPuppet manages launching and monitoring the browser process(es).
     This includes setting up the environment, collecting logs and some debugger support.
 
     Attributes:
-        debugger (int): ID of debugger to use.
+        debugger (Debugger): Debugger to use.
         use_profile (str): Path to existing user profile.
         use_xvfb (bool): Use Xvfb.
         working_path (str): Path to use as base directory for temporary files.
     """
 
-    DBG_NONE = 0
-    DBG_GDB = 1
-    DBG_PERNOSCO = 2
-    DBG_RR = 3
-    DBG_VALGRIND = 4
     LAUNCH_TIMEOUT_MIN = 10  # minimum amount of time to wait for the browser to launch
     RC_ALERT = "ALERT"  # target crashed/aborted/triggered an assertion failure etc...
     RC_CLOSED = "CLOSED"  # target was closed by call to FFPuppet close()
@@ -89,7 +96,7 @@ class FFPuppet:
 
     def __init__(
         self,
-        debugger=DBG_NONE,
+        debugger=Debugger.NONE,
         use_profile=None,
         use_xvfb=False,
         working_path=None,
@@ -184,7 +191,7 @@ class FFPuppet:
                         LOG.debug("failed to scan log %r", entry.path)
                 yield entry.path
             # scan for Valgrind logs
-            elif self._dbg == self.DBG_VALGRIND and entry.name.startswith(
+            elif self._dbg == Debugger.VALGRIND and entry.name.startswith(
                 self._logs.PREFIX_VALGRIND
             ):
                 if entry.stat().st_size:
@@ -200,30 +207,30 @@ class FFPuppet:
                 pass
 
     @classmethod
-    def _dbg_sanity_check(cls, dbg_id):
+    def _dbg_sanity_check(cls, dbg):
         """Check requested debugger is supported and available.
 
         Args:
-            dbg_id (int): Debugger to sanity check.
+            dbg (Debugger): Debugger to sanity check.
 
         Returns:
             None
         """
-        if dbg_id == cls.DBG_GDB:
+        if dbg == Debugger.GDB:
             if not system().startswith("Linux"):
                 raise EnvironmentError("GDB is only supported on Linux")
             try:
                 check_output(["gdb", "--version"])
             except OSError:
                 raise EnvironmentError("Please install GDB") from None
-        elif dbg_id in (cls.DBG_PERNOSCO, cls.DBG_RR):
+        elif dbg in (Debugger.PERNOSCO, Debugger.RR):
             if not system().startswith("Linux"):
                 raise EnvironmentError("rr is only supported on Linux")
             try:
                 check_output(["rr", "--version"])
             except OSError:
                 raise EnvironmentError("Please install rr") from None
-        elif dbg_id == cls.DBG_VALGRIND:
+        elif dbg == Debugger.VALGRIND:
             if not system().startswith("Linux"):
                 raise EnvironmentError("Valgrind is only supported on Linux")
             try:
@@ -339,7 +346,7 @@ class FFPuppet:
             assert all(isinstance(x, str) for x in additional_args)
             cmd.extend(additional_args)
 
-        if self._dbg == self.DBG_VALGRIND:
+        if self._dbg == Debugger.VALGRIND:
             valgrind_cmd = [
                 "valgrind",
                 "-q",
@@ -370,7 +377,7 @@ class FFPuppet:
 
             cmd = valgrind_cmd + cmd
 
-        elif self._dbg == self.DBG_GDB:
+        elif self._dbg == Debugger.GDB:
             cmd = [
                 "gdb",
                 "-nx",
@@ -410,12 +417,12 @@ class FFPuppet:
                 "--args",
             ] + cmd
 
-        elif self._dbg in (self.DBG_PERNOSCO, self.DBG_RR):
+        elif self._dbg in (Debugger.PERNOSCO, Debugger.RR):
             rr_cmd = [
                 "rr",
                 "record",
             ]
-            if self._dbg == self.DBG_PERNOSCO:
+            if self._dbg == Debugger.PERNOSCO:
                 rr_cmd += [
                     "--chaos",
                     "--disable-cpuid-features-ext",
@@ -497,7 +504,7 @@ class FFPuppet:
             while True:
                 LOG.debug("%d crash report(s) found", len(crash_reports))
                 # wait until crash report files are closed
-                report_wait = 300 if self._dbg == self.DBG_RR else 90
+                report_wait = 300 if self._dbg == Debugger.RR else 90
                 if not wait_on_files(procs, crash_reports, timeout=report_wait):
                     LOG.warning("Crash reports still open after %ds", report_wait)
                     break
@@ -518,7 +525,7 @@ class FFPuppet:
         if self.is_running():
             LOG.debug("browser needs to be terminated")
             # when running under a debugger be less aggressive
-            self._terminate(pid, start_mode=1 if self._dbg == self.DBG_NONE else 0)
+            self._terminate(pid, start_mode=1 if self._dbg == Debugger.NONE else 0)
         # wait for any remaining processes to close
         if wait_procs(procs, timeout=1 if force_close else 30)[1]:
             LOG.warning("Some browser processes are still running!")
@@ -725,7 +732,7 @@ class FFPuppet:
                 "capability.policy.localfilelinks.checkloaduri.enabled": "'allAccess'",
                 "privacy.partition.network_state": "false",
             }
-            if self._dbg in (self.DBG_PERNOSCO, self.DBG_RR, self.DBG_VALGRIND):
+            if self._dbg in (Debugger.PERNOSCO, Debugger.RR, Debugger.VALGRIND):
                 # if the browser is running slowly socket reads can fail if this is > 0
                 prefs["network.http.speculative-parallel-limit"] = "0"
             append_prefs(self.profile, prefs)
@@ -738,11 +745,11 @@ class FFPuppet:
                 launch_args.append("-wait-for-browser")
             cmd = self.build_launch_cmd(bin_path, additional_args=launch_args)
 
-            if self._dbg in (self.DBG_PERNOSCO, self.DBG_RR):
+            if self._dbg in (Debugger.PERNOSCO, Debugger.RR):
                 if env_mod is None:
                     env_mod = dict()
                 env_mod["_RR_TRACE_DIR"] = self._logs.add_path(self._logs.PATH_RR)
-            elif self._dbg == self.DBG_VALGRIND:
+            elif self._dbg == Debugger.VALGRIND:
                 if env_mod is None:
                     env_mod = dict()
                 # https://developer.gimp.org/api/2.0/glib/glib-running.html#G_DEBUG
@@ -849,7 +856,7 @@ class FFPuppet:
             logs_only=logs_only,
             meta=meta,
             bin_path=self._bin_path,
-            rr_pack=self._dbg == self.DBG_RR,  # pernosco-submit performs packs
+            rr_pack=self._dbg == Debugger.RR,  # pernosco-submit performs packs
         )
 
     def wait(self, timeout=None):
