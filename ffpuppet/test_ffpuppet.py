@@ -19,7 +19,7 @@ import pytest
 from psutil import Process
 
 from .bootstrapper import Bootstrapper
-from .core import Debugger, FFPuppet
+from .core import Debugger, FFPuppet, Reason
 from .exceptions import (
     BrowserTerminatedError,
     BrowserTimeoutError,
@@ -94,7 +94,7 @@ def test_ffpuppet_01():
     with FFPuppet() as ffp:
         assert ffp._dbg == Debugger.NONE
         assert ffp.launches == 0
-        assert ffp.reason == ffp.RC_CLOSED
+        assert ffp.reason == Reason.CLOSED
         assert not ffp.is_running()
         with HTTPTestServer() as srv:
             ffp.launch(TESTFF_BIN, location=srv.get_addr())
@@ -105,7 +105,7 @@ def test_ffpuppet_01():
         assert ffp.is_healthy()
         assert ffp.reason is None
         ffp.close()
-        assert ffp.reason == ffp.RC_CLOSED
+        assert ffp.reason == Reason.CLOSED
         assert ffp._proc is None
         assert not ffp.is_running()
         assert not ffp.is_healthy()
@@ -191,7 +191,7 @@ def test_ffpuppet_06(mocker):
 
     class StubbedProc(FFPuppet):
         def close(self, **_):  # pylint: disable=arguments-differ
-            self.reason = self.RC_CLOSED
+            self.reason = Reason.CLOSED
 
         def launch(self):  # pylint: disable=arguments-differ
             self.reason = None
@@ -266,7 +266,7 @@ def test_ffpuppet_08(tmp_path):
                     break
                 time.sleep(0.1)
             ffp.close()
-        assert ffp.reason == ffp.RC_WORKER
+        assert ffp.reason == Reason.WORKER
         assert len(ffp.available_logs()) == 3
         logs = tmp_path / "logs"
         ffp.save_logs(str(logs))
@@ -306,7 +306,7 @@ def test_ffpuppet_10(tmp_path):
                     break
                 time.sleep(0.05)
             ffp.close()
-        assert ffp.reason == ffp.RC_WORKER
+        assert ffp.reason == Reason.WORKER
         assert len(ffp.available_logs()) == 3
         logs = tmp_path / "logs"
         ffp.save_logs(str(logs))
@@ -409,7 +409,7 @@ def test_ffpuppet_15(mocker, tmp_path):
         assert ffp._dbg == Debugger.GDB
         ffp.launch(TESTFF_BIN)
         ffp.close()
-        assert ffp.reason == ffp.RC_CLOSED
+        assert ffp.reason == Reason.CLOSED
         logs = tmp_path / "logs"
         ffp.save_logs(str(logs))
     log_data = (logs / "log_stderr.txt").read_bytes()
@@ -443,7 +443,7 @@ def test_ffpuppet_17(mocker, tmp_path):
         assert ffp._dbg == Debugger.VALGRIND
         ffp.launch(TESTFF_BIN)
         ffp.close()
-        assert ffp.reason == ffp.RC_CLOSED
+        assert ffp.reason == Reason.CLOSED
         logs = tmp_path / "logs"
         ffp.save_logs(str(logs))
     log_data = (logs / "log_stderr.txt").read_bytes()
@@ -509,7 +509,7 @@ def test_ffpuppet_21(tmp_path):
                 break
             time.sleep(0.1)
         ffp.close()
-        assert ffp.reason == ffp.RC_WORKER
+        assert ffp.reason == Reason.WORKER
         logs = tmp_path / "logs"
         ffp.save_logs(str(logs))
         logfiles = tuple(logs.iterdir())
@@ -560,7 +560,7 @@ def test_ffpuppet_22(tmp_path):
         assert not ffp.is_healthy()
         assert ffp.is_running()
         ffp.close()
-        assert ffp.reason == ffp.RC_ALERT
+        assert ffp.reason == Reason.ALERT
         logs = tmp_path / "logs"
         ffp.save_logs(str(logs))
         logfiles = tuple(logs.iterdir())
@@ -626,7 +626,7 @@ def test_ffpuppet_24(mocker, tmp_path):
         assert ffp._dbg == Debugger.RR
         ffp.launch(TESTFF_BIN)
         ffp.close()
-        assert ffp.reason == ffp.RC_CLOSED
+        assert ffp.reason == Reason.CLOSED
         logs = tmp_path / "logs"
         ffp.save_logs(str(logs))
     log_data = (logs / "log_stderr.txt").read_bytes()
@@ -924,7 +924,7 @@ def test_ffpuppet_32(mocker, tmp_path):
         ffp.close()
         assert ffp._proc is None
         assert ffp._logs.closed
-        assert ffp.reason == FFPuppet.RC_EXITED
+        assert ffp.reason == Reason.EXITED
     # process exited - exit code - crash
     with StubbedProc() as ffp:
         ffp.launch()
@@ -932,7 +932,7 @@ def test_ffpuppet_32(mocker, tmp_path):
         ffp.close()
         assert ffp._proc is None
         assert ffp._logs.closed
-        assert ffp.reason == FFPuppet.RC_ALERT
+        assert ffp.reason == Reason.ALERT
     # process running - no crash reports
     with StubbedProc() as ffp:
         ffp.launch()
@@ -940,7 +940,7 @@ def test_ffpuppet_32(mocker, tmp_path):
         ffp.close()
         assert ffp._proc is None
         assert ffp._logs.closed
-        assert ffp.reason == FFPuppet.RC_CLOSED
+        assert ffp.reason == Reason.CLOSED
     # process running - with crash reports, hang waiting to close
     (tmp_path / "fake_report1").touch()
     with StubbedProc() as ffp:
@@ -951,7 +951,7 @@ def test_ffpuppet_32(mocker, tmp_path):
         ffp.close()
         assert ffp._proc is None
         assert ffp._logs.closed
-        assert ffp.reason == FFPuppet.RC_ALERT
+        assert ffp.reason == Reason.ALERT
     # process running - with crash reports, multiple logs
     (tmp_path / "fake_report2").touch()
     with StubbedProc() as ffp:
@@ -981,7 +981,7 @@ def test_ffpuppet_32(mocker, tmp_path):
         ffp.close()
         assert ffp._proc is None
         assert ffp._logs.closed
-        assert ffp.reason == FFPuppet.RC_ALERT
+        assert ffp.reason == Reason.ALERT
 
 
 def test_ffpuppet_33():
@@ -996,4 +996,4 @@ def test_ffpuppet_33():
         assert ffp.is_healthy()
         assert san_log in ffp._logs.watching
         ffp.close()
-        assert ffp.reason == ffp.RC_CLOSED
+        assert ffp.reason == Reason.CLOSED

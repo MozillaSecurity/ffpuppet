@@ -13,7 +13,7 @@ from shutil import rmtree
 from tempfile import mkdtemp
 from time import sleep, strftime
 
-from .core import Debugger, FFPuppet
+from .core import Debugger, FFPuppet, Reason
 from .helpers import check_prefs
 
 LOG = getLogger(__name__)
@@ -268,7 +268,7 @@ def main(argv=None):  # pylint: disable=missing-docstring
         ffp.save_logs(log_path, logs_only=user_exit)
         if args.display_logs:
             LOG.info("Displaying logs...%s", dump_to_console(log_path))
-        if ffp.reason == ffp.RC_ALERT or args.save_all:
+        if ffp.reason == Reason.ALERT or args.save_all:
             LOG.info("Browser logs available here %r", abspath(log_path))
         else:
             rmtree(log_path)

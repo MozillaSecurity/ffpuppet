@@ -61,6 +61,20 @@ class Debugger(Enum):
     VALGRIND = 4
 
 
+@unique
+class Reason(Enum):
+    """Indicates why the browser process was terminated"""
+
+    # target crashed, aborted, triggered an assertion failure, etc...
+    ALERT = 0
+    # target was closed by call to FFPuppet close() or has not been launched
+    CLOSED = 1
+    # target exited
+    EXITED = 2
+    # target was closed by worker thread
+    WORKER = 3
+
+
 class FFPuppet:
     """FFPuppet manages launching and monitoring the browser process(es).
     This includes setting up the environment, collecting logs and some debugger support.
@@ -73,10 +87,6 @@ class FFPuppet:
     """
 
     LAUNCH_TIMEOUT_MIN = 10  # minimum amount of time to wait for the browser to launch
-    RC_ALERT = "ALERT"  # target crashed/aborted/triggered an assertion failure etc...
-    RC_CLOSED = "CLOSED"  # target was closed by call to FFPuppet close()
-    RC_EXITED = "EXITED"  # target exited
-    RC_WORKER = "WORKER"  # target was closed by worker thread
     VALGRIND_MIN_VERSION = 3.14  # minimum allowed version of Valgrind
 
     __slots__ = (
@@ -114,7 +124,7 @@ class FFPuppet:
         self._xvfb = None
         self._working_path = working_path
         self.profile = None  # path to profile
-        self.reason = self.RC_CLOSED  # why the target process was terminated
+        self.reason = Reason.CLOSED
 
         if use_xvfb:
             if not system().startswith("Linux"):
@@ -500,7 +510,7 @@ class FFPuppet:
         # set reason code
         crash_reports = set(self._crashreports(skip_benign=True))
         if crash_reports:
-            r_code = self.RC_ALERT
+            r_code = Reason.ALERT
             while True:
                 LOG.debug("%d crash report(s) found", len(crash_reports))
                 # wait until crash report files are closed
@@ -515,12 +525,12 @@ class FFPuppet:
                 LOG.debug("more reports have appeared")
                 crash_reports = new_reports
         elif self.is_running():
-            r_code = self.RC_CLOSED
+            r_code = Reason.CLOSED
         elif self._proc.poll() not in (0, -1, 1, -2):
-            r_code = self.RC_ALERT
+            r_code = Reason.ALERT
             LOG.debug("poll() returned %r", self._proc.poll())
         else:
-            r_code = self.RC_EXITED
+            r_code = Reason.EXITED
         # close processes
         if self.is_running():
             LOG.debug("browser needs to be terminated")
@@ -543,7 +553,7 @@ class FFPuppet:
                 LOG.debug("reviewing %d check(s)", len(self._checks))
                 for check in self._checks:
                     if check.message is not None:
-                        r_code = self.RC_WORKER
+                        r_code = Reason.WORKER
                         check.dump_log(
                             dst_fp=self._logs.add_log("ffp_worker_%s" % check.name)
                         )
@@ -576,7 +586,7 @@ class FFPuppet:
             finally:
                 self.profile = None
         finally:
-            LOG.debug("exit reason code %r", r_code)
+            LOG.debug("exit %s", r_code)
             self.reason = r_code
 
     def cpu_usage(self):
