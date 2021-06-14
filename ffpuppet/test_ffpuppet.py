@@ -756,11 +756,18 @@ def test_ffpuppet_28(tmp_path):
         cmd = ffp.build_launch_cmd("bin_path")
         assert len(cmd) > 2
         assert cmd[0] == "gdb"
+        # Pernosco
+        ffp._dbg = FFPuppet.DBG_PERNOSCO
+        cmd = ffp.build_launch_cmd("bin_path")
+        assert len(cmd) > 2
+        assert cmd[0] == "rr"
+        assert "--chaos" in cmd
         # RR
         ffp._dbg = FFPuppet.DBG_RR
         cmd = ffp.build_launch_cmd("bin_path")
         assert len(cmd) > 2
         assert cmd[0] == "rr"
+        assert "--chaos" not in cmd
         # Valgrind
         ffp._dbg = FFPuppet.DBG_VALGRIND
         try:

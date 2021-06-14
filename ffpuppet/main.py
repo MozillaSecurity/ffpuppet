@@ -158,9 +158,14 @@ def parse_args(argv=None):  # pylint: disable=missing-docstring
 
     if system().startswith("Linux"):
         dbg_group = parser.add_argument_group("Available Debuggers")
-        dbg_group.add_argument("--gdb", action="store_true", help="Use GDB")
-        dbg_group.add_argument("--rr", action="store_true", help="Use rr")
-        dbg_group.add_argument("--valgrind", action="store_true", help="Use Valgrind")
+        dbg_group.add_argument("--gdb", action="store_true", help="Use GDB.")
+        dbg_group.add_argument(
+            "--pernosco",
+            action="store_true",
+            help="Use rr. Trace intended to be submitted to Pernosco.",
+        )
+        dbg_group.add_argument("--rr", action="store_true", help="Use rr.")
+        dbg_group.add_argument("--valgrind", action="store_true", help="Use Valgrind.")
 
     args = parser.parse_args(argv)
 
@@ -187,10 +192,17 @@ def parse_args(argv=None):  # pylint: disable=missing-docstring
         parser.error("Invalid prefs.js file %r" % args.prefs)
     # NOTE: mutually_exclusive_group will fail if no arguments are added
     # so sum() enabled debuggers instead
-    use_gdb = getattr(args, "gdb", False)
-    use_rr = getattr(args, "rr", False)
-    use_valgrind = getattr(args, "valgrind", False)
-    if sum((use_gdb, use_rr, use_valgrind)) > 1:
+    if (
+        sum(
+            (
+                getattr(args, "gdb", False),
+                getattr(args, "pernosco", False),
+                getattr(args, "rr", False),
+                getattr(args, "valgrind", False),
+            )
+        )
+        > 1
+    ):
         parser.error("Only a single debugger can be enabled")
 
     return args
@@ -207,11 +219,13 @@ def main(argv=None):  # pylint: disable=missing-docstring
         log_fmt = "[%(asctime)s] %(message)s"
     basicConfig(format=log_fmt, datefmt=date_fmt, level=args.log_level)
 
-    if args.gdb:  # pragma: no cover
+    if getattr(args, "gdb", False):  # pragma: no cover
         debugger = FFPuppet.DBG_GDB
-    elif args.rr:  # pragma: no cover
+    elif getattr(args, "pernosco", False):  # pragma: no cover
+        debugger = FFPuppet.DBG_PERNOSCO
+    elif getattr(args, "rr", False):  # pragma: no cover
         debugger = FFPuppet.DBG_RR
-    elif args.valgrind:  # pragma: no cover
+    elif getattr(args, "valgrind", False):  # pragma: no cover
         debugger = FFPuppet.DBG_VALGRIND
     else:
         debugger = FFPuppet.DBG_NONE

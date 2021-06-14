@@ -186,12 +186,12 @@ def test_puppet_logger_07(mocker, tmp_path):
         plog.close()
         # test call to rr failing
         fake_ck.side_effect = OSError
-        plog.save_logs(str(tmp_path / "dest1"))
+        plog.save_logs(str(tmp_path / "dest1"), rr_pack=True)
         assert fake_ck.call_count == 1
         assert not plog._rr_packed
         # test call to rr passing
         fake_ck.side_effect = None
-        plog.save_logs(str(tmp_path / "dest2"))
+        plog.save_logs(str(tmp_path / "dest2"), rr_pack=True)
         assert fake_ck.call_count == 2
         assert plog._rr_packed
         # test 'taskcluster-build-task' copied
