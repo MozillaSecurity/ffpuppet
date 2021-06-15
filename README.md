@@ -58,13 +58,13 @@ Once installed FFPuppet can be run using the following command:
     python -m ffpuppet
 
 ```
-usage: __main__.py [-h] [-d] [--log-level LOG_LEVEL] [-e EXTENSION] [-p PREFS]
-                   [-P PROFILE] [-u URL] [--xvfb] [-a ABORT_TOKEN]
-                   [--launch-timeout LAUNCH_TIMEOUT] [-l LOGS]
-                   [--log-limit LOG_LIMIT] [-m MEMORY]
-                   [--poll-interval POLL_INTERVAL] [--save-all] [--gdb] [--rr]
-                   [--valgrind]
-                   binary
+usage: ffpuppet [-h] [-d] [--log-level LOG_LEVEL] [-e EXTENSION] [-p PREFS]
+                [-P PROFILE] [-u URL] [--xvfb] [-a ABORT_TOKEN]
+                [--launch-timeout LAUNCH_TIMEOUT] [-l LOGS]
+                [--log-limit LOG_LIMIT] [-m MEMORY]
+                [--poll-interval POLL_INTERVAL] [--save-all]
+                [--gdb | --pernosco | --rr | --valgrind]
+                binary
 
 FFPuppet - Firefox process launcher and log collector. Happy bug hunting!
 
@@ -89,7 +89,7 @@ Browser Configuration:
                         target profile will be used. (default: temporary
                         profile)
   -u URL, --url URL     Server URL or path to local file to load.
-  --xvfb                Use Xvfb (Linux only)
+  --xvfb                Use Xvfb. (Linux only)
 
 Issue Detection & Reporting:
   -a ABORT_TOKEN, --abort-token ABORT_TOKEN
@@ -112,9 +112,11 @@ Issue Detection & Reporting:
                         an issue is detected.
 
 Available Debuggers:
-  --gdb                 Use GDB (Linux only)
-  --rr                  Use rr (Linux only)
-  --valgrind            Use Valgrind (Linux only)
+  --gdb                 Use GDB. (Linux only)
+  --pernosco            Use rr. Trace intended to be submitted to Pernosco. (Linux only)
+  --rr                  Use rr. (Linux only)
+  --valgrind            Use Valgrind. (Linux only)
+
 ```
 
 ##### Replaying a test case
