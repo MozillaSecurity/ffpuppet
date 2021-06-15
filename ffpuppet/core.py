@@ -47,7 +47,7 @@ from .puppet_logger import PuppetLogger
 LOG = getLogger(__name__)
 
 __author__ = "Tyson Smith"
-__all__ = ("FFPuppet",)
+__all__ = ("Debugger", "FFPuppet", "Reason")
 
 
 @unique
@@ -226,6 +226,7 @@ class FFPuppet:
         Returns:
             None
         """
+        LOG.debug("checking %s support", dbg)
         if dbg == Debugger.GDB:
             if not system().startswith("Linux"):
                 raise EnvironmentError("GDB is only supported on Linux")
