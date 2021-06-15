@@ -105,7 +105,7 @@ def parse_args(argv=None):  # pylint: disable=missing-docstring
         "-u", "--url", help="Server URL or path to local file to load."
     )
     if system().startswith("Linux"):
-        cfg_group.add_argument("--xvfb", action="store_true", help="Use Xvfb")
+        cfg_group.add_argument("--xvfb", action="store_true", help="Use Xvfb.")
 
     report_group = parser.add_argument_group("Issue Detection & Reporting")
     report_group.add_argument(
@@ -127,7 +127,7 @@ def parse_args(argv=None):  # pylint: disable=missing-docstring
         "-l",
         "--logs",
         default=".",
-        help="Location to save browser logs."
+        help="Location to save browser logs. "
         "A sub-directory containing the browser logs will be created.",
     )
     report_group.add_argument(
