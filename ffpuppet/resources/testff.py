@@ -63,9 +63,11 @@ def main():  # pylint: disable=missing-docstring
     target_url = None
     if url:
         try:
+            # pylint: disable=consider-using-with
             conn = urlopen(url)
         except URLError as req_err:
             # can't redirect to file:// from http://
+            # pylint: disable=consider-using-with
             conn = urlopen(req_err.reason.split("'")[1])
         try:
             target_url = conn.geturl()
