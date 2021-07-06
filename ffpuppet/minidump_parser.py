@@ -30,10 +30,7 @@ class MinidumpParser:  # pylint: disable=missing-docstring
     )
 
     def __init__(self, scan_path, record_failures=True, working_path=None):
-        self.md_files = list()
-        for entry in scandir(scan_path):
-            if entry.name.endswith(".dmp"):
-                self.md_files.append(entry.path)
+        self.md_files = [x.path for x in scandir(scan_path) if x.name.endswith(".dmp")]
         self.symbols_path = None
         self._include_raw = getenv("FFP_DEBUG_MDSW") is not None
         self._record_failures = record_failures  # mdsw failure reporting
