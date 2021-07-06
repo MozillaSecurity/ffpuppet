@@ -111,12 +111,14 @@ class MinidumpParser:  # pylint: disable=missing-docstring
                 log_fp.write(line)
             LOG.debug("collected register info: %r", found_registers)
 
-    def _read_stacktrace(self, dump_file, log_fp, raw_fp=None):
+    def _read_stacktrace(self, dump_file, log_fp, raw_fp=None, limit=MDSW_MAX_STACK):
         """Use minidump_stackwalk to retrieve stack trace from dump_file.
 
         Args:
             dump_file (str): Path to dmp file.
-            out_fp (file): File to write output to.
+            log_fp (file): File to write output to.
+            raw_fp (file): File to write unprocessed output to.
+            limit (int): Maximum number of lines to include in stack trace.
 
         Returns:
             None
@@ -148,11 +150,9 @@ class MinidumpParser:  # pylint: disable=missing-docstring
 
                 log_fp.write(line)
                 line_count += 1
-                if line_count >= self.MDSW_MAX_STACK:
-                    LOG.warning(
-                        "MDSW_MAX_STACK (%d) limit reached", self.MDSW_MAX_STACK
-                    )
-                    log_fp.write(b"WARNING: Hit line output limit!")
+                if line_count >= limit:
+                    LOG.warning("Stack size limit reached (%d)", limit)
+                    log_fp.write(b"WARNING: Hit stack size output limit!")
                     break
 
     def collect_logs(self, cb_create_log, symbols_path):

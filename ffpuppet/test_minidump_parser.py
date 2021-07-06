@@ -113,16 +113,14 @@ def test_minidump_parser_04(mocker, tmp_path):
 
     mocker.patch.object(MinidumpParser, "_call_mdsw", side_effect=fake_call_mdsw)
     mdp = MinidumpParser(str(tmp_path))
-    MinidumpParser.MDSW_MAX_STACK = 7
     with (tmp_path / "md_out").open("w+b") as log_fp:
-        mdp._read_stacktrace("fake.dmp", log_fp)
+        mdp._read_stacktrace("fake.dmp", log_fp, limit=7)
         log_fp.seek(0)
         md_lines = log_fp.readlines()
     assert len(md_lines) == 8  # only the interesting stack info should be in here
-    assert md_lines[-1].startswith(b"WARNING: Hit line output limit!")
+    assert md_lines[-1].startswith(b"WARNING: Hit stack size output limit!")
     assert md_lines[-2].startswith(b"0|2|")
     # test raw_fp set
-    MinidumpParser.MDSW_MAX_STACK = 150
     with (tmp_path / "md_out").open("w+b") as log_fp:
         with (tmp_path / "md_raw").open("w+b") as raw_fp:
             mdp._read_stacktrace("fake.dmp", log_fp, raw_fp=raw_fp)
