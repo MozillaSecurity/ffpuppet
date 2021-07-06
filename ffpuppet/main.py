@@ -263,7 +263,10 @@ def main(argv=None):  # pylint: disable=missing-docstring
     finally:
         LOG.info("Shutting down...")
         ffp.close()
-        LOG.info("Firefox process is closed. (Reason: %r)", ffp.reason)
+        if ffp.reason is not None:
+            LOG.info("Firefox process is closed. (Reason: %s)", ffp.reason.name)
+        else:
+            LOG.error("FFPuppet.close() failed")
         log_path = mkdtemp(prefix=strftime("%Y%m%d-%H%M%S_ffp_logs_"), dir=args.logs)
         ffp.save_logs(log_path, logs_only=user_exit)
         if args.display_logs:

@@ -4,82 +4,87 @@
 # License, v. 2.0. If a copy of the MPL was not distributed with this file,
 # You can obtain one at http://mozilla.org/MPL/2.0/.
 
-import pytest
+from pytest import mark, raises
 
+from .core import Reason
 from .main import dump_to_console, main, parse_args
 
 
-def test_main_01(mocker, tmp_path):
-    """test main() with FFPuppet exit"""
+@mark.parametrize(
+    "reason, user_exit, extra_args",
+    [
+        # browser exit
+        (Reason.EXITED, False, ["-d", "--save-all"]),
+        # browser exit - more flags
+        (Reason.EXITED, False, ["-a", "token", "--log-level", "DEBUG"]),
+        # browser crash
+        (Reason.ALERT, False, []),
+        # user exit
+        (Reason.CLOSED, True, []),
+        # exception
+        (None, False, []),
+    ],
+)
+def test_main_01(mocker, tmp_path, reason, user_exit, extra_args):
+    """test main()"""
     fake_ffp = mocker.patch("ffpuppet.main.FFPuppet", autospec=True)
     fake_ffp.return_value.get_pid.return_value = 12345
-    fake_ffp.return_value.is_healthy.return_value = False
+    fake_ffp.return_value.is_healthy.return_value = user_exit
     fake_ffp.return_value.profile = str(tmp_path)
-    fake_ffp.return_value.reason = "EXITED"
+    fake_ffp.return_value.reason = reason
+    mocker.patch("ffpuppet.main.sleep", autospec=True, side_effect=KeyboardInterrupt)
     out_logs = tmp_path / "logs"
     out_logs.mkdir()
     prefs = tmp_path / "prefs.js"
     prefs.touch()
     fake_bin = tmp_path / "fake.bin"
     fake_bin.touch()
-    main([str(fake_bin), "-d", "-l", str(out_logs), "-p", str(prefs), "--save-all"])
-    assert fake_ffp.return_value.add_abort_token.call_count == 0
+    args = [str(fake_bin), "-l", str(out_logs), "-p", str(prefs)]
+    main(args + extra_args)
+    if "-a" in extra_args:
+        assert fake_ffp.return_value.add_abort_token.call_count == 1
+    else:
+        assert fake_ffp.return_value.add_abort_token.call_count == 0
     assert fake_ffp.return_value.get_pid.call_count == 1
     assert fake_ffp.return_value.is_healthy.call_count == 1
     assert fake_ffp.return_value.close.call_count == 1
-    assert fake_ffp.return_value.save_logs.call_count == 1
-    assert fake_ffp.return_value.clean_up.call_count == 1
-
-
-def test_main_02(mocker, tmp_path):
-    """test main() with user exit"""
-    fake_ffp = mocker.patch("ffpuppet.main.FFPuppet", autospec=True)
-    fake_ffp.return_value.get_pid.return_value = 12345
-    fake_ffp.return_value.profile = str(tmp_path)
-    fake_ffp.return_value.reason = "CLOSED"
-    fake_sleep = mocker.patch("ffpuppet.main.sleep", autospec=True)
-    fake_sleep.side_effect = KeyboardInterrupt
-    fake_bin = tmp_path / "fake.bin"
-    fake_bin.touch()
-    main([str(fake_bin), "-l", str(tmp_path), "-a", "token", "--log-level", "DEBUG"])
-    assert fake_ffp.return_value.add_abort_token.call_count == 1
-    assert fake_ffp.return_value.get_pid.call_count == 1
-    assert fake_ffp.return_value.is_healthy.call_count == 1
-    assert fake_ffp.return_value.close.call_count == 1
-    assert fake_ffp.return_value.save_logs.call_count == 1
+    if "--save-all" in extra_args or Reason.ALERT:
+        assert fake_ffp.return_value.save_logs.call_count == 1
+    else:
+        assert fake_ffp.return_value.save_logs.call_count == 0
     assert fake_ffp.return_value.clean_up.call_count == 1
 
 
 def test_parse_args_01(tmp_path):
     """test parse_args()"""
-    with pytest.raises(SystemExit):
+    with raises(SystemExit):
         parse_args(["-h"])
     # invalid/missing binary
-    with pytest.raises(SystemExit):
+    with raises(SystemExit):
         parse_args(["fake_bin"])
     fake_bin = tmp_path / "fake.bin"
     fake_bin.touch()
     # invalid log-limit
-    with pytest.raises(SystemExit):
+    with raises(SystemExit):
         parse_args([str(fake_bin), "--log-limit", "-1"])
     # invalid memory limit
-    with pytest.raises(SystemExit):
+    with raises(SystemExit):
         parse_args([str(fake_bin), "--memory", "-1"])
     # missing prefs
-    with pytest.raises(SystemExit):
+    with raises(SystemExit):
         parse_args([str(fake_bin), "-p", str(tmp_path / "missing")])
     # missing extension
-    with pytest.raises(SystemExit):
+    with raises(SystemExit):
         parse_args([str(fake_bin), "-e", str(tmp_path / "missing")])
     # multiple debuggers
-    with pytest.raises(SystemExit):
+    with raises(SystemExit):
         parse_args([str(fake_bin), "--gdb", "--valgrind"])
     # invalid log path
     (tmp_path / "junk.log").touch()
-    with pytest.raises(SystemExit):
+    with raises(SystemExit):
         parse_args([str(fake_bin), "--logs", "/missing/path/"])
     # invalid log level
-    with pytest.raises(SystemExit):
+    with raises(SystemExit):
         parse_args([str(fake_bin), "--log-level", "bad"])
     # success
     assert parse_args([str(fake_bin)])
