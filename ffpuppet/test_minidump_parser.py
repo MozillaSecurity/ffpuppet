@@ -7,7 +7,7 @@
 
 from os import SEEK_END
 
-from pytest import raises
+from pytest import mark, raises
 
 from .minidump_parser import MinidumpParser, process_minidumps
 
@@ -159,32 +159,53 @@ def test_minidump_parser_05(mocker, tmp_path):
     assert callback.call_count == 2
 
 
-def test_minidump_parser_06(mocker, tmp_path):
+@mark.parametrize(
+    "call_result, record, stat_result, log_count, dmp_exists",
+    [
+        # minidump_stackwalk succeeded - no failures
+        (0, False, None, 0, False),
+        # minidump_stackwalk failed - don't record mdsw error
+        (1, False, 123, 0, False),
+        # minidump_stackwalk failed - record mdsw error results
+        (1, True, 123, 3, True),
+        # minidump_stackwalk failed - stat raises
+        (1, False, OSError, 0, False),
+    ],
+)
+def test_minidump_parser_06(
+    mocker, tmp_path, call_result, record, stat_result, log_count, dmp_exists
+):
     """test MinidumpParser._call_mdsw()"""
     fake_call = mocker.patch(
-        "ffpuppet.minidump_parser.call", autospec=True, return_value=0
+        "ffpuppet.minidump_parser.call", autospec=True, return_value=call_result
     )
+    # create path for error reports
     working = tmp_path / "fake_tmpd"
     working.mkdir()
-    mocker.patch("ffpuppet.minidump_parser.mkdtemp", return_value=str(working))
+    mocker.patch(
+        "ffpuppet.minidump_parser.mkdtemp", autospec=True, return_value=str(working)
+    )
+    fake_stat = mocker.patch("ffpuppet.minidump_parser.stat", autospec=True)
+    if isinstance(stat_result, int):
+        fake_stat.return_value.st_size.return_value = stat_result
+    else:
+        fake_stat.side_effect = stat_result
+    # create dmp file
     dmp_path = tmp_path / "dmps"
     dmp_path.mkdir()
-    mdp = MinidumpParser(str(dmp_path))
-    fake_file = mocker.mock_open()
     dmp_file = dmp_path / "test.dmp"
-    dmp_file.touch()
-    mdp._call_mdsw(str(dmp_file), fake_file())
-    # test minidump_stackwalk failures
-    fake_call.call_count = 0
-    fake_file.return_value.seek.call_count = 0
-    mdp._record_failures = True
+    dmp_file.write_text("fakedmp")
+    # create MinidumpParser
+    mdp = MinidumpParser(str(dmp_path), record_failures=record)
     mdp.symbols_path = "sympath"
-    fake_call.return_value = 1
-    with raises(RuntimeError, match="MDSW Error"):
-        mdp._call_mdsw(str(dmp_file), fake_file())
+    if call_result != 0:
+        with raises(RuntimeError, match="MDSW Error"):
+            mdp._call_mdsw(str(dmp_file), mocker.mock_open()())
+    else:
+        mdp._call_mdsw(str(dmp_file), mocker.mock_open()())
     assert fake_call.call_count == 1
-    assert len(tuple(working.glob("**/mdsw_*.txt"))) == 3
-    assert any(working.glob("**/test.dmp"))
+    assert len(tuple(working.glob("**/mdsw_*.txt"))) == log_count
+    assert any(working.glob("**/test.dmp")) == dmp_exists
 
 
 def test_minidump_parser_07(mocker):

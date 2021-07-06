@@ -4,7 +4,7 @@
 """ffpuppet minidump parsing module"""
 
 from logging import getLogger
-from os import getenv, scandir
+from os import getenv, scandir, stat
 from os.path import getmtime, isdir
 from os.path import join as pathjoin
 from shutil import copy, copyfileobj
@@ -76,7 +76,13 @@ class MinidumpParser:  # pylint: disable=missing-docstring
                     with open(pathjoin(report_dir, "mdsw_stdout.txt"), "wb") as log_fp:
                         copyfileobj(out_fp, log_fp, 0x10000)
                     LOG.warning("mdsw logs can be found here %r", report_dir)
-                    raise RuntimeError("MDSW Error")
+                # collect size of dmp file to help diagnose mdsw issues
+                try:
+                    dmp_size = stat(dump_file).st_size
+                except OSError:
+                    dmp_size = None
+                raise RuntimeError("MDSW Error (dmp size: %r)" % (dmp_size,))
+
         out_fp.seek(0)
 
     def _read_registers(self, dump_file, log_fp):
