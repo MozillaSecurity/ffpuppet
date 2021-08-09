@@ -560,6 +560,7 @@ class FFPuppet:
                         )
                 # collect logs (excluding minidumps)
                 for fname in self._crashreports(skip_md=True, skip_benign=False):
+                    # pylint: disable=consider-using-with
                     self._logs.add_log(basename(fname), open(fname, "rb"))
                 # check for minidumps in the profile and dump them if possible
                 process_minidumps(
