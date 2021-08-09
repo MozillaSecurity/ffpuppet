@@ -238,6 +238,8 @@ def configure_sanitizers(env, target_dir, log_path):
     lsan_config.load_options(env.get("LSAN_OPTIONS"))
     lsan_config.add("max_leaks", "1")
     lsan_config.add("print_suppressions", "false")
+    # helpful with rr/Pernosco sessions
+    lsan_config.add("report_objects", "1")
     env["LSAN_OPTIONS"] = lsan_config.options
 
     # setup Thread Sanitizer options if not set manually
