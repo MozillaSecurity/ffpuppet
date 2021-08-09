@@ -873,7 +873,7 @@ class FFPuppet:
             logs_only=logs_only,
             meta=meta,
             bin_path=self._bin_path,
-            rr_pack=self._dbg == Debugger.RR,  # pernosco-submit performs packs
+            rr_pack=self._dbg in (Debugger.PERNOSCO, Debugger.RR),
         )
 
     def wait(self, timeout=None):
