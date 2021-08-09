@@ -571,7 +571,7 @@ class FFPuppet:
                 )
                 if self._logs.get_fp("stderr"):
                     self._logs.get_fp("stderr").write(
-                        ("[ffpuppet] Reason code: %s\n" % r_code).encode("utf-8")
+                        ("[ffpuppet] Reason code: %s\n" % r_code.name).encode("utf-8")
                     )
         # reset remaining to closed state
         try:
@@ -588,7 +588,7 @@ class FFPuppet:
             finally:
                 self.profile = None
         finally:
-            LOG.debug("exit %s", r_code)
+            LOG.debug("reason code: %s", r_code.name)
             self.reason = r_code
 
     def cpu_usage(self):
@@ -634,7 +634,7 @@ class FFPuppet:
                   in a valid functioning state otherwise False.
         """
         if self.reason is not None:
-            LOG.debug("reason is set to %r", self.reason)
+            LOG.debug("reason is set to %r", self.reason.name)
             return False
         if not self.is_running():
             LOG.debug("is_running() returned False")
