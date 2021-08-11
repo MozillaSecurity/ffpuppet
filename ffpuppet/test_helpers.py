@@ -14,7 +14,7 @@ import psutil
 import pytest
 
 from .helpers import (
-    SanitizerConfig,
+    SanitizerOptions,
     append_prefs,
     check_prefs,
     configure_sanitizers,
@@ -191,7 +191,7 @@ def test_helpers_04(tmp_path):
 
     def parse(opt_str):
         opts = dict()
-        for entry in SanitizerConfig.re_delim.split(opt_str):
+        for entry in SanitizerOptions.re_delim.split(opt_str):
             try:
                 key, value = entry.split("=", maxsplit=1)
             except ValueError:

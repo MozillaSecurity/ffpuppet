@@ -34,7 +34,7 @@ __all__ = (
 )
 
 
-class SanitizerConfig:  # pylint: disable=missing-docstring
+class SanitizerOptions:  # pylint: disable=missing-docstring
     re_delim = re_compile(r":(?![\\|/])")
 
     __slots__ = ("_options",)
@@ -206,7 +206,7 @@ def configure_sanitizers(env, target_dir, log_path):
 
     # setup Address Sanitizer options if not set manually
     # https://github.com/google/sanitizers/wiki/AddressSanitizerFlags
-    asan_config = SanitizerConfig()
+    asan_config = SanitizerOptions()
     asan_config.load_options(env.get("ASAN_OPTIONS"))
     for flag in common_flags:
         asan_config.add(*flag)
@@ -234,7 +234,7 @@ def configure_sanitizers(env, target_dir, log_path):
 
     # setup Leak Sanitizer options if not set manually
     # https://github.com/google/sanitizers/wiki/AddressSanitizerLeakSanitizer
-    lsan_config = SanitizerConfig()
+    lsan_config = SanitizerOptions()
     lsan_config.load_options(env.get("LSAN_OPTIONS"))
     lsan_config.add("max_leaks", "1")
     lsan_config.add("print_suppressions", "false")
@@ -243,7 +243,7 @@ def configure_sanitizers(env, target_dir, log_path):
     env["LSAN_OPTIONS"] = lsan_config.options
 
     # setup Thread Sanitizer options if not set manually
-    tsan_config = SanitizerConfig()
+    tsan_config = SanitizerOptions()
     tsan_config.load_options(env.get("TSAN_OPTIONS"))
     tsan_config.add("halt_on_error", "1")
     if "log_path" in tsan_config:
@@ -254,7 +254,7 @@ def configure_sanitizers(env, target_dir, log_path):
     env["TSAN_OPTIONS"] = tsan_config.options
 
     # setup Undefined Behavior Sanitizer options if not set manually
-    ubsan_config = SanitizerConfig()
+    ubsan_config = SanitizerOptions()
     ubsan_config.load_options(env.get("UBSAN_OPTIONS"))
     for flag in common_flags:
         ubsan_config.add(*flag)
