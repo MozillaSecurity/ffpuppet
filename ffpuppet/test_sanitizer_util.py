@@ -51,6 +51,31 @@ def test_sanitizer_options_01(init, add, result, overwrite):
 
 
 def test_sanitizer_options_02():
+    """test SanitizerOptions() - get() and pop()"""
+    opts = SanitizerOptions()
+    assert opts.get("missing") is None
+    assert opts.pop("missing") is None
+    opts.add("exists", "1")
+    assert opts.pop("exists") == "1"
+    assert opts.get("exists") is None
+
+
+def test_sanitizer_options_03(tmp_path):
+    """test SanitizerOptions() - check_path()"""
+    opts = SanitizerOptions()
+    # test missing key
+    assert opts.check_path("file")
+    # test exists
+    file = tmp_path / "file.bin"
+    file.touch()
+    opts.add("file", "'%s'" % (str(file),))
+    assert opts.check_path("file")
+    # test missing file
+    file.unlink()
+    assert not opts.check_path("file")
+
+
+def test_sanitizer_options_04():
     """test SanitizerOptions.is_quoted()"""
     assert SanitizerOptions.is_quoted("'quoted'")
     assert SanitizerOptions.is_quoted('"quoted"')
