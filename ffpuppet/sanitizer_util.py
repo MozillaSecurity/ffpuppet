@@ -60,10 +60,11 @@ class SanitizerOptions:  # pylint: disable=missing-docstring
         Returns:
             bool: True if token is quoted otherwise False.
         """
-        if token.startswith("'") and token.endswith("'"):
-            return True
-        if token.startswith('"') and token.endswith('"'):
-            return True
+        if len(token) > 1:
+            if token.startswith("'") and token.endswith("'"):
+                return True
+            if token.startswith('"') and token.endswith('"'):
+                return True
         return False
 
     def load_options(self, options):
@@ -76,8 +77,6 @@ class SanitizerOptions:  # pylint: disable=missing-docstring
             None
         """
         self._options.clear()
-        if not options:
-            return
         for option in self.re_delim.split(options):
             try:
                 self.add(*option.split("=", maxsplit=1))
