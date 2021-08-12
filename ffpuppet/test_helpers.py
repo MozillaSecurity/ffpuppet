@@ -247,7 +247,7 @@ def test_helpers_04(tmp_path):
     assert ubsan_opts["log_path"] == "'blah'"
     # test missing suppression file
     env = {"ASAN_OPTIONS": "suppressions=not_a_file"}
-    with pytest.raises(IOError, match=r"not_a_file' \(suppressions\) does not exist"):
+    with pytest.raises(AssertionError, match="missing suppressions file"):
         configure_sanitizers(env, str(tmp_path), "blah")
     # unquoted path containing ':'
     env = {"ASAN_OPTIONS": "strip_path_prefix=x:\\foo\\bar"}
@@ -279,10 +279,6 @@ def test_helpers_04(tmp_path):
     asan_opts = parse(env["ASAN_OPTIONS"])
     assert "external_symbolizer_path" in asan_opts
     assert asan_opts["external_symbolizer_path"].strip("'") == str(llvm_sym_bin)
-    # test unbalanced quotes
-    env = {"ASAN_OPTIONS": "test='a"}
-    with pytest.raises(AssertionError, match=r"unbalanced quotes on"):
-        configure_sanitizers(env, str(tmp_path), "blah")
     # test malformed option pair
     env = {"ASAN_OPTIONS": "a=b=c:x"}
     configure_sanitizers(env, str(tmp_path), "blah")

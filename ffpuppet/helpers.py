@@ -124,6 +124,7 @@ def configure_sanitizers(env, target_dir, log_path):
     # https://github.com/google/sanitizers/wiki/AddressSanitizerFlags
     asan_config = SanitizerOptions()
     asan_config.load_options(env.get("ASAN_OPTIONS"))
+    assert asan_config.check_path("suppressions"), "missing suppressions file"
     for flag in common_flags:
         asan_config.add(*flag)
     # different defaults per OS
@@ -152,6 +153,7 @@ def configure_sanitizers(env, target_dir, log_path):
     # https://github.com/google/sanitizers/wiki/AddressSanitizerLeakSanitizer
     lsan_config = SanitizerOptions()
     lsan_config.load_options(env.get("LSAN_OPTIONS"))
+    assert lsan_config.check_path("suppressions"), "missing suppressions file"
     lsan_config.add("max_leaks", "1")
     lsan_config.add("print_suppressions", "false")
     # helpful with rr/Pernosco sessions
@@ -161,6 +163,7 @@ def configure_sanitizers(env, target_dir, log_path):
     # setup Thread Sanitizer options if not set manually
     tsan_config = SanitizerOptions()
     tsan_config.load_options(env.get("TSAN_OPTIONS"))
+    assert tsan_config.check_path("suppressions"), "missing suppressions file"
     tsan_config.add("halt_on_error", "1")
     if "log_path" in tsan_config:
         LOG.warning(
@@ -172,6 +175,7 @@ def configure_sanitizers(env, target_dir, log_path):
     # setup Undefined Behavior Sanitizer options if not set manually
     ubsan_config = SanitizerOptions()
     ubsan_config.load_options(env.get("UBSAN_OPTIONS"))
+    assert ubsan_config.check_path("suppressions"), "missing suppressions file"
     for flag in common_flags:
         ubsan_config.add(*flag)
     if "log_path" in ubsan_config:

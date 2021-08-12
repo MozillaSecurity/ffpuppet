@@ -3,7 +3,7 @@
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
 """ffpuppet sanitizer utilities"""
 from logging import getLogger
-from os.path import abspath, expanduser, isfile
+from os.path import exists
 from re import compile as re_compile
 
 LOG = getLogger(__name__)
@@ -38,17 +38,36 @@ class SanitizerOptions:  # pylint: disable=missing-docstring
         assert isinstance(value, str)
         if ":" in value or " " in value:
             assert self.is_quoted(value), "%s (%s) must be quoted" % (value, flag)
-        elif value and (
-            value[0] == "'" or value[0] == '"' or value[-1] == "'" or value[-1] == '"'
-        ):
-            assert self.is_quoted(value), "unbalanced quotes on %s (%s)" % (value, flag)
-        # sanity check paths
-        if flag in ("external_symbolizer_path", "suppressions"):
-            path = abspath(expanduser(value.strip("'\"")))
-            if not isfile(path):
-                raise IOError("%r (%s) does not exist" % (path, flag))
         if flag not in self._options or overwrite:
             self._options[flag] = value
+
+    def check_path(self, flag):
+        """Check path exists on disk.
+        Only indicate failure if flag exists and path does not.
+
+        Args:
+            flag (str): Flags to set.
+
+        Returns:
+            bool: False if the flag exists and the path does not otherwise False
+        """
+        if flag in self._options:
+            value = self._options[flag]
+            if self.is_quoted(value):
+                value = value[1:-1]
+            return exists(value)
+        return True
+
+    def get(self, flag):
+        """Get sanitizer flag.
+
+        Args:
+            flag (str): Flags to retrieve.
+
+        Returns:
+            str: Value of given flag or None
+        """
+        return self._options.get(flag, None)
 
     @staticmethod
     def is_quoted(token):
@@ -77,11 +96,12 @@ class SanitizerOptions:  # pylint: disable=missing-docstring
             None
         """
         self._options.clear()
-        for option in self.re_delim.split(options):
-            try:
-                self.add(*option.split("=", maxsplit=1))
-            except TypeError:
-                LOG.warning("Malformed option %r", option)
+        if options:
+            for option in self.re_delim.split(options):
+                try:
+                    self.add(*option.split("=", maxsplit=1))
+                except TypeError:
+                    LOG.warning("Malformed option %r", option)
 
     @property
     def options(self):
@@ -94,3 +114,14 @@ class SanitizerOptions:  # pylint: disable=missing-docstring
             str: Colon separated list of options.
         """
         return ":".join("=".join(kv) for kv in self._options.items())
+
+    def pop(self, flag):
+        """Pop sanitizer flag.
+
+        Args:
+            flag (str): Flags to retrieve.
+
+        Returns:
+            str: Value of given flag or None
+        """
+        return self._options.pop(flag, None)
