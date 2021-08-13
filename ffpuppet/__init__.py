@@ -6,6 +6,7 @@
 
 from .core import Debugger, FFPuppet, Reason
 from .exceptions import BrowserTerminatedError, BrowserTimeoutError, LaunchError
+from .sanitizer_util import SanitizerOptions
 
 __all__ = (
     "Debugger",
@@ -14,5 +15,6 @@ __all__ = (
     "BrowserTimeoutError",
     "BrowserTerminatedError",
     "LaunchError",
+    "SanitizerOptions",
 )
 __author__ = "Tyson Smith"
