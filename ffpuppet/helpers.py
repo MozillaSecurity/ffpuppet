@@ -77,16 +77,20 @@ def check_prefs(prof_prefs, input_prefs):
     return not missing_prefs
 
 
-def configure_sanitizers(env, target_dir, log_path):
-    """Update *SAN_OPTIONS entries in env.
+def _configure_sanitizers(env, target_dir, log_path):
+    """Copy environment and update default values in *SAN_OPTIONS entries.
+    These values are only updated if they are not provided, with the exception of
+    'log_path'. 'log_path' is used by FFPuppet to detect results.
 
     Args:
-        target_dir (str): Directory containing llvm-symbolizer.
+        env (dict): Current environment.
+        target_dir (str): Directory containing browser binary.
         log_path (str): Location to write sanitizer logs to.
 
     Returns:
-        None
+        dict: Environment with *SAN_OPTIONS defaults set.
     """
+    env = dict(env)
     # https://github.com/google/sanitizers/wiki/SanitizerCommonFlags
     common_flags = [
         ("abort_on_error", "false"),
@@ -104,23 +108,24 @@ def configure_sanitizers(env, target_dir, log_path):
         ("soft_rss_limit_mb", "5000"),
         ("symbolize", "true"),
     ]
-    if system().startswith("Windows"):
-        symbolizer_bin = "llvm-symbolizer.exe"
+    # set llvm-symbolizer path
+    if env.get("ASAN_SYMBOLIZER_PATH"):
+        # *SAN_OPTIONS=external_symbolizer_path takes priority if it is defined in env
+        llvm_sym = env.get("ASAN_SYMBOLIZER_PATH")
     else:
-        symbolizer_bin = "llvm-symbolizer"
-    # use packaged llvm-symbolizer if available
-    if isfile(pathjoin(target_dir, symbolizer_bin)):
-        common_flags.append(
-            (
-                "external_symbolizer_path",
-                "'%s'" % (pathjoin(target_dir, symbolizer_bin),),
-            )
+        # used packaged location
+        bin_name = "llvm-symbolizer%s" % (
+            ".exe" if system().startswith("Windows") else "",
         )
+        llvm_sym = pathjoin(target_dir, "".join(bin_name))
+    if isfile(llvm_sym):
+        # add *SAN_OPTIONS=external_symbolizer_path
+        common_flags.append(("external_symbolizer_path", "'%s'" % (llvm_sym,)))
     else:
         # assume system llvm-symbolizer will be used
-        LOG.debug("llvm-symbolizer not found in %r", target_dir)
+        LOG.debug("llvm-symbolizer not found (%s)", llvm_sym)
 
-    # setup Address Sanitizer options if not set manually
+    # setup Address Sanitizer options ONLY if not set manually in environment
     # https://github.com/google/sanitizers/wiki/AddressSanitizerFlags
     asan_config = SanitizerOptions()
     asan_config.load_options(env.get("ASAN_OPTIONS"))
@@ -149,7 +154,7 @@ def configure_sanitizers(env, target_dir, log_path):
     asan_config.add("strict_string_checks", "true")
     env["ASAN_OPTIONS"] = asan_config.options
 
-    # setup Leak Sanitizer options if not set manually
+    # setup Leak Sanitizer options ONLY if not set manually in environment
     # https://github.com/google/sanitizers/wiki/AddressSanitizerLeakSanitizer
     lsan_config = SanitizerOptions()
     lsan_config.load_options(env.get("LSAN_OPTIONS"))
@@ -160,7 +165,7 @@ def configure_sanitizers(env, target_dir, log_path):
     lsan_config.add("report_objects", "1")
     env["LSAN_OPTIONS"] = lsan_config.options
 
-    # setup Thread Sanitizer options if not set manually
+    # setup Thread Sanitizer options ONLY if not set manually in environment
     tsan_config = SanitizerOptions()
     tsan_config.load_options(env.get("TSAN_OPTIONS"))
     assert tsan_config.check_path("suppressions"), "missing suppressions file"
@@ -172,7 +177,7 @@ def configure_sanitizers(env, target_dir, log_path):
     tsan_config.add("log_path", "'%s'" % log_path, overwrite=True)
     env["TSAN_OPTIONS"] = tsan_config.options
 
-    # setup Undefined Behavior Sanitizer options if not set manually
+    # setup Undefined Behavior Sanitizer options ONLY if not set manually in environment
     ubsan_config = SanitizerOptions()
     ubsan_config.load_options(env.get("UBSAN_OPTIONS"))
     assert ubsan_config.check_path("suppressions"), "missing suppressions file"
@@ -185,6 +190,8 @@ def configure_sanitizers(env, target_dir, log_path):
     ubsan_config.add("log_path", "'%s'" % log_path, overwrite=True)
     ubsan_config.add("print_stacktrace", "1")
     env["UBSAN_OPTIONS"] = ubsan_config.options
+
+    return env
 
 
 def create_profile(extension=None, prefs_js=None, template=None, working_path=None):
@@ -421,9 +428,7 @@ def prepare_environment(target_dir, sanitizer_log, env_mod=None):
         env.pop("MOZ_CRASHREPORTER_NO_REPORT", None)
         env.pop("MOZ_CRASHREPORTER_SHUTDOWN", None)
 
-    configure_sanitizers(env, target_dir, sanitizer_log)
-
-    return env
+    return _configure_sanitizers(env, target_dir, sanitizer_log)
 
 
 def true_path(path):

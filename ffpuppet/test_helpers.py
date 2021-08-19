@@ -15,9 +15,9 @@ import pytest
 
 from .helpers import (
     SanitizerOptions,
+    _configure_sanitizers,
     append_prefs,
     check_prefs,
-    configure_sanitizers,
     create_profile,
     files_in_use,
     get_processes,
@@ -187,7 +187,7 @@ def test_helpers_03(mocker, tmp_path):
 
 
 def test_helpers_04(tmp_path):
-    """test configure_sanitizers()"""
+    """test _configure_sanitizers()"""
 
     def parse(opt_str):
         opts = dict()
@@ -201,7 +201,7 @@ def test_helpers_04(tmp_path):
 
     # test with empty environment
     env = {}
-    configure_sanitizers(env, str(tmp_path), "blah")
+    env = _configure_sanitizers(env, str(tmp_path), "blah")
     assert "ASAN_OPTIONS" in env
     asan_opts = parse(env["ASAN_OPTIONS"])
     assert "external_symbolizer_path" not in asan_opts
@@ -216,7 +216,7 @@ def test_helpers_04(tmp_path):
         "LSAN_OPTIONS": "a=1",
         "UBSAN_OPTIONS": "",
     }
-    configure_sanitizers(env, str(tmp_path), "blah")
+    env = _configure_sanitizers(env, str(tmp_path), "blah")
     assert "ASAN_OPTIONS" in env
     asan_opts = parse(env["ASAN_OPTIONS"])
     assert "detect_leaks" in asan_opts
@@ -229,7 +229,7 @@ def test_helpers_04(tmp_path):
     sup = tmp_path / "test.sup"
     sup.touch()
     env = {"ASAN_OPTIONS": "suppressions='%s'" % str(sup)}
-    configure_sanitizers(env, str(tmp_path), "blah")
+    env = _configure_sanitizers(env, str(tmp_path), "blah")
     asan_opts = parse(env["ASAN_OPTIONS"])
     assert "suppressions" in asan_opts
     # test overwrite log_path
@@ -238,7 +238,7 @@ def test_helpers_04(tmp_path):
         "TSAN_OPTIONS": "log_path='overwrite'",
         "UBSAN_OPTIONS": "log_path='overwrite'",
     }
-    configure_sanitizers(env, str(tmp_path), "blah")
+    env = _configure_sanitizers(env, str(tmp_path), "blah")
     assert "ASAN_OPTIONS" in env
     asan_opts = parse(env["ASAN_OPTIONS"])
     assert asan_opts["log_path"] == "'blah'"
@@ -248,11 +248,11 @@ def test_helpers_04(tmp_path):
     # test missing suppression file
     env = {"ASAN_OPTIONS": "suppressions=not_a_file"}
     with pytest.raises(AssertionError, match="missing suppressions file"):
-        configure_sanitizers(env, str(tmp_path), "blah")
+        _configure_sanitizers(env, str(tmp_path), "blah")
     # unquoted path containing ':'
     env = {"ASAN_OPTIONS": "strip_path_prefix=x:\\foo\\bar"}
     with pytest.raises(AssertionError, match=r"\(strip_path_prefix\) must be quoted"):
-        configure_sanitizers(env, str(tmp_path), "blah")
+        _configure_sanitizers(env, str(tmp_path), "blah")
     # multiple options
     options = (
         "opt1=1",
@@ -265,26 +265,48 @@ def test_helpers_04(tmp_path):
         "opt8='x:\\with a space\\or two'",
     )
     env = {"ASAN_OPTIONS": ":".join(options)}
-    configure_sanitizers(env, str(tmp_path), "blah")
+    env = _configure_sanitizers(env, str(tmp_path), "blah")
     asan_opts = parse(env["ASAN_OPTIONS"])
     for key, value in (x.split(sep="=", maxsplit=1) for x in options):
         assert asan_opts[key] == value
     # test using packaged llvm-symbolizer
     if sys.platform.startswith("win"):
-        llvm_sym_bin = tmp_path / "llvm-symbolizer.exe"
+        llvm_sym_packed = tmp_path / "llvm-symbolizer.exe"
     else:
-        llvm_sym_bin = tmp_path / "llvm-symbolizer"
-    llvm_sym_bin.touch()
-    configure_sanitizers(env, str(tmp_path), "blah")
+        llvm_sym_packed = tmp_path / "llvm-symbolizer"
+    llvm_sym_packed.touch()
+    env = {"ASAN_OPTIONS": ":".join(options)}
+    env = _configure_sanitizers(env, str(tmp_path), "blah")
     asan_opts = parse(env["ASAN_OPTIONS"])
     assert "external_symbolizer_path" in asan_opts
-    assert asan_opts["external_symbolizer_path"].strip("'") == str(llvm_sym_bin)
+    assert asan_opts["external_symbolizer_path"].strip("'") == str(llvm_sym_packed)
     # test malformed option pair
     env = {"ASAN_OPTIONS": "a=b=c:x"}
-    configure_sanitizers(env, str(tmp_path), "blah")
+    env = _configure_sanitizers(env, str(tmp_path), "blah")
     asan_opts = parse(env["ASAN_OPTIONS"])
     assert asan_opts["a"] == "b=c"
     assert "x" not in asan_opts
+    # test ASAN_SYMBOLIZER_PATH
+    (tmp_path / "a").mkdir()
+    llvm_sym_a = tmp_path / "a" / "llvm-symbolizer"
+    llvm_sym_a.touch()
+    env = {"ASAN_SYMBOLIZER_PATH": str(llvm_sym_a)}
+    env = _configure_sanitizers(env, str(tmp_path), "blah")
+    asan_opts = parse(env["ASAN_OPTIONS"])
+    assert "external_symbolizer_path" in asan_opts
+    assert asan_opts["external_symbolizer_path"].strip("'") == str(llvm_sym_a)
+    # test ASAN_SYMBOLIZER_PATH override by ASAN_OPTIONS=external_symbolizer_path
+    (tmp_path / "b").mkdir()
+    llvm_sym_b = tmp_path / "b" / "llvm-symbolizer"
+    llvm_sym_b.touch()
+    env = {
+        "ASAN_SYMBOLIZER_PATH": str(llvm_sym_a),
+        "ASAN_OPTIONS": "external_symbolizer_path='%s'" % (str(llvm_sym_b),),
+    }
+    env = _configure_sanitizers(env, str(tmp_path), "blah")
+    asan_opts = parse(env["ASAN_OPTIONS"])
+    assert "external_symbolizer_path" in asan_opts
+    assert asan_opts["external_symbolizer_path"].strip("'") == str(llvm_sym_b)
 
 
 def test_helpers_05():
