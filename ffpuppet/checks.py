@@ -62,7 +62,7 @@ class CheckLogContents(Check):
         super().__init__()
         self.logs = list()
         for log_file in log_files:
-            self.logs.append({"fname": log_file, "buffer": "", "offset": 0})
+            self.logs.append({"fname": log_file, "buffer": b"", "offset": 0})
         self.tokens = search_tokens
 
     def check(self):
@@ -79,17 +79,17 @@ class CheckLogContents(Check):
                 # check if file has new data
                 if stat(log["fname"]).st_size <= log["offset"]:
                     continue
-                with open(log["fname"], "r") as scan_fp:
+                with open(log["fname"], "rb") as scan_fp:
                     # only collect new data
                     scan_fp.seek(log["offset"], SEEK_SET)
                     # read and prepend chunk of previously read data
-                    data = "".join([log["buffer"], scan_fp.read(self.chunk_size)])
+                    data = b"".join([log["buffer"], scan_fp.read(self.chunk_size)])
                     log["offset"] = scan_fp.tell()
             except (IOError, OSError):
                 # log does not exist
                 continue
             for token in self.tokens:
-                match = token.search(data)
+                match = token.search(data.decode("utf-8", errors="replace"))
                 if match:
                     self.message = "TOKEN_LOCATED: %s\n" % (match.group(),)
                     return True
