@@ -737,8 +737,8 @@ class FFPuppet:
         # will be loaded and ready to accept input when launch() returns
         bootstrapper = Bootstrapper()
         try:
-            # added `network.proxy.failover_direct` to workaround
-            # default prefs.js packaged with Grizzly test cases.
+            # added `network.proxy.failover_direct` and `network.proxy.allow_bypass`
+            # to workaround default prefs.js packaged with Grizzly test cases.
             # This can be removed in the future but for now it unblocks
             # reducing older Grizzly test cases.
             prefs = {
@@ -746,6 +746,7 @@ class FFPuppet:
                 "capability.policy.localfilelinks.sites": "'%s'"
                 % bootstrapper.location,
                 "capability.policy.policynames": "'localfilelinks'",
+                "network.proxy.allow_bypass": "false",
                 "network.proxy.failover_direct": "false",
                 "privacy.partition.network_state": "false",
             }
