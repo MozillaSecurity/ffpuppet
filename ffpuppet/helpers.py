@@ -101,11 +101,10 @@ def _configure_sanitizers(env, target_dir, log_path):
         ("handle_sigbus", "true"),  # set to be safe
         ("handle_sigfpe", "true"),  # set to be safe
         ("handle_sigill", "true"),  # set to be safe
-        ("max_allocation_size_mb", "512"),
         # requires background thread so only works on Linux for now...
         # https://github.com/llvm/llvm-project/blob/main/compiler-rt/lib/
         # sanitizer_common/sanitizer_common_libcdep.cpp#L116
-        ("soft_rss_limit_mb", "5000"),
+        ("soft_rss_limit_mb", "10000"),
         ("symbolize", "true"),
     ]
     # set llvm-symbolizer path
