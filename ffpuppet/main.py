@@ -106,6 +106,8 @@ def parse_args(argv=None):  # pylint: disable=missing-docstring
     )
     if system().startswith("Linux"):
         cfg_group.add_argument("--xvfb", action="store_true", help="Use Xvfb.")
+    else:
+        cfg_group.set_defaults(xvfb=False)
 
     report_group = parser.add_argument_group("Issue Detection & Reporting")
     report_group.add_argument(
@@ -235,7 +237,7 @@ def main(argv=None):  # pylint: disable=missing-docstring
     ffp = FFPuppet(
         debugger=args.debugger,
         use_profile=args.profile,
-        use_xvfb=getattr(args, "xvfb", False),
+        use_xvfb=args.xvfb,
     )
     for a_token in args.abort_token:
         ffp.add_abort_token(a_token)
