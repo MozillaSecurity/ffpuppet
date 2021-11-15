@@ -145,8 +145,6 @@ def _configure_sanitizers(env, target_dir, log_path):
             "ASAN_OPTIONS=log_path is used internally and cannot be set externally"
         )
     asan_config.add("log_path", "'%s'" % log_path, overwrite=True)
-    # attempt to save some memory during deep stack allocations
-    asan_config.add("malloc_context_size", "20")
     asan_config.add("sleep_before_dying", "0")
     asan_config.add("strict_init_order", "true")
     # breaks old builds (esr52)
