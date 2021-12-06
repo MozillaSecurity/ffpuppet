@@ -143,6 +143,56 @@ class FFPuppet:
     def __exit__(self, *exc):
         self.clean_up()
 
+    def _benign_sanitizer_report(self, report):
+        """Scan file for benign sanitizer reports.
+
+        Args:
+            report (os.DirEntry): File to scan.
+
+        Returns:
+            bool: True if only benign reports are found otherwise False.
+        """
+        size = self._logs.watching.get(report.path)
+        # skip previously scanned file if it has not been updated
+        if size is not None and size == report.stat().st_size:
+            return True
+
+        try:
+            # WARNING: cannot open files that are already open on Windows
+            with open(report.path, "rb") as log_fp:
+                # NOTE: only add benign single line warnings here
+                # this should not include any fatal errors
+                for line in log_fp:
+                    line = line.rstrip()
+                    # entries to ignores
+                    if not line:
+                        # empty or blank line
+                        continue
+                    if line.endswith(b"==WARNING: Symbolizer buffer too small"):
+                        # frequently emitted by TSan
+                        continue
+                    if (
+                        b"Sanitizer failed to allocate" in line
+                        and b"==WARNING: " in line
+                    ):
+                        # emitted by *SAN_OPTIONS=max_allocation_size_mb
+                        continue
+                    if b"Sanitizer: soft rss limit exhausted" in line:
+                        # emitted by *SAN_OPTIONS=soft_rss_limit_mb
+                        continue
+                    # line looks interesting so stop scanning
+                    break
+                else:
+                    # nothing interesting was found
+                    LOG.debug("benign log has changed %r", report.path)
+                    self._logs.watching[report.path] = log_fp.tell()
+                    return True
+
+        except OSError:
+            LOG.debug("failed to scan log %r", report.path)
+
+        return False
+
     def _crashreports(self, skip_md=False, skip_benign=True):
         """Collect crash logs/reports.
 
@@ -154,61 +204,24 @@ class FFPuppet:
         Yields:
             str: Path to log on the filesystem.
         """
-        assert self._logs is not None
         try:
-            contents = scandir(self._logs.working_path)
-        except OSError:  # pragma: no cover
-            contents = tuple()
-        for entry in contents:
-            # scan for sanitizer logs
-            if entry.name.startswith(self._logs.PREFIX_SAN):
-                if skip_benign:
-                    size = self._logs.watching.get(entry.path)
-                    # skip previously scanned files that have not been updated
-                    if size is not None and size == entry.stat().st_size:
+            for entry in scandir(self._logs.working_path):
+                # scan for sanitizer logs
+                if entry.name.startswith(self._logs.PREFIX_SAN):
+                    if skip_benign and self._benign_sanitizer_report(entry):
                         continue
-                    try:
-                        # WARNING: cannot open files that are already open on Windows
-                        with open(entry.path, "rb") as log_fp:
-                            # NOTE: add only benign single line warnings here
-                            # This should not include any fatal errors
-                            for line in log_fp:
-                                line = line.rstrip()
-                                if not line:
-                                    continue
-                                # entries to ignores
-                                if line.endswith(
-                                    b"==WARNING: Symbolizer buffer too small"
-                                ):
-                                    # frequently emitted by TSan
-                                    continue
-                                if (
-                                    b"Sanitizer failed to allocate" in line
-                                    and b"==WARNING: " in line
-                                ):
-                                    # emitted by *SAN_OPTIONS=max_allocation_size_mb
-                                    continue
-                                if b"Sanitizer: soft rss limit exhausted" in line:
-                                    # emitted by *SAN_OPTIONS=soft_rss_limit_mb
-                                    continue
-                                # the file contains something interesting
-                                break
-                            else:
-                                self._logs.watching[entry.path] = log_fp.tell()
-                                LOG.debug("benign log has changed %r", entry.path)
-                                continue
-                    except OSError:
-                        LOG.debug("failed to scan log %r", entry.path)
-                yield entry.path
-            # scan for Valgrind logs
-            elif self._dbg == Debugger.VALGRIND and entry.name.startswith(
-                self._logs.PREFIX_VALGRIND
-            ):
-                if entry.stat().st_size:
                     yield entry.path
+                # scan for Valgrind logs
+                elif self._dbg == Debugger.VALGRIND and entry.name.startswith(
+                    self._logs.PREFIX_VALGRIND
+                ):
+                    if entry.stat().st_size:
+                        yield entry.path
+        except OSError:  # pragma: no cover
+            pass
+
         # check for minidumps
         if not skip_md:
-            assert self.profile is not None
             try:
                 for entry in scandir(pathjoin(self.profile, "minidumps")):
                     if ".dmp" in entry.name:
