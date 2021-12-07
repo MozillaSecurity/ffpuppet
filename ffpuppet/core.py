@@ -5,10 +5,11 @@
 
 from enum import Enum, unique
 from logging import getLogger
-from os import X_OK, access, getenv, scandir
-from os.path import abspath, basename, dirname, isfile
+from os import X_OK, access, getenv
+from os.path import abspath, dirname, isfile
 from os.path import join as pathjoin
 from os.path import realpath
+from pathlib import Path
 from platform import system
 from re import IGNORECASE
 from re import compile as re_compile
@@ -147,19 +148,19 @@ class FFPuppet:
         """Scan file for benign sanitizer reports.
 
         Args:
-            report (os.DirEntry): File to scan.
+            report (Path): File to scan.
 
         Returns:
             bool: True if only benign reports are found otherwise False.
         """
-        size = self._logs.watching.get(report.path)
+        size = self._logs.watching.get(str(report))
         # skip previously scanned file if it has not been updated
         if size is not None and size == report.stat().st_size:
             return True
 
         try:
             # WARNING: cannot open files that are already open on Windows
-            with open(report.path, "rb") as log_fp:
+            with report.open("rb") as log_fp:
                 # NOTE: only add benign single line warnings here
                 # this should not include any fatal errors
                 for line in log_fp:
@@ -184,12 +185,12 @@ class FFPuppet:
                     break
                 else:
                     # nothing interesting was found
-                    LOG.debug("benign log has changed %r", report.path)
-                    self._logs.watching[report.path] = log_fp.tell()
+                    LOG.debug("benign log has changed %r", str(report))
+                    self._logs.watching[str(report)] = log_fp.tell()
                     return True
 
         except OSError:
-            LOG.debug("failed to scan log %r", report.path)
+            LOG.debug("failed to scan log %r", str(report))
 
         return False
 
@@ -202,30 +203,30 @@ class FFPuppet:
                                 warnings.
 
         Yields:
-            str: Path to log on the filesystem.
+            Path: Log on the filesystem.
         """
         try:
-            for entry in scandir(self._logs.working_path):
+            for entry in Path(self._logs.working_path).iterdir():
                 # scan for sanitizer logs
                 if entry.name.startswith(self._logs.PREFIX_SAN):
                     if skip_benign and self._benign_sanitizer_report(entry):
                         continue
-                    yield entry.path
+                    yield entry.resolve()
                 # scan for Valgrind logs
                 elif self._dbg == Debugger.VALGRIND and entry.name.startswith(
                     self._logs.PREFIX_VALGRIND
                 ):
                     if entry.stat().st_size:
-                        yield entry.path
+                        yield entry.resolve()
         except OSError:  # pragma: no cover
             pass
 
         # check for minidumps
         if not skip_md:
             try:
-                for entry in scandir(pathjoin(self.profile, "minidumps")):
+                for entry in (Path(self.profile) / "minidumps").iterdir():
                     if ".dmp" in entry.name:
-                        yield entry.path
+                        yield entry.resolve()
             except OSError:  # pragma: no cover
                 pass
 
@@ -572,9 +573,8 @@ class FFPuppet:
                             dst_fp=self._logs.add_log("ffp_worker_%s" % check.name)
                         )
                 # collect logs (excluding minidumps)
-                for fname in self._crashreports(skip_md=True, skip_benign=False):
-                    # pylint: disable=consider-using-with
-                    self._logs.add_log(basename(fname), open(fname, "rb"))
+                for log_path in self._crashreports(skip_md=True, skip_benign=False):
+                    self._logs.add_log(log_path.name, log_path.open("rb"))
                 # check for minidumps in the profile and dump them if possible
                 process_minidumps(
                     pathjoin(self.profile, "minidumps"),
