@@ -9,6 +9,7 @@ import os
 import shutil
 import sys
 import tempfile
+from pathlib import Path
 
 import psutil
 import pytest
@@ -368,13 +369,13 @@ def test_helpers_07(tmp_path):
     # test with open file
     procs = get_processes(os.getpid(), recursive=False)
     with tempfile.NamedTemporaryFile() as wait_fp:
-        assert not wait_on_files(procs, (wait_fp.name, str(t_file)), timeout=0.1)
+        assert not wait_on_files(procs, [Path(wait_fp.name), t_file], timeout=0.1)
     # existing but closed file
     procs = get_processes(os.getpid(), recursive=False)
-    assert wait_on_files(procs, [str(t_file)], timeout=0.1)
+    assert wait_on_files(procs, [t_file], timeout=0.1)
     # file that does not exist
     procs = get_processes(os.getpid(), recursive=False)
-    assert wait_on_files(procs, ["no_file"], timeout=0.1)
+    assert wait_on_files(procs, [Path("missing")], timeout=0.1)
     # empty file list
     assert wait_on_files([], [])
 
@@ -422,11 +423,9 @@ def test_helpers_10(tmp_path):
     procs = [psutil.Process(os.getpid())]
     # test with open file
     with tempfile.NamedTemporaryFile() as wait_fp:
-        check = [os.path.abspath(wait_fp.name), os.path.abspath(str(t_file))]
-        assert any(files_in_use(check, os.path.abspath, procs))
+        assert any(files_in_use([t_file, Path(wait_fp.name)], procs))
     # existing but closed file
-    check = [os.path.abspath(str(t_file))]
-    assert not any(files_in_use(check, os.path.abspath, procs))
+    assert not any(files_in_use([t_file], procs))
 
 
 def test_helpers_11(tmp_path):

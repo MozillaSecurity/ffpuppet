@@ -642,10 +642,9 @@ def test_ffpuppet_25(tmp_path):
     # - just create a puppet, write a readonly file in its profile, then call close()
     with FFPuppet() as ffp:
         ffp.launch(TESTFF_BIN)
-        ro_file = os.path.join(ffp.profile, "read-only-test.txt")
-        with open(ro_file, "w"):
-            pass
-        os.chmod(ro_file, stat.S_IREAD)
+        ro_file = Path(ffp.profile) / "read-only-test.txt"
+        ro_file.touch()
+        ro_file.chmod(stat.S_IREAD)
         ffp.close()
         assert not os.path.isfile(ro_file)
         ffp.clean_up()
@@ -654,7 +653,7 @@ def test_ffpuppet_25(tmp_path):
     profile.mkdir()
     ro_file = profile / "read-only.txt"
     ro_file.touch()
-    os.chmod(str(ro_file), stat.S_IREAD)
+    ro_file.chmod(stat.S_IREAD)
     with FFPuppet(use_profile=str(profile)) as ffp:
         ffp.launch(TESTFF_BIN)
         prof_path = ffp.profile
@@ -667,10 +666,10 @@ def test_ffpuppet_26(tmp_path):
     """test using a readonly prefs.js and extension"""
     prefs = tmp_path / "prefs.js"
     prefs.touch()
-    os.chmod(str(prefs), stat.S_IREAD)
+    prefs.chmod(stat.S_IREAD)
     ext = tmp_path / "ext.xpi"
     ext.touch()
-    os.chmod(str(ext), stat.S_IREAD)
+    ext.chmod(stat.S_IREAD)
     with FFPuppet() as ffp:
         ffp.launch(TESTFF_BIN, extension=str(ext), prefs_js=str(prefs))
         prof_path = ffp.profile
@@ -730,11 +729,13 @@ def test_ffpuppet_27(mocker, tmp_path):
         assert len(list(ffp._crashreports())) == (3 if is_linux else 2)
         assert ffp._logs.watching
         assert len(list(ffp._crashreports(skip_md=True))) == (2 if is_linux else 1)
-        # fail to open (for read) and scan sanitizer file
-        ffp._logs.watching.clear()
-        ign_log.chmod(0o222)
-        assert len(list(ffp._crashreports())) == (4 if is_linux else 3)
-        assert not ffp._logs.watching
+        if platform.system() != "Windows":
+            # fail to open (for read) and scan sanitizer file
+            # not tested on Windows because chmod() does not work
+            ffp._logs.watching.clear()
+            ign_log.chmod(stat.S_IWRITE)
+            assert len(list(ffp._crashreports())) == 4
+            assert not ffp._logs.watching
 
 
 def test_ffpuppet_28(tmp_path):

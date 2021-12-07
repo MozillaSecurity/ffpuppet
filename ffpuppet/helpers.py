@@ -5,10 +5,10 @@
 
 from json import load as json_load
 from logging import getLogger
-from os import W_OK, access, chmod, environ, mkdir, remove, scandir
+from os import W_OK, access, chmod, environ, mkdir, remove
 from os.path import abspath, basename, isdir, isfile
 from os.path import join as pathjoin
-from os.path import normcase, realpath
+from pathlib import Path
 from platform import system
 from shutil import copyfile, copytree, rmtree
 from stat import S_IWUSR
@@ -275,27 +275,31 @@ def create_profile(extension=None, prefs_js=None, template=None, working_path=No
     return profile
 
 
-def files_in_use(check_files, path_fix, procs):
+def files_in_use(files, procs):
     """Check if any of the given files are open by any of the given processes.
 
     Args:
-        check_files (iterable(str)): Files path to check.
-        path_fix (callable): Function to format paths.
+        files (iterable(Path)): Files to check.
         procs (iterable(Process)): Processes to scan for open files.
 
     Yields:
-        tuple: Path of file, pid of process and process name.
+        tuple: Path of file, process ID and process name.
     """
-    if check_files:
+    assert isinstance(files, (set, tuple, list))
+    if files:
         for proc in procs:
             try:
                 # WARNING: Process.open_files() has issues on Windows!
                 # https://psutil.readthedocs.io/en/latest/#psutil.Process.open_files
-                proc_files = tuple(path_fix(x.path) for x in proc.open_files())
-                if proc_files:
-                    for efile in check_files:
-                        if efile in proc_files:
-                            yield efile, proc.pid, proc.name()
+                for open_file in (Path(x.path) for x in proc.open_files()):
+                    for check_file in files:
+                        try:
+                            if check_file.samefile(open_file):
+                                yield open_file, proc.pid, proc.name()
+                        except OSError:
+                            # samefile() can raise if either file cannot be accessed
+                            # this is triggered on Windows if a file is missing
+                            pass
             except (AccessDenied, NoSuchProcess):  # pragma: no cover
                 pass
 
@@ -428,18 +432,6 @@ def prepare_environment(target_dir, sanitizer_log, env_mod=None):
     return _configure_sanitizers(env, target_dir, sanitizer_log)
 
 
-def true_path(path):
-    """Use realpath() and normcase() on path for cross platform compatibility.
-
-    Args:
-        path (str): File or directory path.
-
-    Returns:
-        str: Normalized real path of given path.
-    """
-    return normcase(realpath(path))
-
-
 def wait_on_files(procs, wait_files, poll_rate=0.25, timeout=60):
     """Wait for files in wait_files to no longer be use by any process.
 
@@ -454,20 +446,17 @@ def wait_on_files(procs, wait_files, poll_rate=0.25, timeout=60):
     """
     assert poll_rate >= 0
     assert timeout >= 0
-    wait_files = {true_path(x) for x in wait_files if isfile(x)}
-    if not wait_files:
-        return True
     poll_rate = min(poll_rate, timeout)
     deadline = time() + timeout
-    while any(files_in_use(wait_files, true_path, procs)):
+    while any(files_in_use(wait_files, procs)):
         if deadline <= time():
             LOG.debug("wait_on_files timeout (%ds)", timeout)
             break
         sleep(poll_rate)
     else:
         return True
-    for entry in files_in_use(wait_files, true_path, procs):
-        LOG.debug("%r open by %r (%d)", entry[0], entry[2], entry[1])
+    for entry in files_in_use(wait_files, procs):
+        LOG.debug("%r open by %r (%d)", str(entry[0]), entry[2], entry[1])
     return False
 
 
@@ -482,6 +471,5 @@ def warn_open(path):
     Returns:
         None
     """
-    check = tuple(abspath(x.path) for x in scandir(path))
-    for entry in files_in_use(check, abspath, process_iter()):
-        LOG.warning("%s open by %r (%d)", entry[0], entry[2], entry[1])
+    for entry in files_in_use(list(Path(path).iterdir()), process_iter()):
+        LOG.warning("%r open by %r (%d)", str(entry[0]), entry[2], entry[1])
