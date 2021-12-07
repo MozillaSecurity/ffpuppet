@@ -13,6 +13,7 @@ import stat
 import threading
 import time
 from http.server import BaseHTTPRequestHandler, HTTPServer
+from pathlib import Path
 from subprocess import Popen
 
 import pytest
@@ -702,44 +703,36 @@ def test_ffpuppet_27(mocker, tmp_path):
         ffp.launch()
         assert not any(ffp._crashreports())
         # benign sanitizer warnings
-        ign_log = "%s.1" % (ffp._logs.PREFIX_SAN,)
-        with open(os.path.join(ffp._logs.working_path, ign_log), "w") as ofp:
-            ofp.write(
-                "==123==WARNING: Symbolizer buffer too small\n\n"
-                "==123==WARNING: Symbolizer buffer too small\n\n"
-                "==123==WARNING: AddressSanitizer failed to allocate 0xFFFFFF bytes\n"
-                "==123==AddressSanitizer: soft rss limit exhausted (5000Mb vs 5026Mb)\n"
-            )
+        ign_log = Path(ffp._logs.working_path) / ("%s.1" % (ffp._logs.PREFIX_SAN,))
+        ign_log.write_text(
+            "==123==WARNING: Symbolizer buffer too small\n\n"
+            "==123==WARNING: Symbolizer buffer too small\n\n"
+            "==123==WARNING: AddressSanitizer failed to allocate 0xFFFFFF bytes\n"
+            "==123==AddressSanitizer: soft rss limit exhausted (5000Mb vs 5026Mb)\n"
+        )
         assert any(ffp._crashreports(skip_benign=False))
         # valid sanitizer log
-        san_log = "%s.2" % (ffp._logs.PREFIX_SAN,)
-        with open(os.path.join(ffp._logs.working_path, san_log), "w") as ofp:
-            ofp.write("test\n")
+        san_log = Path(ffp._logs.working_path) / ("%s.2" % (ffp._logs.PREFIX_SAN,))
+        san_log.write_text("test\n")
         # valid Valgrind log - with error
-        vg1_log = "%s.1" % (ffp._logs.PREFIX_VALGRIND,)
-        with open(os.path.join(ffp._logs.working_path, vg1_log), "w") as ofp:
-            ofp.write("test\n")
+        vg1_log = Path(ffp._logs.working_path) / ("%s.1" % (ffp._logs.PREFIX_VALGRIND,))
+        vg1_log.write_text("test\n")
         # valid Valgrind log - without error
-        vg2_log = "%s.2" % (ffp._logs.PREFIX_VALGRIND,)
-        with open(os.path.join(ffp._logs.working_path, vg2_log), "w") as ofp:
-            pass
+        (Path(ffp._logs.working_path) / ("%s.2" % (ffp._logs.PREFIX_VALGRIND,))).touch()
         # nothing interesting
-        with open(os.path.join(ffp._logs.working_path, "junk.log"), "w") as ofp:
-            ofp.write("test\n")
+        (Path(ffp._logs.working_path) / "junk.log").write_text("test\n")
         # valid minidump
-        with open(os.path.join(ffp.profile, "minidumps", "test.dmp"), "w") as ofp:
-            ofp.write("test\n")
+        (Path(ffp.profile) / "minidumps" / "test.dmp").write_text("test\n")
         # nothing interesting
-        with open(os.path.join(ffp.profile, "minidumps", "test.junk"), "w") as ofp:
-            pass
+        (Path(ffp.profile) / "minidumps" / "test.junk").write_text("\n")
         assert not ffp._logs.watching
         # NOTE: Valgrind logs are only checked on Linux
         assert len(list(ffp._crashreports())) == (3 if is_linux else 2)
         assert ffp._logs.watching
         assert len(list(ffp._crashreports(skip_md=True))) == (2 if is_linux else 1)
-        # fail to open and scan sanitizer file
+        # fail to open (for read) and scan sanitizer file
         ffp._logs.watching.clear()
-        mocker.patch("ffpuppet.core.open", side_effect=OSError)
+        ign_log.chmod(0o222)
         assert len(list(ffp._crashreports())) == (4 if is_linux else 3)
         assert not ffp._logs.watching
 
@@ -946,7 +939,7 @@ def test_ffpuppet_32(mocker, tmp_path):
     with StubbedProc() as ffp:
         ffp.launch()
         ffp._proc.poll.return_value = None
-        fake_reports.return_value = (str(tmp_path / "fake_report1"),)
+        fake_reports.return_value = (tmp_path / "fake_report1",)
         fake_wait_files.return_value = False
         ffp.close()
         assert ffp._proc is None
@@ -959,23 +952,11 @@ def test_ffpuppet_32(mocker, tmp_path):
         ffp._proc.poll.return_value = None
         fake_reports.return_value = None
         fake_reports.side_effect = (
-            (str(tmp_path / "fake_report1"),),
-            (
-                str(tmp_path / "fake_report1"),
-                str(tmp_path / "fake_report2"),
-            ),
-            (
-                str(tmp_path / "fake_report1"),
-                str(tmp_path / "fake_report2"),
-            ),
-            (
-                str(tmp_path / "fake_report1"),
-                str(tmp_path / "fake_report2"),
-            ),
-            (
-                str(tmp_path / "fake_report1"),
-                str(tmp_path / "fake_report2"),
-            ),
+            (tmp_path / "fake_report1",),
+            (tmp_path / "fake_report1", tmp_path / "fake_report2"),
+            (tmp_path / "fake_report1", tmp_path / "fake_report2"),
+            (tmp_path / "fake_report1", tmp_path / "fake_report2"),
+            (tmp_path / "fake_report1", tmp_path / "fake_report2"),
         )
         fake_wait_files.return_value = True
         ffp.close()
