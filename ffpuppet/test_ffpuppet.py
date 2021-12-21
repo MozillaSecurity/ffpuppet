@@ -18,6 +18,7 @@ import time
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 from subprocess import Popen
+from typing import Any
 
 import pytest
 from psutil import Process
@@ -41,14 +42,14 @@ MinidumpParser.MDSW_MAX_STACK = 8
 
 
 class ReqHandler(BaseHTTPRequestHandler):
-    def do_GET(self):
+    def do_GET(self) -> None:
         self.send_response(200)
         self.end_headers()
         self.wfile.write(b"hello world")
 
 
 class HTTPTestServer:
-    def __init__(self, handler=None):
+    def __init__(self, handler=None) -> None:
         self._handler = handler if handler is not None else ReqHandler
         while True:
             try:
@@ -63,23 +64,23 @@ class HTTPTestServer:
         )
         self._thread.start()
 
-    def __enter__(self):
+    def __enter__(self) -> HTTPTestServer:
         return self
 
-    def __exit__(self, *exc):
+    def __exit__(self, *exc: Any) -> None:
         self.shutdown()
 
-    def get_addr(self):
+    def get_addr(self) -> str:
         return "http://127.0.0.1:%d" % (self._httpd.server_address[1],)
 
-    def shutdown(self):
+    def shutdown(self) -> None:
         if self._httpd is not None:
             self._httpd.shutdown()
         if self._thread is not None:
             self._thread.join()
 
     @staticmethod
-    def _srv_thread(httpd):
+    def _srv_thread(httpd) -> None:
         try:
             httpd.serve_forever()
         finally:
@@ -195,13 +196,13 @@ def test_ffpuppet_06(mocker: MockerFixture) -> None:
     """test wait()"""
 
     class StubbedProc(FFPuppet):
-        def close(self, **_):  # pylint: disable=arguments-differ
+        def close(self, **_) -> None:  # pylint: disable=arguments-differ
             self.reason = Reason.CLOSED
 
-        def launch(self):  # pylint: disable=arguments-differ
+        def launch(self) -> None:  # pylint: disable=arguments-differ
             self.reason = None
 
-        def get_pid(self):
+        def get_pid(self) -> int | None:
             if self.reason is None:
                 return 123
             return None
@@ -688,13 +689,13 @@ def test_ffpuppet_27(mocker: MockerFixture, tmp_path: Path) -> None:
     )
 
     class StubbedLaunch(FFPuppet):
-        def launch(self):  # pylint: disable=arguments-differ
+        def launch(self) -> None:  # pylint: disable=arguments-differ
             profile = tmp_path / "profile"
             profile.mkdir()
             (profile / "minidumps").mkdir()
             self.profile = str(profile)
 
-        def close(self, force_close=False):
+        def close(self, force_close: bool = False) -> None:
             if os.path.isdir(self.profile):
                 shutil.rmtree(self.profile)
             self.profile = None
@@ -896,7 +897,7 @@ def test_ffpuppet_32(mocker: MockerFixture, tmp_path: Path) -> None:
     """test FFPuppet.close() setting reason"""
 
     class StubbedProc(FFPuppet):
-        def launch(self):  # pylint: disable=arguments-differ
+        def launch(self) -> None:  # pylint: disable=arguments-differ
             self.reason = None
             self._bin_path = str(tmp_path)
             self._logs.reset()
@@ -907,7 +908,9 @@ def test_ffpuppet_32(mocker: MockerFixture, tmp_path: Path) -> None:
             self.profile = str(profile)
 
         @staticmethod
-        def _terminate(pid, *_a, **_kw):  # pylint: disable=signature-differs
+        def _terminate(  # pylint: disable=signature-differs
+            pid, *_a: Any, **_kw: Any
+        ) -> None:
             assert isinstance(pid, int)
 
     fake_reports = mocker.patch("ffpuppet.core.FFPuppet._crashreports", autospec=True)

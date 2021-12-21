@@ -141,10 +141,10 @@ def test_bootstrapper_07(mocker: MockerFixture) -> None:
     assert fake_conn.sendall.call_count == 1
 
 
-def test_bootstrapper_08():
+def test_bootstrapper_08() -> None:
     """test Bootstrapper.wait() with a fake browser"""
 
-    def _fake_browser(port, payload_size=5120):
+    def _fake_browser(port: int, payload_size: int = 5120) -> None:
         conn = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         # 50 x 0.1 = 5 seconds
         conn.settimeout(0.1)

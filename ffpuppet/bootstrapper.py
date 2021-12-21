@@ -104,16 +104,15 @@ class Bootstrapper:  # pylint: disable=missing-docstring
     def wait(
         self,
         cb_continue: Callable[[], bool],
-        timeout: int = 60,
+        timeout: float = 60,
         url: str | None = None,
     ) -> None:
         """Wait for browser connection, read request and send response.
 
         Args:
             cb_continue: Callback that return True if the browser
-                                    process is healthy otherwise False.
-            timeout: Amount of time wait before raising
-                           BrowserTimeoutError.
+                         process is healthy otherwise False.
+            timeout: Amount of time wait before raising BrowserTimeoutError.
             url: Location to redirect to.
 
         Returns:
