@@ -6,6 +6,8 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 from pytest import mark, raises
 
 from .core import Reason
@@ -27,7 +29,9 @@ from .main import dump_to_console, main, parse_args
         (None, False, []),
     ],
 )
-def test_main_01(mocker, tmp_path, reason, user_exit, extra_args):
+def test_main_01(
+    mocker, tmp_path: Path, reason, user_exit: bool, extra_args: list[str]
+) -> None:
     """test main()"""
     fake_ffp = mocker.patch("ffpuppet.main.FFPuppet", autospec=True)
     fake_ffp.return_value.get_pid.return_value = 12345
@@ -57,7 +61,7 @@ def test_main_01(mocker, tmp_path, reason, user_exit, extra_args):
     assert fake_ffp.return_value.clean_up.call_count == 1
 
 
-def test_parse_args_01(tmp_path):
+def test_parse_args_01(tmp_path: Path) -> None:
     """test parse_args()"""
     with raises(SystemExit):
         parse_args(["-h"])
@@ -92,7 +96,7 @@ def test_parse_args_01(tmp_path):
     assert parse_args([str(fake_bin)])
 
 
-def test_dump_to_console_01(tmp_path):
+def test_dump_to_console_01(tmp_path: Path) -> None:
     """test dump_to_console()"""
     # call with no logs
     assert not dump_to_console(str(tmp_path))

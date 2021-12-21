@@ -5,7 +5,7 @@
 
 from __future__ import annotations
 
-from argparse import ArgumentParser
+import argparse
 from logging import DEBUG, ERROR, INFO, WARNING, basicConfig, getLogger
 from os import scandir
 from os.path import abspath, exists, isdir, isfile
@@ -65,10 +65,12 @@ def dump_to_console(log_dir, log_quota=0x8000):
     return "".join(lines)
 
 
-def parse_args(argv=None):  # pylint: disable=missing-docstring
+def parse_args(  # pylint: disable=missing-docstring
+    argv: list[str] | None = None,
+) -> argparse.Namespace:
     log_level_map = {"ERROR": ERROR, "WARN": WARNING, "INFO": INFO, "DEBUG": DEBUG}
 
-    parser = ArgumentParser(
+    parser = argparse.ArgumentParser(
         description="FFPuppet - Firefox process launcher and log collector. "
         "Happy bug hunting!"
     )
@@ -225,7 +227,7 @@ def parse_args(argv=None):  # pylint: disable=missing-docstring
     return args
 
 
-def main(argv=None):  # pylint: disable=missing-docstring
+def main(argv: list[str] | None = None) -> None:  # pylint: disable=missing-docstring
     args = parse_args(argv)
     # set output verbosity
     if args.log_level == DEBUG:

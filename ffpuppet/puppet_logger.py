@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterator
 from json import dump as json_dump
 from logging import getLogger
 from os import close as os_close
@@ -15,6 +16,9 @@ from os.path import realpath
 from shutil import copy2, copyfileobj, copytree, rmtree
 from subprocess import STDOUT, CalledProcessError, check_output
 from tempfile import mkdtemp, mkstemp
+from typing import Any
+from typing import IO
+from typing import KeysView
 
 from .helpers import onerror, warn_open
 
@@ -35,31 +39,31 @@ class PuppetLogger:  # pylint: disable=missing-docstring
 
     __slots__ = ("_base", "_logs", "_rr_packed", "closed", "watching", "working_path")
 
-    def __init__(self, base_path=None):
+    def __init__(self, base_path: str | None = None) -> None:
         self._base = base_path
-        self._logs = dict()
+        self._logs: dict[str, IO[bytes]] = dict()
         self._rr_packed = False
         self.closed = True
-        self.watching = dict()
-        self.working_path = None
+        self.watching: dict[str, str] = dict()
+        self.working_path: str | None = None
         self.reset()
 
-    def __enter__(self):
+    def __enter__(self) -> PuppetLogger:
         return self
 
-    def __exit__(self, *exc):
+    def __exit__(self, *exc: Any) -> None:
         self.clean_up()
 
-    def add_log(self, log_id, logfp=None):
+    def add_log(self, log_id: str, logfp: IO[bytes] | None = None) -> IO[bytes]:
         """Add a log file to the log manager.
 
         Args:
-            log_id (str): ID of the log to add.
-            logfp (file): File object to use. If None is provided a new log
+            log_id: ID of the log to add.
+            logfp: File object to use. If None is provided a new log
                           file will be created.
 
         Returns:
-            file: Newly added log file.
+            Newly added log file.
         """
         assert log_id not in self._logs
         assert not self.closed
@@ -68,39 +72,40 @@ class PuppetLogger:  # pylint: disable=missing-docstring
         self._logs[log_id] = logfp
         return logfp
 
-    def add_path(self, name):
+    def add_path(self, name: str) -> str:
         """Add a directory that can be used as temporary storage for
         miscellaneous items such as additional debugger output.
 
         Args:
-            name (str): Name of directory to create.
+            name: Name of directory to create.
 
         Returns:
-            str: Path of newly created directory.
+            Path of newly created directory.
         """
         assert not self.closed
+        assert isinstance(self.working_path, str)
         path = pathjoin(self.working_path, name)
         LOG.debug("adding path %r as %r", name, path)
         mkdir(path)
         return path
 
-    def available_logs(self):
+    def available_logs(self) -> KeysView[str]:
         """List of IDs for the available logs.
 
         Args:
             None
 
         Returns:
-            list: A list containing log IDs.
+            A list containing log IDs.
         """
         return self._logs.keys()
 
-    def clean_up(self, ignore_errors=False):
+    def clean_up(self, ignore_errors: bool = False) -> None:
         """Remove log files from disk.
 
         Args:
-            ignore_errors (bool): Ignore errors triggered by removing files and
-                                  directories will be ignored.
+            ignore_errors: Ignore errors triggered by removing files and
+                           directories will be ignored.
 
         Returns:
             None
@@ -122,16 +127,18 @@ class PuppetLogger:  # pylint: disable=missing-docstring
         self._logs.clear()
         self.working_path = None
 
-    def clone_log(self, log_id, offset=None, target_file=None):
+    def clone_log(
+        self, log_id: str, offset: int | None = None, target_file: int | None = None
+    ) -> int | None:
         """Create a copy of the specified log.
 
         Args:
-            log_id (str): ID of the log to clone.
-            target_file (str): The log contents will be saved to target_file.
-            offset (int): Where to begin reading the log from.
+            log_id: ID of the log to clone.
+            target_file: The log contents will be saved to target_file.
+            offset: Where to begin reading the log from.
 
         Returns:
-            str: Name of the file containing the cloned log or None on failure.
+            Name of the file containing the cloned log or None on failure.
         """
         log_fp = self.get_fp(log_id)
         if log_fp is None:
@@ -153,7 +160,7 @@ class PuppetLogger:  # pylint: disable=missing-docstring
                 cpyfp.close()
         return target_file
 
-    def close(self):
+    def close(self) -> None:
         """Close all open file objects.
 
         Args:
@@ -168,27 +175,27 @@ class PuppetLogger:  # pylint: disable=missing-docstring
         self.closed = True
 
     @property
-    def files(self):
+    def files(self) -> Iterator[str]:
         """File names of log files.
 
         Args:
             None
 
         Yields:
-            str: File names of log files.
+            File names of log files.
         """
         for lfp in self._logs.values():
             if lfp.name is not None:
                 yield lfp.name
 
-    def get_fp(self, log_id):
+    def get_fp(self, log_id: str) -> IO[bytes] | None:
         """Lookup log file object by ID.
 
         Args:
-            log_id (str): ID of the log (stderr, stdout... etc).
+            log_id: ID of the log (stderr, stdout... etc).
 
         Returns:
-            file: The file matching given ID otherwise None.
+            The file matching given ID otherwise None.
         """
         try:
             log_fp = self._logs[log_id]
@@ -199,15 +206,14 @@ class PuppetLogger:  # pylint: disable=missing-docstring
             raise IOError("log file %r does not exist" % log_fp.name)
         return log_fp
 
-    def log_length(self, log_id):
+    def log_length(self, log_id: str) -> int | None:
         """Get the length of the specified log.
 
         Args:
-            log_id (str): ID of the log to measure.
+            log_id: ID of the log to measure.
 
         Returns:
-            int: Length of the specified log in bytes or None if the log does
-                 not exist.
+            Length of the specified log in bytes or None if the log does not exist.
         """
         log_fp = self.get_fp(log_id)
         if log_fp is None:
@@ -217,23 +223,23 @@ class PuppetLogger:  # pylint: disable=missing-docstring
         return stat(log_fp.name).st_size
 
     @staticmethod
-    def open_unique(base_dir=None, mode="wb"):
+    def open_unique(base_dir: str | None = None, mode: str = "wb") -> IO[bytes]:
         """Create and open a unique file.
 
         Args:
-            base_dir (str): This is where the file will be created. If None is
-                            passed mkstemp() will use the system default.
-            mode (str): File mode. See documentation for open().
+            base_dir: This is where the file will be created. If None is
+                      passed mkstemp() will use the system default.
+            mode: File mode. See documentation for open().
 
         Returns:
-            file: An open file object.
+            An open file object.
         """
         tmp_fd, log_file = mkstemp(suffix=".txt", prefix="ffp_log_", dir=base_dir)
         os_close(tmp_fd)
         # use open() so the file object 'name' attribute is correct
         return open(log_file, mode)  # pylint: disable=consider-using-with
 
-    def reset(self):
+    def reset(self) -> None:
         """Reset logger for reuse.
 
         Args:
@@ -248,19 +254,24 @@ class PuppetLogger:  # pylint: disable=missing-docstring
         self.working_path = realpath(mkdtemp(prefix="ffplogs_", dir=self._base))
 
     def save_logs(
-        self, dest, logs_only=False, meta=False, bin_path=None, rr_pack=False
-    ):
+        self,
+        dest: str,
+        logs_only: bool = False,
+        meta: bool = False,
+        bin_path: str | None = None,
+        rr_pack: bool = False,
+    ) -> None:
         """The browser logs will be saved to dest. This can only be called
         after close() has been called.
 
         Args:
-            dest (str): Destination path for log data. Existing files will be
+            dest: Destination path for log data. Existing files will be
                         overwritten.
-            logs_only (bool): Do not include other data, including debugger
+            logs_only: Do not include other data, including debugger
                               output files.
-            meta (bool): Output JSON file containing log file meta data.
-            bin_path (str): Path to Firefox binary.
-            rr_pack (bool): Pack rr trace if required.
+            meta: Output JSON file containing log file meta data.
+            bin_path: Path to Firefox binary.
+            rr_pack: Pack rr trace if required.
 
         Returns:
             None
