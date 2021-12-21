@@ -21,20 +21,20 @@ class Check(ABC):
     Check base class
     """
 
-    name = None
+    name: str | None = None
 
     __slots__ = ("message",)
 
-    def __init__(self):
-        self.message = None
+    def __init__(self) -> None:
+        self.message: str | None = None
 
     @abstractmethod
-    def check(self):
+    def check(self) -> bool | None:
         """
         Implement a check that returns True when the abort conditions are met.
         """
 
-    def dump_log(self, dst_fp):
+    def dump_log(self, dst_fp) -> None:
         """Write log contents to file.
 
         Args:
@@ -58,7 +58,7 @@ class CheckLogContents(Check):
 
     __slots__ = ("logs", "tokens")
 
-    def __init__(self, log_files, search_tokens):
+    def __init__(self, log_files, search_tokens) -> None:
         assert log_files, "log_files is empty"
         assert search_tokens, "search_tokens is empty"
         super().__init__()
@@ -67,14 +67,14 @@ class CheckLogContents(Check):
             self.logs.append({"fname": log_file, "buffer": b"", "offset": 0})
         self.tokens = search_tokens
 
-    def check(self):
+    def check(self) -> bool:
         """Collect log contents for tokens.
 
         Args:
             None
 
         Returns:
-            bool: True if a token is located otherwise False.
+            True if a token is located otherwise False.
         """
         for log in self.logs:
             try:
@@ -108,21 +108,21 @@ class CheckLogSize(Check):
 
     __slots__ = ("limit", "stderr_file", "stdout_file")
 
-    def __init__(self, limit, stderr_file, stdout_file):
+    def __init__(self, limit: int, stderr_file: str, stdout_file: str) -> None:
         super().__init__()
         self.limit = limit
         self.stderr_file = stderr_file
         self.stdout_file = stdout_file
 
-    def check(self):
+    def check(self) -> bool:
         """Collect log disk usage info and compare with limit.
 
         Args:
             None
 
         Returns:
-            bool: True if the total usage is greater than or equal to
-                  self.limit otherwise False.
+            True if the total usage is greater than or equal to
+            self.limit otherwise False.
         """
         err_size = stat(self.stderr_file).st_size
         out_size = stat(self.stdout_file).st_size
@@ -156,20 +156,20 @@ class CheckMemoryUsage(Check):
 
     __slots__ = ("limit", "pid")
 
-    def __init__(self, pid, limit):
+    def __init__(self, pid: int, limit: int) -> None:
         super().__init__()
         self.limit = limit
         self.pid = pid
 
-    def check(self):
+    def check(self) -> bool:
         """Use psutil to collect memory usage info and compare with limit.
 
         Args:
             None
 
         Returns:
-            bool: True if the total usage is greater than or equal to
-                  self.limit otherwise False.
+            True if the total usage is greater than or equal to
+            self.limit otherwise False.
         """
         proc_info = list()
         total_usage = 0
