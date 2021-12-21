@@ -20,19 +20,19 @@ class SanitizerOptions:  # pylint: disable=missing-docstring
 
     __slots__ = ("_options",)
 
-    def __init__(self):
+    def __init__(self) -> None:
         self._options = dict()
 
     def __contains__(self, item):
         return item in self._options
 
-    def add(self, flag, value, overwrite=False):
+    def add(self, flag: str, value: str, overwrite: bool = False) -> None:
         """Add sanitizer flag.
 
         Args:
-            flag (str): Flags to set.
-            value (str): Value to use.
-            overwrite (bool): Overwrite existing value.
+            flag: Flags to set.
+            value: Value to use.
+            overwrite: Overwrite existing value.
 
         Returns:
             None
@@ -44,15 +44,15 @@ class SanitizerOptions:  # pylint: disable=missing-docstring
         if flag not in self._options or overwrite:
             self._options[flag] = value
 
-    def check_path(self, flag):
+    def check_path(self, flag: str) -> bool:
         """Check path exists on disk.
         Only indicate failure if flag exists and path does not.
 
         Args:
-            flag (str): Flags to set.
+            flag: Flags to set.
 
         Returns:
-            bool: False if the flag exists and the path does not otherwise False
+            False if the flag exists and the path does not otherwise False
         """
         if flag in self._options:
             value = self._options[flag]
@@ -61,26 +61,26 @@ class SanitizerOptions:  # pylint: disable=missing-docstring
             return exists(value)
         return True
 
-    def get(self, flag):
+    def get(self, flag: str) -> str:
         """Get sanitizer flag.
 
         Args:
-            flag (str): Flags to retrieve.
+            flag: Flags to retrieve.
 
         Returns:
-            str: Value of given flag or None
+            Value of given flag or None
         """
         return self._options.get(flag, None)
 
     @staticmethod
-    def is_quoted(token):
+    def is_quoted(token: str) -> bool:
         """Check if token is quoted.
 
         Args:
-            token (str): Value to check.
+            token: Value to check.
 
         Returns:
-            bool: True if token is quoted otherwise False.
+            True if token is quoted otherwise False.
         """
         if len(token) > 1:
             if token.startswith("'") and token.endswith("'"):
@@ -89,11 +89,11 @@ class SanitizerOptions:  # pylint: disable=missing-docstring
                 return True
         return False
 
-    def load_options(self, options):
+    def load_options(self, options: str) -> None:
         """Load flags from *SAN_OPTIONS in env.
 
         Args:
-            options (str): Colon separated list of `flag=value` pairs.
+            options: Colon separated list of `flag=value` pairs.
 
         Returns:
             None
@@ -107,24 +107,24 @@ class SanitizerOptions:  # pylint: disable=missing-docstring
                     LOG.warning("Malformed option %r", option)
 
     @property
-    def options(self):
+    def options(self) -> str:
         """Join all flag and value pairs for use with *SAN_OPTIONS.
 
         Args:
             None
 
         Returns:
-            str: Colon separated list of options.
+            Colon separated list of options.
         """
         return ":".join("=".join(kv) for kv in self._options.items())
 
-    def pop(self, flag):
+    def pop(self, flag: str) -> str:
         """Pop sanitizer flag.
 
         Args:
-            flag (str): Flags to retrieve.
+            flag: Flags to retrieve.
 
         Returns:
-            str: Value of given flag or None
+            Value of given flag or None
         """
         return self._options.pop(flag, None)
