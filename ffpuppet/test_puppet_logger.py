@@ -3,19 +3,25 @@
 # This Source Code Form is subject to the terms of the Mozilla Public
 # License, v. 2.0. If a copy of the MPL was not distributed with this file,
 # You can obtain one at http://mozilla.org/MPL/2.0/.
+
+from __future__ import annotations
+
 # pylint: disable=protected-access
 
 import json
 import os
+from pathlib import Path
 import tempfile
 import time
+from typing import BinaryIO
 
 import pytest
+from pytest_mock import MockerFixture
 
 from .puppet_logger import PuppetLogger, onerror
 
 
-def test_puppet_logger_01(tmp_path):
+def test_puppet_logger_01(tmp_path: Path) -> None:
     """test simple PuppetLogger()"""
     plog = PuppetLogger(base_path=str(tmp_path))
     assert not plog.closed
@@ -32,7 +38,7 @@ def test_puppet_logger_01(tmp_path):
     assert plog.log_length("missing") is None
 
 
-def test_puppet_logger_02(tmp_path):
+def test_puppet_logger_02(tmp_path: Path) -> None:
     """test PuppetLogger.add_log() and PuppetLogger.available_logs()"""
     with PuppetLogger(base_path=str(tmp_path)) as plog:
         assert not plog._logs
@@ -40,18 +46,22 @@ def test_puppet_logger_02(tmp_path):
         assert not any(plog.files)
         plog.add_log("test_new")  # non-existing log
         assert "test_new" in plog.available_logs()
-        assert os.path.isfile(plog.get_fp("test_new").name)
+        plog_fp_test_new = plog.get_fp("test_new")
+        assert isinstance(plog_fp_test_new, BinaryIO)
+        assert os.path.isfile(plog_fp_test_new.name)
         with (tmp_path / "test_existing.txt").open("w+b") as in_fp:
             in_fp.write(b"blah")
             plog.add_log("test_existing", logfp=in_fp)
         assert len(plog.available_logs()) == 2
         assert len(tuple(plog.files)) == 2
-        assert os.path.isfile(plog.get_fp("test_existing").name)
+        plog_fp_test_existing = plog.get_fp("test_existing")
+        assert isinstance(plog_fp_test_existing, BinaryIO)
+        assert os.path.isfile(plog_fp_test_existing.name)
         assert plog.log_length("test_new") == 0
         assert plog.log_length("test_existing") == 4
 
 
-def test_puppet_logger_03(tmp_path):
+def test_puppet_logger_03(tmp_path: Path) -> None:
     """test PuppetLogger.clean_up()"""
     with PuppetLogger(base_path=str(tmp_path)) as plog:
         assert not plog.closed
@@ -69,7 +79,7 @@ def test_puppet_logger_03(tmp_path):
         assert not plog._logs
 
 
-def test_puppet_logger_04(tmp_path):
+def test_puppet_logger_04(tmp_path: Path) -> None:
     """test PuppetLogger.reset()"""
     with PuppetLogger(base_path=str(tmp_path)) as plog:
         plog.add_log("test_new")
@@ -77,23 +87,28 @@ def test_puppet_logger_04(tmp_path):
         plog.reset()
         assert not plog.closed
         assert not plog._logs
+        assert isinstance(plog.working_path, str)
         assert os.path.isdir(plog.working_path)
         assert plog._base is not None
         assert len(os.listdir(plog._base)) == 1
 
 
-def test_puppet_logger_05(tmp_path):
+def test_puppet_logger_05(tmp_path: Path) -> None:
     """test PuppetLogger.clone_log()"""
     with PuppetLogger(base_path=str(tmp_path)) as plog:
         plog.add_log("test_empty")
         plog.add_log("test_extra")
-        plog.get_fp("test_extra").write(b"stuff")
-        plog.get_fp("test_extra").flush()
+        plog_fp_test_extra = plog.get_fp("test_extra")
+        assert isinstance(plog_fp_test_extra, BinaryIO)
+        plog_fp_test_extra.write(b"stuff")
+        plog_fp_test_extra.flush()
         # test clone
         plog.add_log("test_new")
         pl_fp = plog.get_fp("test_new")
+        assert isinstance(pl_fp, BinaryIO)
         pl_fp.write(b"test1")
         cloned = plog.clone_log("test_new")
+        assert isinstance(cloned, str)
         assert os.path.isfile(cloned)
         with open(cloned, "rb") as log_fp:
             assert log_fp.read() == b"test1"
@@ -104,6 +119,7 @@ def test_puppet_logger_05(tmp_path):
         pl_fp.write(b"test2")
         pl_fp.flush()
         cloned = plog.clone_log("test_new", target_file=str(target))
+        assert isinstance(cloned, str)
         assert os.path.isfile(cloned)
         with open(cloned, "rb") as log_fp:
             assert log_fp.read() == b"test1test2"
@@ -113,6 +129,7 @@ def test_puppet_logger_05(tmp_path):
         pl_fp.write(b"test3")
         pl_fp.flush()
         cloned = plog.clone_log("test_new", target_file=str(target), offset=4)
+        assert isinstance(cloned, str)
         assert os.path.isfile(cloned)
         with open(cloned, "rb") as log_fp:
             assert log_fp.read() == b"1test2test3"
@@ -123,12 +140,13 @@ def test_puppet_logger_05(tmp_path):
         # test empty log
         assert plog.log_length("test_empty") == 0
         cloned = plog.clone_log("test_empty")
+        assert isinstance(cloned, str)
         assert os.path.isfile(cloned)
         assert not os.stat(cloned).st_size
         os.remove(cloned)
 
 
-def test_puppet_logger_06(tmp_path):
+def test_puppet_logger_06(tmp_path: Path) -> None:
     """test PuppetLogger.save_logs()"""
     with PuppetLogger(base_path=str(tmp_path)) as plog:
         plog.close()
@@ -140,17 +158,23 @@ def test_puppet_logger_06(tmp_path):
         dest.rmdir()
         # add small log
         plog.add_log("test_1")
-        plog.get_fp("test_1").write(b"test1\ntest1\n")
+        plog_fp_test_1 = plog.get_fp("test_1")
+        assert isinstance(plog_fp_test_1, BinaryIO)
+        plog_fp_test_1.write(b"test1\ntest1\n")
         # add binary data in log
         plog.add_log("test_2")
-        plog.get_fp("test_2").write(b"\x00TEST\xFF\xEF")
+        plog_fp_test_2 = plog.get_fp("test_2")
+        assert isinstance(plog_fp_test_2, BinaryIO)
+        plog_fp_test_2.write(b"\x00TEST\xFF\xEF")
         # add empty log
         plog.add_log("test_empty")
         # add larger log (not a power of 2 to help catch buffer issues)
         plog.add_log("test_3")
         data = b"A" * 1234
+        plog_fp_test_3 = plog.get_fp("test_3")
+        assert isinstance(plog_fp_test_3, BinaryIO)
         for _ in range(500):
-            plog.get_fp("test_3").write(data)
+            plog_fp_test_3.write(data)
         meta_test = tmp_path / "test_meta.txt"
         with meta_test.open("w+b") as meta_fp:
             meta_fp.write(b"blah")
@@ -173,15 +197,16 @@ def test_puppet_logger_06(tmp_path):
         assert len(meta_map) == 5
         assert meta_ctime == meta_map["log_test_meta.txt"]["st_ctime"]
         # verify all data was copied
-        assert os.stat(plog.get_fp("test_1").name).st_size == 12
-        assert os.stat(plog.get_fp("test_2").name).st_size == 7
-        assert os.stat(plog.get_fp("test_3").name).st_size == 500 * 1234
+        assert os.stat(plog_fp_test_1.name).st_size == 12
+        assert os.stat(plog_fp_test_2.name).st_size == 7
+        assert os.stat(plog_fp_test_3.name).st_size == 500 * 1234
 
 
-def test_puppet_logger_07(mocker, tmp_path):
+def test_puppet_logger_07(mocker: MockerFixture, tmp_path: Path) -> None:
     """test PuppetLogger.save_logs() rr trace directory"""
     fake_ck = mocker.patch("ffpuppet.puppet_logger.check_output", autospec=True)
     with PuppetLogger(base_path=str(tmp_path)) as plog:
+        assert isinstance(plog.working_path, str)
         os.makedirs(os.path.join(plog.working_path, plog.PATH_RR, "latest-trace"))
         plog.close()
         # test call to rr failing
@@ -211,7 +236,7 @@ def test_puppet_logger_07(mocker, tmp_path):
         assert plog._rr_packed
 
 
-def test_puppet_logger_08(tmp_path):
+def test_puppet_logger_08(tmp_path: Path) -> None:
     """test PuppetLogger.add_log() with file not on disk"""
     with PuppetLogger(base_path=str(tmp_path)) as plog:
         with tempfile.SpooledTemporaryFile(max_size=2048) as log_fp:
@@ -220,7 +245,7 @@ def test_puppet_logger_08(tmp_path):
                 plog.get_fp("test")
 
 
-def test_puppet_logger_09(mocker, tmp_path):
+def test_puppet_logger_09(mocker: MockerFixture, tmp_path: Path) -> None:
     """test PuppetLogger.clean_up() with in-use file or inaccessible directory"""
     fake_rmtree = mocker.patch("ffpuppet.puppet_logger.rmtree", autospec=True)
     with PuppetLogger(base_path=str(tmp_path)) as plog:
@@ -246,7 +271,7 @@ def test_puppet_logger_09(mocker, tmp_path):
         assert plog.working_path is None
 
 
-def test_puppet_logger_10(tmp_path):
+def test_puppet_logger_10(tmp_path: Path) -> None:
     """test PuppetLogger.add_path()"""
     with PuppetLogger(base_path=str(tmp_path)) as plog:
         path = plog.add_path("test")

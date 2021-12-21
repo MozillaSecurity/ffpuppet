@@ -2,12 +2,17 @@
 # License, v. 2.0. If a copy of the MPL was not distributed with this
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
 """ffpuppet bootstrapper module"""
+
+from __future__ import annotations
+
 import socket
+from collections.abc import Callable
 from errno import EADDRINUSE
 from logging import getLogger
 from platform import system
 from random import randint
 from time import time
+from typing import Any
 
 from .exceptions import BrowserTerminatedError, BrowserTimeoutError, LaunchError
 
@@ -19,15 +24,17 @@ __all__ = ("Bootstrapper",)
 
 class Bootstrapper:  # pylint: disable=missing-docstring
     BUF_SIZE = 4096  # receive buffer size
-    POLL_WAIT = 1  # duration of initial blocking socket operations
+    POLL_WAIT: float = 1  # duration of initial blocking socket operations
     PORT_MAX = 0xFFFF  # bootstrap range
     PORT_MIN = 0x2000  # bootstrap range
     PORT_RETRIES = 100  # number of attempts to find an available port
 
     __slots__ = ("_socket",)
 
-    def __init__(self):
-        self._socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    def __init__(self) -> None:
+        self._socket: socket.socket | None = socket.socket(
+            socket.AF_INET, socket.SOCK_STREAM
+        )
         if system().startswith("Windows"):
             self._socket.setsockopt(
                 socket.SOL_SOCKET,
@@ -49,13 +56,13 @@ class Bootstrapper:  # pylint: disable=missing-docstring
             self._socket.close()
             raise LaunchError("Could not find available port")
 
-    def __enter__(self):
+    def __enter__(self) -> Bootstrapper:
         return self
 
-    def __exit__(self, *exc):
+    def __exit__(self, *exc: Any) -> None:
         self.close()
 
-    def close(self):
+    def close(self) -> None:
         """Close listening socket.
 
         Args:
@@ -69,40 +76,44 @@ class Bootstrapper:  # pylint: disable=missing-docstring
             self._socket = None
 
     @property
-    def location(self):
+    def location(self) -> str:
         """Location in the format of 'http://127.0.0.1:#'.
 
         Args:
             None
 
         Returns:
-            str: Location.
+            Location.
         """
         assert self._socket is not None
         return "http://127.0.0.1:%d" % (self.port,)
 
     @property
-    def port(self):
+    def port(self) -> int:
         """Listening socket port number.
 
         Args:
             None
 
         Returns:
-            int: Port number.
+            Port number.
         """
         assert self._socket is not None
-        return self._socket.getsockname()[1]
+        return int(self._socket.getsockname()[1])
 
-    def wait(self, cb_continue, timeout=60, url=None):
+    def wait(
+        self,
+        cb_continue: Callable[[], bool],
+        timeout: float = 60,
+        url: str | None = None,
+    ) -> None:
         """Wait for browser connection, read request and send response.
 
         Args:
-            cb_continue (callable): Callback that return True if the browser
-                                    process is healthy otherwise False.
-            timeout (int): Amount of time wait before raising
-                           BrowserTimeoutError.
-            url (str): Location to redirect to.
+            cb_continue: Callback that return True if the browser
+                         process is healthy otherwise False.
+            timeout: Amount of time wait before raising BrowserTimeoutError.
+            url: Location to redirect to.
 
         Returns:
             None

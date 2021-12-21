@@ -4,6 +4,10 @@
 # You can obtain one at http://mozilla.org/MPL/2.0/.
 """ffpuppet sanitizer_util tests"""
 
+from __future__ import annotations
+
+from pathlib import Path
+
 from pytest import mark
 
 from .sanitizer_util import SanitizerOptions
@@ -35,7 +39,9 @@ from .sanitizer_util import SanitizerOptions
         ),
     ],
 )
-def test_sanitizer_options_01(init, add, result, overwrite):
+def test_sanitizer_options_01(
+    init: str, add: dict[str, str], result: list[str], overwrite: bool
+) -> None:
     """test SanitizerOptions() - parsing and adding"""
     opts = SanitizerOptions(init)
     for key, value in add.items():
@@ -49,7 +55,7 @@ def test_sanitizer_options_01(init, add, result, overwrite):
         assert not result[-1]
 
 
-def test_sanitizer_options_02():
+def test_sanitizer_options_02() -> None:
     """test SanitizerOptions() - get() and pop()"""
     opts = SanitizerOptions()
     assert opts.get("missing") is None
@@ -59,7 +65,7 @@ def test_sanitizer_options_02():
     assert opts.get("exists") is None
 
 
-def test_sanitizer_options_03(tmp_path):
+def test_sanitizer_options_03(tmp_path: Path) -> None:
     """test SanitizerOptions() - check_path()"""
     opts = SanitizerOptions()
     # test missing key
@@ -74,7 +80,7 @@ def test_sanitizer_options_03(tmp_path):
     assert not opts.check_path("file")
 
 
-def test_sanitizer_options_04():
+def test_sanitizer_options_04() -> None:
     """test SanitizerOptions.is_quoted()"""
     assert SanitizerOptions.is_quoted("'quoted'")
     assert SanitizerOptions.is_quoted('"quoted"')

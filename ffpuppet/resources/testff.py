@@ -1,5 +1,8 @@
 #!/usr/bin/env python
 """fake firefox"""
+
+from __future__ import annotations
+
 import os
 import platform
 import sys
@@ -9,7 +12,7 @@ from urllib.request import URLError, urlopen
 EXIT_DELAY = 45
 
 
-def main():  # pylint: disable=missing-docstring
+def main() -> int:  # pylint: disable=missing-docstring
     os_name = platform.system()
     profile = url = None
     while len(sys.argv) > 1:
@@ -56,6 +59,7 @@ def main():  # pylint: disable=missing-docstring
     # sys.stdout.write('cmd: %s\n' % cmd)
     # sys.stdout.flush()
 
+    assert isinstance(profile, str)
     if cmd == "invalid_js":
         with open(os.path.join(profile, "Invalidprefs.js"), "w") as prefs_js:
             prefs_js.write("bad!")
