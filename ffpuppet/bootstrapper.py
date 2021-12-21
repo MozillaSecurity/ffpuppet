@@ -103,7 +103,7 @@ class Bootstrapper:  # pylint: disable=missing-docstring
 
     def wait(
         self,
-        cb_continue: Callable[..., bool],
+        cb_continue: Callable[[], bool],
         timeout: int = 60,
         url: str | None = None,
     ) -> None:
