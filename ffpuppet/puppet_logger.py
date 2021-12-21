@@ -3,6 +3,8 @@
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
 """browser and debugger log management"""
 
+from __future__ import annotations
+
 from json import dump as json_dump
 from logging import getLogger
 from os import close as os_close

@@ -5,6 +5,8 @@
 # You can obtain one at http://mozilla.org/MPL/2.0/.
 # pylint: disable=protected-access
 
+from __future__ import annotations
+
 from os import SEEK_END
 
 from pytest import mark, raises

@@ -4,6 +4,9 @@
 # You can obtain one at http://mozilla.org/MPL/2.0/.
 # pylint: disable=invalid-name,missing-docstring,protected-access
 """ffpuppet tests"""
+
+from __future__ import annotations
+
 import errno
 import os
 import platform

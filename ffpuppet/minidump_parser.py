@@ -3,6 +3,8 @@
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
 """ffpuppet minidump parsing module"""
 
+from __future__ import annotations
+
 from logging import getLogger
 from os import getenv, scandir, stat
 from os.path import getmtime, isdir

@@ -3,6 +3,8 @@
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
 """ffpuppet module"""
 
+from __future__ import annotations
+
 from enum import Enum, unique
 from logging import getLogger
 from os import X_OK, access, getenv

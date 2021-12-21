@@ -3,6 +3,8 @@
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
 """ffpuppet checks module"""
 
+from __future__ import annotations
+
 from abc import ABC, abstractmethod
 from os import SEEK_SET, stat
 

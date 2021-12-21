@@ -4,6 +4,8 @@
 # You can obtain one at http://mozilla.org/MPL/2.0/.
 """ffpuppet helpers tests"""
 
+from __future__ import annotations
+
 import multiprocessing
 import os
 import shutil

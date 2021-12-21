@@ -3,6 +3,8 @@
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
 """ffpuppet helper utilities"""
 
+from __future__ import annotations
+
 from json import load as json_load
 from logging import getLogger
 from os import W_OK, access, chmod, environ, mkdir, remove

@@ -4,6 +4,8 @@
 # You can obtain one at http://mozilla.org/MPL/2.0/.
 """ffpuppet sanitizer_util tests"""
 
+from __future__ import annotations
+
 from pytest import mark
 
 from .sanitizer_util import SanitizerOptions
