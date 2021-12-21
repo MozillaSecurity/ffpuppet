@@ -3,7 +3,9 @@
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
 """ffpuppet main.py"""
 
-from argparse import ArgumentParser
+from __future__ import annotations
+
+import argparse
 from logging import DEBUG, ERROR, INFO, WARNING, basicConfig, getLogger
 from os import scandir
 from os.path import abspath, exists, isdir, isfile
@@ -21,15 +23,15 @@ LOG = getLogger(__name__)
 __author__ = "Tyson Smith"
 
 
-def dump_to_console(log_dir, log_quota=0x8000):
+def dump_to_console(log_dir: str, log_quota: int = 0x8000) -> str:
     """Read and merge log files and format for output on the console.
 
     Args:
-        log_dir (str): Directory to scan for logs.
-        log_quota (int): Maximum number of bytes to read per log.
+        log_dir: Directory to scan for logs.
+        log_quota: Maximum number of bytes to read per log.
 
     Returns:
-        str: Merged log data to be displayed on the console.
+        Merged log data to be displayed on the console.
     """
 
     logs = list(x for x in scandir(log_dir) if x.is_file())
@@ -63,10 +65,12 @@ def dump_to_console(log_dir, log_quota=0x8000):
     return "".join(lines)
 
 
-def parse_args(argv=None):  # pylint: disable=missing-docstring
+def parse_args(  # pylint: disable=missing-docstring
+    argv: list[str] | None = None,
+) -> argparse.Namespace:
     log_level_map = {"ERROR": ERROR, "WARN": WARNING, "INFO": INFO, "DEBUG": DEBUG}
 
-    parser = ArgumentParser(
+    parser = argparse.ArgumentParser(
         description="FFPuppet - Firefox process launcher and log collector. "
         "Happy bug hunting!"
     )
@@ -223,7 +227,7 @@ def parse_args(argv=None):  # pylint: disable=missing-docstring
     return args
 
 
-def main(argv=None):  # pylint: disable=missing-docstring
+def main(argv: list[str] | None = None) -> None:  # pylint: disable=missing-docstring
     args = parse_args(argv)
     # set output verbosity
     if args.log_level == DEBUG:
@@ -239,6 +243,7 @@ def main(argv=None):  # pylint: disable=missing-docstring
         use_profile=args.profile,
         use_xvfb=args.xvfb,
     )
+    assert isinstance(ffp.profile, str)
     for a_token in args.abort_token:
         ffp.add_abort_token(a_token)
 

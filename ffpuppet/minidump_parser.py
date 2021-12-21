@@ -3,6 +3,9 @@
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
 """ffpuppet minidump parsing module"""
 
+from __future__ import annotations
+
+from collections.abc import Callable
 from logging import getLogger
 from os import getenv, scandir, stat
 from os.path import getmtime, isdir
@@ -10,6 +13,8 @@ from os.path import join as pathjoin
 from shutil import copy, copyfileobj
 from subprocess import DEVNULL, call
 from tempfile import TemporaryFile, mkdtemp
+from typing import Any
+from typing import IO
 
 LOG = getLogger(__name__)
 
@@ -29,20 +34,27 @@ class MinidumpParser:  # pylint: disable=missing-docstring
         "_working_path",
     )
 
-    def __init__(self, scan_path, record_failures=True, working_path=None):
+    def __init__(
+        self,
+        scan_path: str,
+        record_failures: bool = True,
+        working_path: str | None = None,
+    ):
         self.md_files = [x.path for x in scandir(scan_path) if x.name.endswith(".dmp")]
-        self.symbols_path = None
+        self.symbols_path: str | None = None
         self._include_raw = getenv("FFP_DEBUG_MDSW") is not None
         self._record_failures = record_failures  # mdsw failure reporting
         self._working_path = working_path
 
-    def _call_mdsw(self, dump_file, out_fp, extra_flags=None):
+    def _call_mdsw(
+        self, dump_file: str, out_fp: IO[bytes], extra_flags: list[str] | None = None
+    ) -> None:
         """Call minidump_stackwalk on a dmp file and collect output.
 
         Args:
-            dump_file (str): Path to dmp file.
-            out_fp (file): File to write output to.
-            extra_flags (list(str)): Arguments to pass to minidump_stackwalk.
+            dump_file: Path to dmp file.
+            out_fp: File to write output to.
+            extra_flags: Arguments to pass to minidump_stackwalk.
 
         Returns:
             None
@@ -82,12 +94,12 @@ class MinidumpParser:  # pylint: disable=missing-docstring
 
         out_fp.seek(0)
 
-    def _read_registers(self, dump_file, log_fp):
+    def _read_registers(self, dump_file: str, log_fp: IO[bytes]) -> None:
         """Use minidump_stackwalk to retrieve register info from dump_file.
 
         Args:
-            dump_file (str): Path to dmp file.
-            out_fp (file): File to write output to.
+            dump_file: Path to dmp file.
+            out_fp: File to write output to.
 
         Returns:
             None
@@ -111,14 +123,20 @@ class MinidumpParser:  # pylint: disable=missing-docstring
                 log_fp.write(line)
             LOG.debug("collected register info: %r", found_registers)
 
-    def _read_stacktrace(self, dump_file, log_fp, raw_fp=None, limit=MDSW_MAX_STACK):
+    def _read_stacktrace(
+        self,
+        dump_file: str,
+        log_fp: IO[bytes],
+        raw_fp: IO[bytes] | None = None,
+        limit: int = MDSW_MAX_STACK,
+    ) -> None:
         """Use minidump_stackwalk to retrieve stack trace from dump_file.
 
         Args:
-            dump_file (str): Path to dmp file.
-            log_fp (file): File to write output to.
-            raw_fp (file): File to write unprocessed output to.
-            limit (int): Maximum number of lines to include in stack trace.
+            dump_file: Path to dmp file.
+            log_fp: File to write output to.
+            raw_fp: File to write unprocessed output to.
+            limit: Maximum number of lines to include in stack trace.
 
         Returns:
             None
@@ -155,12 +173,14 @@ class MinidumpParser:  # pylint: disable=missing-docstring
                     log_fp.write(b"WARNING: Hit stack size output limit!")
                     break
 
-    def collect_logs(self, cb_create_log, symbols_path):
+    def collect_logs(
+        self, cb_create_log: Callable[..., Any], symbols_path: str
+    ) -> None:
         """Collect logs from dmp files.
 
         Args:
-            cb_create_log (callable): A callback to add log to PuppetLogger.
-            symbols_path (str): Path to symbols directory.
+            cb_create_log: A callback to add log to PuppetLogger.
+            symbols_path: Path to symbols directory.
 
         Returns:
             None
@@ -181,14 +201,14 @@ class MinidumpParser:  # pylint: disable=missing-docstring
                 log_fp.write(b"WARNING: minidump_stackwalk log was empty\n")
 
     @classmethod
-    def mdsw_available(cls):
+    def mdsw_available(cls) -> bool:
         """Check if minidump_stackwalk is available.
 
         Args:
             None
 
         Returns:
-            bool: True if minidump_stackwalk is available otherwise False.
+            True if minidump_stackwalk is available otherwise False.
         """
         try:
             call([cls.MDSW_BIN], stdout=DEVNULL, stderr=DEVNULL)
@@ -197,15 +217,20 @@ class MinidumpParser:  # pylint: disable=missing-docstring
         return True
 
 
-def process_minidumps(scan_path, symbols_path, cb_create_log, working_path=None):
+def process_minidumps(
+    scan_path: str,
+    symbols_path: str,
+    cb_create_log: Callable[..., Any],
+    working_path: str | None = None,
+) -> None:
     """Scan for minidump (.dmp) files a in scan_path. If dumps are found they
     are parsed and new logs are added via the cb_create_log callback.
 
     Args:
-        scan_path (str): Directory potentially containing minidump files.
-        symbols_path (str): Directory containing symbols for the target binary.
-        cb_create_log (callable): A callback to the add_log() of a PuppetLogger.
-        working_path (str): Used as base directory for temporary files.
+        scan_path: Directory potentially containing minidump files.
+        symbols_path: Directory containing symbols for the target binary.
+        cb_create_log: A callback to the add_log() of a PuppetLogger.
+        working_path: Used as base directory for temporary files.
 
     Returns:
         None
