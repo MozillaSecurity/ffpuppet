@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 from collections.abc import Iterator
+from collections.abc import KeysView
 from json import dump as json_dump
 from logging import getLogger
 from os import close as os_close
@@ -18,7 +19,6 @@ from subprocess import STDOUT, CalledProcessError, check_output
 from tempfile import mkdtemp, mkstemp
 from typing import Any
 from typing import IO
-from typing import KeysView
 
 from .helpers import onerror, warn_open
 
@@ -128,8 +128,8 @@ class PuppetLogger:  # pylint: disable=missing-docstring
         self.working_path = None
 
     def clone_log(
-        self, log_id: str, offset: int | None = None, target_file: int | None = None
-    ) -> int | None:
+        self, log_id: str, offset: int | None = None, target_file: str | None = None
+    ) -> str | None:
         """Create a copy of the specified log.
 
         Args:
