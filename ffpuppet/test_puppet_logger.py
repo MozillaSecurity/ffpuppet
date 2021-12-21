@@ -15,6 +15,7 @@ import tempfile
 import time
 
 import pytest
+from pytest_mock import MockerFixture
 
 from .puppet_logger import PuppetLogger, onerror
 
@@ -182,7 +183,7 @@ def test_puppet_logger_06(tmp_path: Path) -> None:
         assert os.stat(plog.get_fp("test_3").name).st_size == 500 * 1234
 
 
-def test_puppet_logger_07(mocker, tmp_path: Path) -> None:
+def test_puppet_logger_07(mocker: MockerFixture, tmp_path: Path) -> None:
     """test PuppetLogger.save_logs() rr trace directory"""
     fake_ck = mocker.patch("ffpuppet.puppet_logger.check_output", autospec=True)
     with PuppetLogger(base_path=str(tmp_path)) as plog:
@@ -224,7 +225,7 @@ def test_puppet_logger_08(tmp_path: Path) -> None:
                 plog.get_fp("test")
 
 
-def test_puppet_logger_09(mocker, tmp_path: Path) -> None:
+def test_puppet_logger_09(mocker: MockerFixture, tmp_path: Path) -> None:
     """test PuppetLogger.clean_up() with in-use file or inaccessible directory"""
     fake_rmtree = mocker.patch("ffpuppet.puppet_logger.rmtree", autospec=True)
     with PuppetLogger(base_path=str(tmp_path)) as plog:

@@ -8,13 +8,15 @@
 from __future__ import annotations
 
 from os import SEEK_END
+from pathlib import Path
 
 from pytest import mark, raises
+from pytest_mock import MockerFixture
 
 from .minidump_parser import MinidumpParser, process_minidumps
 
 
-def test_minidump_parser_01(mocker, tmp_path):
+def test_minidump_parser_01(mocker: MockerFixture, tmp_path: Path) -> None:
     """test MinidumpParser() with missing and empty scan path"""
     with raises(IOError):
         MinidumpParser("/path/does/not/exist/")
@@ -26,7 +28,7 @@ def test_minidump_parser_01(mocker, tmp_path):
     assert callback.call_count == 0
 
 
-def test_minidump_parser_02(mocker, tmp_path):
+def test_minidump_parser_02(mocker: MockerFixture, tmp_path: Path) -> None:
     """test MinidumpParser() with empty minidumps (ignore mdsw failures)"""
     md_path = tmp_path / "minidumps"
     md_path.mkdir()
@@ -47,7 +49,7 @@ def test_minidump_parser_02(mocker, tmp_path):
     assert not any(working.iterdir())
 
 
-def test_minidump_parser_03(mocker, tmp_path):
+def test_minidump_parser_03(mocker: MockerFixture, tmp_path: Path) -> None:
     """test MinidumpParser._read_registers()"""
 
     def fake_call_mdsw(_, out_fp):
@@ -84,7 +86,7 @@ def test_minidump_parser_03(mocker, tmp_path):
     assert len(md_lines) == 9  # only register info should be in here
 
 
-def test_minidump_parser_04(mocker, tmp_path):
+def test_minidump_parser_04(mocker: MockerFixture, tmp_path: Path) -> None:
     """test MinidumpParser._read_stacktrace()"""
 
     def fake_call_mdsw(_, out_fp, extra_flags=None):  # pylint: disable=unused-argument
@@ -137,7 +139,7 @@ def test_minidump_parser_04(mocker, tmp_path):
     assert md_lines[-1].startswith(b"0|3|")
 
 
-def test_minidump_parser_05(mocker, tmp_path):
+def test_minidump_parser_05(mocker: MockerFixture, tmp_path: Path) -> None:
     """test MinidumpParser.collect_logs()"""
     (tmp_path / "dummy.dmp").touch()
     (tmp_path / "dummy.txt").touch()
@@ -173,8 +175,14 @@ def test_minidump_parser_05(mocker, tmp_path):
     ],
 )
 def test_minidump_parser_06(
-    mocker, tmp_path, call_result, record, stat_result, log_count, dmp_exists
-):
+    mocker: MockerFixture,
+    tmp_path: Path,
+    call_result,
+    record,
+    stat_result,
+    log_count: int,
+    dmp_exists,
+) -> None:
     """test MinidumpParser._call_mdsw()"""
     fake_call = mocker.patch(
         "ffpuppet.minidump_parser.call", autospec=True, return_value=call_result
@@ -208,7 +216,7 @@ def test_minidump_parser_06(
     assert any(working.glob("**/test.dmp")) == dmp_exists
 
 
-def test_minidump_parser_07(mocker):
+def test_minidump_parser_07(mocker: MockerFixture) -> None:
     """test MinidumpParser.mdsw_available()"""
     fake_call = mocker.patch(
         "ffpuppet.minidump_parser.call", autospec=True, return_value=0
@@ -218,7 +226,7 @@ def test_minidump_parser_07(mocker):
     assert not MinidumpParser.mdsw_available()
 
 
-def test_process_minidumps_01(mocker, tmp_path):
+def test_process_minidumps_01(mocker: MockerFixture, tmp_path: Path) -> None:
     """test process_minidumps()"""
     fake_mdp = mocker.patch("ffpuppet.minidump_parser.MinidumpParser", autospec=True)
     fake_mdp.return_value.mdsw_available.return_value = True

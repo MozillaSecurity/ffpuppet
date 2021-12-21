@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import multiprocessing
 import os
+from pathlib import Path
 import shutil
 import sys
 import tempfile
@@ -15,6 +16,7 @@ from pathlib import Path
 
 import psutil
 import pytest
+from pytest_mock import MockerFixture
 
 from .helpers import (
     SanitizerOptions,
@@ -30,7 +32,7 @@ from .helpers import (
 )
 
 
-def test_helpers_01(tmp_path):
+def test_helpers_01(tmp_path: Path) -> None:
     """test create_profile()"""
     # try creating a profile from scratch
     # does nothing but create a directory to be populated
@@ -60,7 +62,7 @@ def test_helpers_01(tmp_path):
     assert not any((tmp_path / "dst3").iterdir())
 
 
-def test_helpers_02(tmp_path):
+def test_helpers_02(tmp_path: Path) -> None:
     """test check_prefs()"""
     dummy_prefs = tmp_path / "dummy.js"
     dummy_prefs.write_text(
@@ -87,7 +89,7 @@ def test_helpers_02(tmp_path):
     assert not check_prefs(str(dummy_prefs), str(custom_prefs))
 
 
-def test_helpers_03(mocker, tmp_path):
+def test_helpers_03(mocker: MockerFixture, tmp_path: Path) -> None:
     """test create_profile() extension support"""
     mocker.patch(
         "ffpuppet.helpers.mkdtemp", autospec=True, return_value=str(tmp_path / "dst")
@@ -189,7 +191,7 @@ def test_helpers_03(mocker, tmp_path):
     }
 
 
-def test_helpers_04(tmp_path):
+def test_helpers_04(tmp_path: Path) -> None:
     """test _configure_sanitizers()"""
 
     def parse(opt_str):
@@ -312,7 +314,7 @@ def test_helpers_04(tmp_path):
     assert asan_opts["external_symbolizer_path"].strip("'") == str(llvm_sym_b)
 
 
-def test_helpers_05():
+def test_helpers_05() -> None:
     """test prepare_environment()"""
     env = prepare_environment("", "blah")
     assert "ASAN_OPTIONS" in env
@@ -322,7 +324,7 @@ def test_helpers_05():
     assert "MOZ_CRASHREPORTER" in env
 
 
-def test_helpers_06():
+def test_helpers_06() -> None:
     """test prepare_environment() using some predefined environment variables"""
     pre = {
         "LSAN_OPTIONS": "lopt=newopt",
@@ -364,7 +366,7 @@ def test_helpers_06():
     assert "MOZ_CRASHREPORTER" not in env
 
 
-def test_helpers_07(tmp_path):
+def test_helpers_07(tmp_path: Path) -> None:
     """test wait_on_files()"""
     t_file = tmp_path / "file.bin"
     t_file.touch()
@@ -383,13 +385,13 @@ def test_helpers_07(tmp_path):
 
 
 # this needs to be here in order to work correctly on Windows
-def _dummy_process(is_alive, is_done):
+def _dummy_process(is_alive, is_done) -> None:
     is_alive.set()
     sys.stdout.write("I'm process %d\n" % os.getpid())
     is_done.wait(30)
 
 
-def test_helpers_08():
+def test_helpers_08() -> None:
     """test get_processes()"""
     assert len(get_processes(os.getpid(), recursive=False)) == 1
     assert not get_processes(0xFFFFFF)
@@ -405,7 +407,7 @@ def test_helpers_08():
     proc.join()
 
 
-def test_helpers_09(tmp_path):
+def test_helpers_09(tmp_path: Path) -> None:
     """test append_prefs()"""
     prefs = tmp_path / "prefs.js"
     prefs.write_bytes(b"user_pref('pre.existing', 1);")
@@ -418,7 +420,7 @@ def test_helpers_09(tmp_path):
     assert "user_pref('foo', 'a1b2c3');" in data
 
 
-def test_helpers_10(tmp_path):
+def test_helpers_10(tmp_path: Path) -> None:
     """test files_in_use()"""
     t_file = tmp_path / "file.bin"
     t_file.touch()
@@ -430,7 +432,7 @@ def test_helpers_10(tmp_path):
     assert not any(files_in_use([t_file], procs))
 
 
-def test_helpers_11(tmp_path):
+def test_helpers_11(tmp_path: Path) -> None:
     """test warn_open()"""
     (tmp_path / "file.bin").touch()
     with tempfile.NamedTemporaryFile(dir=str(tmp_path)) as _:

@@ -21,6 +21,7 @@ from subprocess import Popen
 
 import pytest
 from psutil import Process
+from pytest_mock import MockerFixture
 
 from .bootstrapper import Bootstrapper
 from .core import Debugger, FFPuppet, Reason
@@ -86,14 +87,14 @@ class HTTPTestServer:
 
 
 @pytest.mark.skipif(platform.system() == "Windows", reason="Unsupported on Windows")
-def test_ffpuppet_00(tmp_path):
+def test_ffpuppet_00(tmp_path: Path) -> None:
     """test that invalid executables raise the right exception"""
     with FFPuppet() as ffp:
         with pytest.raises(IOError, match="is not an executable"):
             ffp.launch(str(tmp_path))
 
 
-def test_ffpuppet_01():
+def test_ffpuppet_01() -> None:
     """test basic launch and close"""
     with FFPuppet() as ffp:
         assert ffp._dbg == Debugger.NONE
@@ -116,7 +117,7 @@ def test_ffpuppet_01():
         assert ffp.wait(timeout=10)
 
 
-def test_ffpuppet_02(mocker):
+def test_ffpuppet_02(mocker: MockerFixture) -> None:
     """test launch failures"""
     fake_bts = mocker.patch("ffpuppet.core.Bootstrapper", autospec=True)
     bts = mocker.Mock(spec=Bootstrapper, location="")
@@ -139,7 +140,7 @@ def test_ffpuppet_02(mocker):
         assert ffp.launches == 0
 
 
-def test_ffpuppet_03(tmp_path):
+def test_ffpuppet_03(tmp_path: Path) -> None:
     """test logging"""
     with FFPuppet() as ffp:
         ffp.close()
@@ -168,7 +169,7 @@ def test_ffpuppet_03(tmp_path):
         assert any(logs.glob(ffp._logs.META_FILE))
 
 
-def test_ffpuppet_04(mocker):
+def test_ffpuppet_04(mocker: MockerFixture) -> None:
     """test get_pid()"""
     with FFPuppet() as ffp:
         assert ffp.get_pid() is None
@@ -177,7 +178,7 @@ def test_ffpuppet_04(mocker):
         ffp._proc = None
 
 
-def test_ffpuppet_05(mocker):
+def test_ffpuppet_05(mocker: MockerFixture) -> None:
     """test is_running()"""
     with FFPuppet() as ffp:
         assert not ffp.is_running()
@@ -190,7 +191,7 @@ def test_ffpuppet_05(mocker):
         assert not ffp.is_running()
 
 
-def test_ffpuppet_06(mocker):
+def test_ffpuppet_06(mocker: MockerFixture) -> None:
     """test wait()"""
 
     class StubbedProc(FFPuppet):
@@ -222,7 +223,7 @@ def test_ffpuppet_06(mocker):
         assert fake_wait_procs.call_count == 1
 
 
-def test_ffpuppet_07(tmp_path):
+def test_ffpuppet_07(tmp_path: Path) -> None:
     """test clone_log()"""
     logs = tmp_path / "logs.txt"
     with FFPuppet() as ffp:
@@ -252,7 +253,7 @@ def test_ffpuppet_07(tmp_path):
         assert ffp.clone_log("stdout", target_file=str(logs)) is None
 
 
-def test_ffpuppet_08(tmp_path):
+def test_ffpuppet_08(tmp_path: Path) -> None:
     """test hitting memory limit"""
     with FFPuppet() as ffp:
         prefs = tmp_path / "prefs.js"
@@ -279,7 +280,7 @@ def test_ffpuppet_08(tmp_path):
     assert "MEMORY_LIMIT_EXCEEDED" in worker_log.read_text()
 
 
-def test_ffpuppet_09():
+def test_ffpuppet_09() -> None:
     """test calling launch() multiple times"""
     with FFPuppet() as ffp:
         with HTTPTestServer() as srv:
@@ -295,7 +296,7 @@ def test_ffpuppet_09():
         ffp.close()
 
 
-def test_ffpuppet_10(tmp_path):
+def test_ffpuppet_10(tmp_path: Path) -> None:
     """test abort tokens"""
     prefs = tmp_path / "prefs.js"
     prefs.write_bytes(b"//fftest_soft_assert\n")
@@ -319,7 +320,7 @@ def test_ffpuppet_10(tmp_path):
         assert b"TOKEN_LOCATED: ASSERTION: test" in worker_log.read_bytes()
 
 
-def test_ffpuppet_11(tmp_path):
+def test_ffpuppet_11(tmp_path: Path) -> None:
     """test using an existing profile directory"""
     prf_dir = tmp_path / "ffp_test_prof"
     prf_dir.mkdir()
@@ -328,7 +329,7 @@ def test_ffpuppet_11(tmp_path):
     assert prf_dir.is_dir()
 
 
-def test_ffpuppet_12():
+def test_ffpuppet_12() -> None:
     """test calling close() and clean_up() in multiple states"""
     with FFPuppet() as ffp:
         ffp.close()
@@ -343,7 +344,7 @@ def test_ffpuppet_12():
                 ffp.close()
 
 
-def test_ffpuppet_13(mocker):
+def test_ffpuppet_13(mocker: MockerFixture) -> None:
     """test launching under Xvfb"""
     fake_system = mocker.patch("ffpuppet.core.system", autospec=True)
     is_linux = platform.system() == "Linux"
@@ -369,7 +370,7 @@ def test_ffpuppet_13(mocker):
     assert fake_xvfb.start.call_count == 0
 
 
-def test_ffpuppet_14(tmp_path):
+def test_ffpuppet_14(tmp_path: Path) -> None:
     """test passing a file and a non existing file to launch() via location"""
     with FFPuppet() as ffp:
         with pytest.raises(IOError, match="Cannot find"):
@@ -399,7 +400,7 @@ def test_ffpuppet_14(tmp_path):
         assert os.path.normpath(os.path.join("/", location)) == fname
 
 
-def test_ffpuppet_15(mocker, tmp_path):
+def test_ffpuppet_15(mocker: MockerFixture, tmp_path: Path) -> None:
     """test launching with gdb"""
     mocker.patch("ffpuppet.core.check_output", autospec=True)
     mocker.patch("ffpuppet.core.get_processes", autospec=True, return_value=[])
@@ -422,7 +423,7 @@ def test_ffpuppet_15(mocker, tmp_path):
     assert b"[ffpuppet] Reason code:" in log_data
 
 
-def test_ffpuppet_16(tmp_path):
+def test_ffpuppet_16(tmp_path: Path) -> None:
     """test calling save_logs() before close()"""
     with FFPuppet() as ffp:
         with HTTPTestServer() as srv:
@@ -431,7 +432,7 @@ def test_ffpuppet_16(tmp_path):
                 ffp.save_logs(str(tmp_path / "logs"))
 
 
-def test_ffpuppet_17(mocker, tmp_path):
+def test_ffpuppet_17(mocker: MockerFixture, tmp_path: Path) -> None:
     """test launching with Valgrind"""
     mocker.patch(
         "ffpuppet.core.check_output", autospec=True, return_value=b"valgrind-99.0"
@@ -456,7 +457,7 @@ def test_ffpuppet_17(mocker, tmp_path):
     assert b"[ffpuppet] Reason code:" in log_data
 
 
-def test_ffpuppet_18(tmp_path):
+def test_ffpuppet_18(tmp_path: Path) -> None:
     """test detecting invalid prefs file"""
     prefs = tmp_path / "prefs.js"
     prefs.write_bytes(b"//fftest_invalid_js\n")
@@ -466,7 +467,7 @@ def test_ffpuppet_18(tmp_path):
                 ffp.launch(TESTFF_BIN, location=srv.get_addr(), prefs_js=str(prefs))
 
 
-def test_ffpuppet_19():
+def test_ffpuppet_19() -> None:
     """test log_length()"""
     with FFPuppet() as ffp:
         assert ffp.log_length("INVALID") is None
@@ -480,7 +481,7 @@ def test_ffpuppet_19():
         assert ffp.log_length("stderr") is None
 
 
-def test_ffpuppet_20():
+def test_ffpuppet_20() -> None:
     """test running multiple instances in parallel"""
     ffps = list()
     try:
@@ -501,7 +502,7 @@ def test_ffpuppet_20():
             ffp.clean_up()
 
 
-def test_ffpuppet_21(tmp_path):
+def test_ffpuppet_21(tmp_path: Path) -> None:
     """test hitting log size limit"""
     prefs = tmp_path / "prefs.js"
     prefs.write_bytes(b"//fftest_big_log\n")
@@ -525,7 +526,7 @@ def test_ffpuppet_21(tmp_path):
         )
 
 
-def test_ffpuppet_22(tmp_path):
+def test_ffpuppet_22(tmp_path: Path) -> None:
     """test collecting and cleaning up ASan logs"""
     test_logs = list()
     with FFPuppet() as ffp:
@@ -583,7 +584,7 @@ def test_ffpuppet_22(tmp_path):
     assert not any(os.path.isfile(f) for f in test_logs)
 
 
-def test_ffpuppet_23(mocker, tmp_path):
+def test_ffpuppet_23(mocker: MockerFixture, tmp_path: Path) -> None:
     """test multiple minidumps"""
 
     # pylint: disable=unused-argument
@@ -616,7 +617,7 @@ def test_ffpuppet_23(mocker, tmp_path):
         assert any(logs.glob("log_minidump_03.txt"))
 
 
-def test_ffpuppet_24(mocker, tmp_path):
+def test_ffpuppet_24(mocker: MockerFixture, tmp_path: Path) -> None:
     """test launching with rr"""
     mocker.patch("ffpuppet.core.check_output", autospec=True)
     mocker.patch("ffpuppet.core.get_processes", autospec=True, return_value=[])
@@ -639,7 +640,7 @@ def test_ffpuppet_24(mocker, tmp_path):
     assert b"[ffpuppet] Reason code:" in log_data
 
 
-def test_ffpuppet_25(tmp_path):
+def test_ffpuppet_25(tmp_path: Path) -> None:
     """test rmtree error handler"""
     # normal profile creation
     # - just create a puppet, write a readonly file in its profile, then call close()
@@ -665,7 +666,7 @@ def test_ffpuppet_25(tmp_path):
         assert not os.path.isdir(prof_path)
 
 
-def test_ffpuppet_26(tmp_path):
+def test_ffpuppet_26(tmp_path: Path) -> None:
     """test using a readonly prefs.js and extension"""
     prefs = tmp_path / "prefs.js"
     prefs.touch()
@@ -680,7 +681,7 @@ def test_ffpuppet_26(tmp_path):
         assert not os.path.isdir(prof_path)
 
 
-def test_ffpuppet_27(mocker, tmp_path):
+def test_ffpuppet_27(mocker: MockerFixture, tmp_path: Path) -> None:
     """test _crashreports()"""
     mocker.patch(
         "ffpuppet.core.check_output", autospec=True, return_value=b"valgrind-99.0"
@@ -741,7 +742,7 @@ def test_ffpuppet_27(mocker, tmp_path):
             assert not ffp._logs.watching
 
 
-def test_ffpuppet_28(tmp_path):
+def test_ffpuppet_28(tmp_path: Path) -> None:
     """test build_launch_cmd()"""
     with FFPuppet() as ffp:
         cmd = ffp.build_launch_cmd("bin_path", ["test"])
@@ -781,7 +782,7 @@ def test_ffpuppet_28(tmp_path):
             os.environ.pop("VALGRIND_SUP_PATH")
 
 
-def test_ffpuppet_29():
+def test_ffpuppet_29() -> None:
     """test cpu_usage()"""
     with FFPuppet() as ffp:
         assert not any(ffp.cpu_usage())
@@ -796,7 +797,7 @@ def test_ffpuppet_29():
         assert ffp.wait(timeout=10)
 
 
-def test_ffpuppet_30(mocker):
+def test_ffpuppet_30(mocker: MockerFixture) -> None:
     """test _dbg_sanity_check()"""
     fake_system = mocker.patch("ffpuppet.core.system", autospec=True)
     fake_chkout = mocker.patch("ffpuppet.core.check_output", autospec=True)
@@ -855,7 +856,7 @@ def test_ffpuppet_30(mocker):
         FFPuppet._dbg_sanity_check(Debugger.VALGRIND)
 
 
-def test_ffpuppet_31(mocker):
+def test_ffpuppet_31(mocker: MockerFixture) -> None:
     """test _terminate()"""
     procs = [mocker.Mock(spec=Process, pid=123), mocker.Mock(spec=Process, pid=124)]
     mocker.patch("ffpuppet.core.get_processes", autospec=True, return_value=procs)
@@ -891,7 +892,7 @@ def test_ffpuppet_31(mocker):
         FFPuppet._terminate(1234)
 
 
-def test_ffpuppet_32(mocker, tmp_path):
+def test_ffpuppet_32(mocker: MockerFixture, tmp_path: Path) -> None:
     """test FFPuppet.close() setting reason"""
 
     class StubbedProc(FFPuppet):
@@ -969,7 +970,7 @@ def test_ffpuppet_32(mocker, tmp_path):
         assert ffp.reason == Reason.ALERT
 
 
-def test_ffpuppet_33():
+def test_ffpuppet_33() -> None:
     """test ignoring benign sanitizer logs"""
     with FFPuppet() as ffp:
         ffp.launch(TESTFF_BIN)

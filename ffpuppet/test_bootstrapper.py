@@ -11,12 +11,13 @@ import socket
 import threading
 
 from pytest import raises
+from pytest_mock import MockerFixture
 
 from .bootstrapper import Bootstrapper
 from .exceptions import BrowserTerminatedError, BrowserTimeoutError, LaunchError
 
 
-def test_bootstrapper_01():
+def test_bootstrapper_01() -> None:
     """test simple Bootstrapper()"""
     with Bootstrapper() as bts:
         assert bts._socket is not None
@@ -27,7 +28,7 @@ def test_bootstrapper_01():
         assert bts._socket is None
 
 
-def test_bootstrapper_02(mocker):
+def test_bootstrapper_02(mocker: MockerFixture) -> None:
     """test Bootstrapper.wait() failure waiting for initial connection"""
     fake_sock = mocker.Mock(socket.socket)
     fake_sock.accept.side_effect = socket.timeout
@@ -50,7 +51,7 @@ def test_bootstrapper_02(mocker):
         assert fake_sock.accept.call_count > 1
 
 
-def test_bootstrapper_03(mocker):
+def test_bootstrapper_03(mocker: MockerFixture) -> None:
     """test Bootstrapper.wait() failure waiting for request"""
     fake_sock = mocker.Mock(socket.socket)
     fake_conn = mocker.Mock(socket.socket)
@@ -73,7 +74,7 @@ def test_bootstrapper_03(mocker):
         assert fake_conn.close.call_count == 1
 
 
-def test_bootstrapper_04(mocker):
+def test_bootstrapper_04(mocker: MockerFixture) -> None:
     """test Bootstrapper.wait() failure sending response"""
     fake_sock = mocker.Mock(socket.socket)
     fake_conn = mocker.Mock(socket.socket)
@@ -97,7 +98,7 @@ def test_bootstrapper_04(mocker):
         assert fake_conn.close.call_count == 1
 
 
-def test_bootstrapper_05(mocker):
+def test_bootstrapper_05(mocker: MockerFixture) -> None:
     """test Bootstrapper.wait() target crashed"""
     fake_sock = mocker.Mock(socket.socket)
     fake_conn = mocker.Mock(socket.socket)
@@ -111,7 +112,7 @@ def test_bootstrapper_05(mocker):
     assert fake_conn.close.call_count == 1
 
 
-def test_bootstrapper_06(mocker):
+def test_bootstrapper_06(mocker: MockerFixture) -> None:
     """test Bootstrapper.wait() successful without redirect"""
     fake_sock = mocker.Mock(socket.socket)
     fake_conn = mocker.Mock(socket.socket)
@@ -125,7 +126,7 @@ def test_bootstrapper_06(mocker):
     assert fake_conn.sendall.call_count == 1
 
 
-def test_bootstrapper_07(mocker):
+def test_bootstrapper_07(mocker: MockerFixture) -> None:
     """test Bootstrapper.wait() successful with redirect"""
     fake_sock = mocker.Mock(socket.socket)
     fake_conn = mocker.Mock(socket.socket)
@@ -173,7 +174,7 @@ def test_bootstrapper_08():
             browser_thread.join()
 
 
-def test_bootstrapper_09(mocker):
+def test_bootstrapper_09(mocker: MockerFixture) -> None:
     """test Bootstrapper() hit PORT_RETRIES"""
     fake_sock = mocker.Mock(socket.socket)
     fake_sock.bind.side_effect = socket.error(10013, "TEST")

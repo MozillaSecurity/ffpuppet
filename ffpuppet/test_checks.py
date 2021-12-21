@@ -10,10 +10,12 @@ from os import getpid, path
 from pathlib import Path
 from re import compile as re_compile
 
+from pytest_mock import MockerFixture
+
 from .checks import CheckLogContents, CheckLogSize, CheckMemoryUsage
 
 
-def test_check_01(mocker, tmp_path: Path) -> None:
+def test_check_01(mocker: MockerFixture, tmp_path: Path) -> None:
     """test CheckLogContents()"""
     test_log = tmp_path / "test.log"
     # input contains token
