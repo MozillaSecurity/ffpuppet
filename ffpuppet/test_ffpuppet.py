@@ -7,6 +7,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 import errno
 import os
 import platform
@@ -196,7 +197,7 @@ def test_ffpuppet_06(mocker: MockerFixture) -> None:
     """test wait()"""
 
     class StubbedProc(FFPuppet):
-        def close(self, **_) -> None:  # pylint: disable=arguments-differ
+        def close(self, **_: Any) -> None:  # pylint: disable=arguments-differ
             self.reason = Reason.CLOSED
 
         def launch(self) -> None:  # pylint: disable=arguments-differ
@@ -532,6 +533,7 @@ def test_ffpuppet_22(tmp_path: Path) -> None:
     test_logs = list()
     with FFPuppet() as ffp:
         ffp.launch(TESTFF_BIN)
+        assert isinstance(ffp._logs.working_path, str)
         asan_prefix = os.path.join(ffp._logs.working_path, ffp._logs.PREFIX_SAN)
         for i in range(4):
             test_logs.append(".".join([asan_prefix, str(i)]))
@@ -589,7 +591,9 @@ def test_ffpuppet_23(mocker: MockerFixture, tmp_path: Path) -> None:
     """test multiple minidumps"""
 
     # pylint: disable=unused-argument
-    def _fake_process_minidumps(dmps, _, add_log, working_path=None):
+    def _fake_process_minidumps(
+        dmps: str, _: str, add_log: Callable[..., Any], working_path: str | None = None
+    ):
         for num, _ in enumerate(x for x in os.listdir(dmps) if x.endswith(".dmp")):
             lfp = add_log("minidump_%02d" % (num + 1,))
             lfp.write(b"test")
@@ -602,6 +606,7 @@ def test_ffpuppet_23(mocker: MockerFixture, tmp_path: Path) -> None:
         ffp.launch(TESTFF_BIN)
         ffp._bin_path = ffp.profile
         # create "test.dmp" files
+        assert isinstance(ffp._bin_path, str)
         md_path = os.path.join(ffp._bin_path, "minidumps")
         with open(os.path.join(md_path, "test1.dmp"), "w") as out_fp:
             out_fp.write("1a\n1b")
@@ -663,6 +668,7 @@ def test_ffpuppet_25(tmp_path: Path) -> None:
     with FFPuppet(use_profile=str(profile)) as ffp:
         ffp.launch(TESTFF_BIN)
         prof_path = ffp.profile
+        assert isinstance(prof_path, str)
         assert os.path.isdir(prof_path)
         ffp.close()
         assert not os.path.isdir(prof_path)
@@ -680,6 +686,7 @@ def test_ffpuppet_26(tmp_path: Path) -> None:
         ffp.launch(TESTFF_BIN, extension=str(ext), prefs_js=str(prefs))
         prof_path = ffp.profile
         ffp.close()
+        assert isinstance(prof_path, str)
         assert not os.path.isdir(prof_path)
 
 
@@ -697,6 +704,7 @@ def test_ffpuppet_27(mocker: MockerFixture, tmp_path: Path) -> None:
             self.profile = str(profile)
 
         def close(self, force_close: bool = False) -> None:
+            assert isinstance(self.profile, str)
             if os.path.isdir(self.profile):
                 shutil.rmtree(self.profile)
             self.profile = None
@@ -912,7 +920,7 @@ def test_ffpuppet_32(mocker: MockerFixture, tmp_path: Path) -> None:
 
         @staticmethod
         def _terminate(  # pylint: disable=signature-differs
-            pid, *_a: Any, **_kw: Any
+            pid: int, *_a: Any, **_kw: Any
         ) -> None:
             assert isinstance(pid, int)
 
@@ -980,6 +988,7 @@ def test_ffpuppet_33() -> None:
     """test ignoring benign sanitizer logs"""
     with FFPuppet() as ffp:
         ffp.launch(TESTFF_BIN)
+        assert isinstance(ffp._logs.working_path, str)
         san_log = "%s.1" % os.path.join(ffp._logs.working_path, ffp._logs.PREFIX_SAN)
         assert not ffp._logs.watching
         # ignore benign ASan warning
