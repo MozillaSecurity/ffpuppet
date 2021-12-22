@@ -22,7 +22,7 @@ from subprocess import Popen, check_output
 from typing import Any
 
 try:
-    from subprocess import CREATE_NEW_PROCESS_GROUP
+    from subprocess import CREATE_NEW_PROCESS_GROUP  # type: ignore[attr-defined]
 except ImportError:
     pass
 from sys import executable
