@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from json import load as json_load
 from logging import getLogger
-from os import W_OK, access, chmod, environ, mkdir, remove
+from os import _Environ, W_OK, access, chmod, environ, mkdir, remove
 from os.path import abspath, basename, isdir, isfile
 from os.path import join as pathjoin
 from pathlib import Path
@@ -80,20 +80,22 @@ def check_prefs(prof_prefs: str, input_prefs: str) -> bool:
     return not missing_prefs
 
 
-def _configure_sanitizers(env, target_dir: str, log_path: str):
+def _configure_sanitizers(
+    orig_env: dict[str, str], target_dir: str, log_path: str
+) -> dict[str, str]:
     """Copy environment and update default values in *SAN_OPTIONS entries.
     These values are only updated if they are not provided, with the exception of
     'log_path'. 'log_path' is used by FFPuppet to detect results.
 
     Args:
-        env (dict): Current environment.
+        env: Current environment.
         target_dir: Directory containing browser binary.
         log_path: Location to write sanitizer logs to.
 
     Returns:
-        dict: Environment with *SAN_OPTIONS defaults set.
+        Environment with *SAN_OPTIONS defaults set.
     """
-    env = dict(env)
+    env: dict[str, str] = dict(orig_env)
     # https://github.com/google/sanitizers/wiki/SanitizerCommonFlags
     common_flags = [
         ("abort_on_error", "false"),
@@ -120,6 +122,7 @@ def _configure_sanitizers(env, target_dir: str, log_path: str):
             ".exe" if system().startswith("Windows") else "",
         )
         llvm_sym = pathjoin(target_dir, "".join(bin_name))
+    assert isinstance(llvm_sym, str)
     if isfile(llvm_sym):
         # add *SAN_OPTIONS=external_symbolizer_path
         common_flags.append(("external_symbolizer_path", "'%s'" % (llvm_sym,)))
@@ -130,7 +133,9 @@ def _configure_sanitizers(env, target_dir: str, log_path: str):
     # setup Address Sanitizer options ONLY if not set manually in environment
     # https://github.com/google/sanitizers/wiki/AddressSanitizerFlags
     asan_config = SanitizerOptions()
-    asan_config.load_options(env.get("ASAN_OPTIONS"))
+    env_asan_opts = env.get("ASAN_OPTIONS")
+    assert isinstance(env_asan_opts, str)
+    asan_config.load_options(env_asan_opts)
     assert asan_config.check_path("suppressions"), "missing suppressions file"
     for flag in common_flags:
         asan_config.add(*flag)
@@ -157,7 +162,9 @@ def _configure_sanitizers(env, target_dir: str, log_path: str):
     # setup Leak Sanitizer options ONLY if not set manually in environment
     # https://github.com/google/sanitizers/wiki/AddressSanitizerLeakSanitizer
     lsan_config = SanitizerOptions()
-    lsan_config.load_options(env.get("LSAN_OPTIONS"))
+    env_lsan_opts = env.get("LSAN_OPTIONS")
+    assert isinstance(env_lsan_opts, str)
+    lsan_config.load_options(env_lsan_opts)
     assert lsan_config.check_path("suppressions"), "missing suppressions file"
     lsan_config.add("max_leaks", "1")
     lsan_config.add("print_suppressions", "false")
@@ -167,7 +174,9 @@ def _configure_sanitizers(env, target_dir: str, log_path: str):
 
     # setup Thread Sanitizer options ONLY if not set manually in environment
     tsan_config = SanitizerOptions()
-    tsan_config.load_options(env.get("TSAN_OPTIONS"))
+    env_tsan_opts = env.get("TSAN_OPTIONS")
+    assert isinstance(env_tsan_opts, str)
+    tsan_config.load_options(env_tsan_opts)
     assert tsan_config.check_path("suppressions"), "missing suppressions file"
     tsan_config.add("halt_on_error", "1")
     if "log_path" in tsan_config:
@@ -179,7 +188,9 @@ def _configure_sanitizers(env, target_dir: str, log_path: str):
 
     # setup Undefined Behavior Sanitizer options ONLY if not set manually in environment
     ubsan_config = SanitizerOptions()
-    ubsan_config.load_options(env.get("UBSAN_OPTIONS"))
+    env_ubsan_opts = env.get("UBSAN_OPTIONS")
+    assert isinstance(env_ubsan_opts, str)
+    ubsan_config.load_options(env_ubsan_opts)
     assert ubsan_config.check_path("suppressions"), "missing suppressions file"
     for flag in common_flags:
         ubsan_config.add(*flag)
@@ -377,7 +388,7 @@ def prepare_environment(target_dir: str, sanitizer_log: str, env_mod=None):
         dict: Environment to use when launching browser.
     """
     base = dict()
-    env = dict(environ)
+    env: dict[str, str] = dict(environ)
 
     # https://developer.gimp.org/api/2.0/glib/glib-running.html#G_SLICE
     base["G_SLICE"] = "always-malloc"

@@ -9,6 +9,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from pytest import mark, raises
+from pytest_mock import MockerFixture
 
 from .core import Reason
 from .main import dump_to_console, main, parse_args
@@ -30,7 +31,11 @@ from .main import dump_to_console, main, parse_args
     ],
 )
 def test_main_01(
-    mocker, tmp_path: Path, reason, user_exit: bool, extra_args: list[str]
+    mocker: MockerFixture,
+    tmp_path: Path,
+    reason: Reason | None,
+    user_exit: bool,
+    extra_args: list[str],
 ) -> None:
     """test main()"""
     fake_ffp = mocker.patch("ffpuppet.main.FFPuppet", autospec=True)

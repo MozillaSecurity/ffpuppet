@@ -7,6 +7,7 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from os import SEEK_SET, stat
+from typing import IO
 
 from psutil import AccessDenied, NoSuchProcess
 
@@ -34,11 +35,11 @@ class Check(ABC):
         Implement a check that returns True when the abort conditions are met.
         """
 
-    def dump_log(self, dst_fp) -> None:
+    def dump_log(self, dst_fp: IO[bytes]) -> None:
         """Write log contents to file.
 
         Args:
-            dst_fp (file): Open file object to write logs to.
+            dst_fp: Open file object to write logs to.
 
         Returns:
             None

@@ -20,7 +20,7 @@ from re import match as re_match
 from shutil import rmtree
 from subprocess import Popen, check_output
 from typing import Any
-from typing import IO
+from typing import BinaryIO
 
 try:
     from subprocess import CREATE_NEW_PROCESS_GROUP  # type: ignore[attr-defined]
@@ -119,8 +119,8 @@ class FFPuppet:
     ):
         # tokens used to notify log scanner to kill the browser process
         self._abort_tokens = set()
-        self._bin_path = None
-        self._checks = list()
+        self._bin_path: str | None = None
+        self._checks: list[CheckLogContents | CheckLogSize | CheckMemoryUsage] = list()
         self._dbg = debugger
         self._dbg_sanity_check(self._dbg)
         self._launches = 0  # number of successful browser launches
@@ -129,8 +129,8 @@ class FFPuppet:
         self._profile_template = use_profile  # profile that is used as a template
         self._xvfb = None
         self._working_path = working_path
-        self.profile = None  # path to profile
-        self.reason = Reason.CLOSED
+        self.profile: str | None = None  # path to profile
+        self.reason: Reason | None = Reason.CLOSED
 
         if use_xvfb:
             if not system().startswith("Linux"):
@@ -212,6 +212,7 @@ class FFPuppet:
         Yields:
             Log on the filesystem.
         """
+        assert isinstance(self._logs.working_path, str)
         try:
             for entry in Path(self._logs.working_path).iterdir():
                 # scan for sanitizer logs
@@ -229,6 +230,7 @@ class FFPuppet:
             pass
 
         # check for minidumps
+        assert isinstance(self.profile, str)
         if not skip_md:
             try:
                 for entry in (Path(self.profile) / "minidumps").iterdir():
@@ -341,7 +343,7 @@ class FFPuppet:
         assert token and isinstance(token, str)
         self._abort_tokens.add(re_compile(token))
 
-    def available_logs(self: str) -> list[str]:
+    def available_logs(self) -> list[str]:
         """List of IDs for the currently available logs.
 
         Args:
@@ -380,6 +382,7 @@ class FFPuppet:
             assert all(isinstance(x, str) for x in additional_args)
             cmd.extend(additional_args)
 
+        assert isinstance(self._logs.working_path, str)
         if self._dbg == Debugger.VALGRIND:
             valgrind_cmd = [
                 "valgrind",
@@ -498,7 +501,7 @@ class FFPuppet:
 
     def clone_log(
         self, log_id: str, offset: int | None = None, target_file: str | None = None
-    ) -> str:
+    ) -> str | None:
         """Create a copy of the selected browser log.
 
         Args:
@@ -798,6 +801,7 @@ class FFPuppet:
             stderr.write(" ".join(cmd).encode("utf-8"))
             stderr.write(b"\n\n")
             stderr.flush()
+            assert isinstance(self._logs.working_path, str)
             sanitizer_logs = pathjoin(self._logs.working_path, self._logs.PREFIX_SAN)
             # launch the browser
             LOG.debug("launch command: %r", " ".join(cmd))
@@ -822,24 +826,28 @@ class FFPuppet:
             ):
                 raise InvalidPrefs("%r is invalid" % prefs_js)
 
-        assert isinstance(self._logs.get_fp("stderr"), IO[bytes])
-        assert isinstance(self._logs.get_fp("stdout"), IO[bytes])
+        logs_fp_stderr = self._logs.get_fp("stderr")
+        assert isinstance(logs_fp_stderr, BinaryIO)
+        logs_fp_stdout = self._logs.get_fp("stdout")
+        assert isinstance(logs_fp_stdout, BinaryIO)
         if log_limit:
             self._checks.append(
                 CheckLogSize(
                     log_limit,
-                    self._logs.get_fp("stderr").name,
-                    self._logs.get_fp("stdout").name,
+                    logs_fp_stderr.name,
+                    logs_fp_stdout.name,
                 )
             )
         if memory_limit:
-            self._checks.append(CheckMemoryUsage(self.get_pid(), memory_limit))
+            curr_pid = self.get_pid()
+            assert isinstance(curr_pid, int)
+            self._checks.append(CheckMemoryUsage(curr_pid, memory_limit))
         if self._abort_tokens:
             self._checks.append(
                 CheckLogContents(
                     [
-                        self._logs.get_fp("stderr").name,
-                        self._logs.get_fp("stdout").name,
+                        logs_fp_stderr.name,
+                        logs_fp_stdout.name,
                     ],
                     self._abort_tokens,
                 )
@@ -860,7 +868,7 @@ class FFPuppet:
         assert self._launches > -1, "clean_up() has been called"
         return self._launches
 
-    def log_length(self, log_id: str) -> int:
+    def log_length(self, log_id: str) -> int | None:
         """Get the length of the selected browser log.
 
         Args:

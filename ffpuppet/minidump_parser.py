@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from logging import getLogger
 from os import getenv, scandir, stat
 from os.path import getmtime, isdir
@@ -12,6 +13,7 @@ from os.path import join as pathjoin
 from shutil import copy, copyfileobj
 from subprocess import DEVNULL, call
 from tempfile import TemporaryFile, mkdtemp
+from typing import Any
 from typing import IO
 
 LOG = getLogger(__name__)
@@ -171,7 +173,9 @@ class MinidumpParser:  # pylint: disable=missing-docstring
                     log_fp.write(b"WARNING: Hit stack size output limit!")
                     break
 
-    def collect_logs(self, cb_create_log, symbols_path: str) -> None:
+    def collect_logs(
+        self, cb_create_log: Callable[..., Any], symbols_path: str
+    ) -> None:
         """Collect logs from dmp files.
 
         Args:
@@ -214,7 +218,10 @@ class MinidumpParser:  # pylint: disable=missing-docstring
 
 
 def process_minidumps(
-    scan_path: str, symbols_path: str, cb_create_log, working_path: str | None = None
+    scan_path: str,
+    symbols_path: str,
+    cb_create_log: Callable[..., Any],
+    working_path: str | None = None,
 ) -> None:
     """Scan for minidump (.dmp) files a in scan_path. If dumps are found they
     are parsed and new logs are added via the cb_create_log callback.

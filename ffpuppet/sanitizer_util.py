@@ -21,9 +21,9 @@ class SanitizerOptions:  # pylint: disable=missing-docstring
     __slots__ = ("_options",)
 
     def __init__(self) -> None:
-        self._options = dict()
+        self._options: dict[str, str] = dict()
 
-    def __contains__(self, item):
+    def __contains__(self, item: str) -> bool:
         return item in self._options
 
     def add(self, flag: str, value: str, overwrite: bool = False) -> None:
@@ -61,7 +61,7 @@ class SanitizerOptions:  # pylint: disable=missing-docstring
             return exists(value)
         return True
 
-    def get(self, flag: str) -> str:
+    def get(self, flag: str) -> str | None:
         """Get sanitizer flag.
 
         Args:
@@ -118,7 +118,7 @@ class SanitizerOptions:  # pylint: disable=missing-docstring
         """
         return ":".join("=".join(kv) for kv in self._options.items())
 
-    def pop(self, flag: str) -> str:
+    def pop(self, flag: str) -> str | None:
         """Pop sanitizer flag.
 
         Args:

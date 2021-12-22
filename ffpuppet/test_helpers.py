@@ -205,7 +205,7 @@ def test_helpers_04(tmp_path: Path) -> None:
         return opts
 
     # test with empty environment
-    env = {}
+    env: dict[str, str] = {}
     env = _configure_sanitizers(env, str(tmp_path), "blah")
     assert "ASAN_OPTIONS" in env
     asan_opts = parse(env["ASAN_OPTIONS"])

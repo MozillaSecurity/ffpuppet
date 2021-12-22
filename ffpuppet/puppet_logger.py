@@ -44,7 +44,7 @@ class PuppetLogger:  # pylint: disable=missing-docstring
         self._logs: dict[str, IO[bytes]] = dict()
         self._rr_packed = False
         self.closed = True
-        self.watching: dict[str, str] = dict()
+        self.watching: dict[str, int] = dict()
         self.working_path: str | None = None
         self.reset()
 
