@@ -23,15 +23,15 @@ LOG = getLogger(__name__)
 __author__ = "Tyson Smith"
 
 
-def dump_to_console(log_dir, log_quota=0x8000):
+def dump_to_console(log_dir: str, log_quota: int = 0x8000) -> str:
     """Read and merge log files and format for output on the console.
 
     Args:
-        log_dir (str): Directory to scan for logs.
-        log_quota (int): Maximum number of bytes to read per log.
+        log_dir: Directory to scan for logs.
+        log_quota: Maximum number of bytes to read per log.
 
     Returns:
-        str: Merged log data to be displayed on the console.
+        Merged log data to be displayed on the console.
     """
 
     logs = list(x for x in scandir(log_dir) if x.is_file())
@@ -243,6 +243,7 @@ def main(argv: list[str] | None = None) -> None:  # pylint: disable=missing-docs
         use_profile=args.profile,
         use_xvfb=args.xvfb,
     )
+    assert isinstance(ffp.profile, str)
     for a_token in args.abort_token:
         ffp.add_abort_token(a_token)
 

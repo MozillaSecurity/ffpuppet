@@ -194,7 +194,7 @@ def test_helpers_03(mocker: MockerFixture, tmp_path: Path) -> None:
 def test_helpers_04(tmp_path: Path) -> None:
     """test _configure_sanitizers()"""
 
-    def parse(opt_str: str):
+    def parse(opt_str: str) -> dict[str, str]:
         opts = dict()
         for entry in SanitizerOptions.re_delim.split(opt_str):
             try:

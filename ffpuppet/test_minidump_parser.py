@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from os import SEEK_END
 from pathlib import Path
+from typing import IO
 
 from pytest import mark, raises
 from pytest_mock import MockerFixture
@@ -52,7 +53,7 @@ def test_minidump_parser_02(mocker: MockerFixture, tmp_path: Path) -> None:
 def test_minidump_parser_03(mocker: MockerFixture, tmp_path: Path) -> None:
     """test MinidumpParser._read_registers()"""
 
-    def fake_call_mdsw(_, out_fp):
+    def fake_call_mdsw(_: str, out_fp: IO[bytes]) -> None:
         out_fp.write(
             b"Crash reason:  SIGSEGV\n"
             b"Crash address: 0x0\n"
@@ -89,7 +90,9 @@ def test_minidump_parser_03(mocker: MockerFixture, tmp_path: Path) -> None:
 def test_minidump_parser_04(mocker: MockerFixture, tmp_path: Path) -> None:
     """test MinidumpParser._read_stacktrace()"""
 
-    def fake_call_mdsw(_, out_fp, extra_flags=None):  # pylint: disable=unused-argument
+    def fake_call_mdsw(  # pylint: disable=unused-argument
+        _: str, out_fp: IO[bytes], extra_flags: list[str] | None = None
+    ) -> None:
         out_fp.write(
             b"OS|Linux|0.0.0 sys info...\n"
             b"CPU|amd64|more info|8\n"
@@ -177,11 +180,11 @@ def test_minidump_parser_05(mocker: MockerFixture, tmp_path: Path) -> None:
 def test_minidump_parser_06(
     mocker: MockerFixture,
     tmp_path: Path,
-    call_result,
-    record,
-    stat_result,
+    call_result: int,
+    record: bool,
+    stat_result: OSError | int | None,
     log_count: int,
-    dmp_exists,
+    dmp_exists: bool,
 ) -> None:
     """test MinidumpParser._call_mdsw()"""
     fake_call = mocker.patch(

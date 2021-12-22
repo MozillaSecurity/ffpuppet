@@ -16,6 +16,7 @@ from shutil import copyfile, copytree, rmtree
 from stat import S_IWUSR
 from tempfile import mkdtemp
 from time import sleep, time
+from typing import Iterable
 from xml.etree import ElementTree
 
 from psutil import AccessDenied, NoSuchProcess, Process, process_iter
@@ -194,7 +195,7 @@ def _configure_sanitizers(env, target_dir: str, log_path: str):
 
 
 def create_profile(
-    extension: str | None = None,
+    extension: list[str] | str | None = None,
     prefs_js: str | None = None,
     template: str | None = None,
     working_path: str | None = None,
@@ -251,8 +252,8 @@ def create_profile(
                 if isfile(pathjoin(ext, "manifest.json")):
                     try:
                         with open(pathjoin(ext, "manifest.json")) as manifest:
-                            manifest = json_load(manifest)
-                        ext_name = manifest["applications"]["gecko"]["id"]
+                            manifest_loaded_json = json_load(manifest)
+                        ext_name = manifest_loaded_json["applications"]["gecko"]["id"]
                     except (IOError, KeyError, ValueError) as exc:
                         LOG.debug("Failed to parse manifest.json: %s", exc)
                 elif isfile(pathjoin(ext, "install.rdf")):
@@ -282,7 +283,7 @@ def create_profile(
     return profile
 
 
-def files_in_use(files, procs):
+def files_in_use(files, procs) -> Iterable[tuple[Path, int, str]]:
     """Check if any of the given files are open by any of the given processes.
 
     Args:
@@ -290,7 +291,7 @@ def files_in_use(files, procs):
         procs (iterable(Process)): Processes to scan for open files.
 
     Yields:
-        tuple: Path of file, process ID and process name.
+        Path of file, process ID and process name.
     """
     assert isinstance(files, (set, tuple, list))
     if files:
