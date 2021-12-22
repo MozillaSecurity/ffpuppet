@@ -24,7 +24,7 @@ __all__ = ("Bootstrapper",)
 
 class Bootstrapper:  # pylint: disable=missing-docstring
     BUF_SIZE = 4096  # receive buffer size
-    POLL_WAIT = 1  # duration of initial blocking socket operations
+    POLL_WAIT: float = 1  # duration of initial blocking socket operations
     PORT_MAX = 0xFFFF  # bootstrap range
     PORT_MIN = 0x2000  # bootstrap range
     PORT_RETRIES = 100  # number of attempts to find an available port

@@ -20,6 +20,7 @@ from re import match as re_match
 from shutil import rmtree
 from subprocess import Popen, check_output
 from typing import Any
+from typing import IO
 
 try:
     from subprocess import CREATE_NEW_PROCESS_GROUP  # type: ignore[attr-defined]
@@ -821,6 +822,8 @@ class FFPuppet:
             ):
                 raise InvalidPrefs("%r is invalid" % prefs_js)
 
+        assert isinstance(self._logs.get_fp("stderr"), IO[bytes])
+        assert isinstance(self._logs.get_fp("stdout"), IO[bytes])
         if log_limit:
             self._checks.append(
                 CheckLogSize(

@@ -646,6 +646,7 @@ def test_ffpuppet_25(tmp_path: Path) -> None:
     # normal profile creation
     # - just create a puppet, write a readonly file in its profile, then call close()
     with FFPuppet() as ffp:
+        assert isinstance(ffp.profile, str)
         ffp.launch(TESTFF_BIN)
         ro_file = Path(ffp.profile) / "read-only-test.txt"
         ro_file.touch()
@@ -703,6 +704,8 @@ def test_ffpuppet_27(mocker: MockerFixture, tmp_path: Path) -> None:
     is_linux = platform.system() == "Linux"
     debugger = Debugger.VALGRIND if is_linux else Debugger.NONE
     with StubbedLaunch(debugger=debugger) as ffp:
+        assert isinstance(ffp._logs.working_path, str)
+        assert isinstance(ffp.profile, str)
         assert ffp._dbg == debugger
         ffp.launch()
         assert not any(ffp._crashreports())
