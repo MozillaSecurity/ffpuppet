@@ -440,7 +440,7 @@ def prepare_environment(target_dir: str, sanitizer_log: str, env_mod=None):
 
 
 def wait_on_files(
-    procs, wait_files, poll_rate: float = 0.25, timeout: int = 60
+    procs, wait_files, poll_rate: float = 0.25, timeout: float = 60
 ) -> bool:
     """Wait for files in wait_files to no longer be use by any process.
 
