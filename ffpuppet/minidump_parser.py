@@ -3,9 +3,6 @@
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
 """ffpuppet minidump parsing module"""
 
-from __future__ import annotations
-
-from collections.abc import Callable
 from logging import getLogger
 from os import getenv, scandir, stat
 from os.path import getmtime, isdir
@@ -13,8 +10,7 @@ from os.path import join as pathjoin
 from shutil import copy, copyfileobj
 from subprocess import DEVNULL, call
 from tempfile import TemporaryFile, mkdtemp
-from typing import Any
-from typing import IO
+from typing import IO, Any, Callable, List, Optional
 
 LOG = getLogger(__name__)
 
@@ -38,16 +34,16 @@ class MinidumpParser:  # pylint: disable=missing-docstring
         self,
         scan_path: str,
         record_failures: bool = True,
-        working_path: str | None = None,
+        working_path: Optional[str] = None,
     ):
         self.md_files = [x.path for x in scandir(scan_path) if x.name.endswith(".dmp")]
-        self.symbols_path: str | None = None
+        self.symbols_path: Optional[str] = None
         self._include_raw = getenv("FFP_DEBUG_MDSW") is not None
         self._record_failures = record_failures  # mdsw failure reporting
         self._working_path = working_path
 
     def _call_mdsw(
-        self, dump_file: str, out_fp: IO[bytes], extra_flags: list[str] | None = None
+        self, dump_file: str, out_fp: IO[bytes], extra_flags: Optional[List[str]] = None
     ) -> None:
         """Call minidump_stackwalk on a dmp file and collect output.
 
@@ -127,7 +123,7 @@ class MinidumpParser:  # pylint: disable=missing-docstring
         self,
         dump_file: str,
         log_fp: IO[bytes],
-        raw_fp: IO[bytes] | None = None,
+        raw_fp: Optional[IO[bytes]] = None,
         limit: int = MDSW_MAX_STACK,
     ) -> None:
         """Use minidump_stackwalk to retrieve stack trace from dump_file.
@@ -174,7 +170,7 @@ class MinidumpParser:  # pylint: disable=missing-docstring
                     break
 
     def collect_logs(
-        self, cb_create_log: Callable[..., Any], symbols_path: str
+        self, cb_create_log: Callable[..., Any], symbols_path: Optional[str]
     ) -> None:
         """Collect logs from dmp files.
 
@@ -221,7 +217,7 @@ def process_minidumps(
     scan_path: str,
     symbols_path: str,
     cb_create_log: Callable[..., Any],
-    working_path: str | None = None,
+    working_path: Optional[str] = None,
 ) -> None:
     """Scan for minidump (.dmp) files a in scan_path. If dumps are found they
     are parsed and new logs are added via the cb_create_log callback.
@@ -251,7 +247,8 @@ def process_minidumps(
             " See README.md for how to obtain it."
         )
         return
+    symbols_arg: Optional[str] = symbols_path
     if not isdir(symbols_path):
         LOG.warning("Symbols path not found: %r", symbols_path)
-        symbols_path = None
-    parser.collect_logs(cb_create_log, symbols_path)
+        symbols_arg = None
+    parser.collect_logs(cb_create_log, symbols_arg)

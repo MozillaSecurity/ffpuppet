@@ -3,9 +3,6 @@
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
 """ffpuppet module"""
 
-from __future__ import annotations
-
-from collections.abc import Iterator
 from enum import Enum, unique
 from logging import getLogger
 from os import X_OK, access, getenv
@@ -19,10 +16,10 @@ from re import compile as re_compile
 from re import match as re_match
 from shutil import rmtree
 from subprocess import Popen, check_output
-from typing import Any
-from typing import BinaryIO
+from typing import Any, Dict, Iterator, List, Optional, Pattern, Set, Tuple, Union
 
 try:
+    # pylint: disable=ungrouped-imports
     from subprocess import CREATE_NEW_PROCESS_GROUP  # type: ignore[attr-defined]
 except ImportError:
     pass
@@ -113,24 +110,26 @@ class FFPuppet:
     def __init__(
         self,
         debugger: Debugger = Debugger.NONE,
-        use_profile: str | None = None,
+        use_profile: Optional[str] = None,
         use_xvfb: bool = False,
-        working_path: str | None = None,
+        working_path: Optional[str] = None,
     ):
         # tokens used to notify log scanner to kill the browser process
-        self._abort_tokens = set()
-        self._bin_path: str | None = None
-        self._checks: list[CheckLogContents | CheckLogSize | CheckMemoryUsage] = list()
+        self._abort_tokens: Set[Pattern[str]] = set()
+        self._bin_path: Optional[str] = None
+        self._checks: List[
+            Union[CheckLogContents, CheckLogSize, CheckMemoryUsage]
+        ] = list()
         self._dbg = debugger
         self._dbg_sanity_check(self._dbg)
         self._launches = 0  # number of successful browser launches
         self._logs = PuppetLogger(base_path=working_path)
-        self._proc = None
+        self._proc: Optional["Popen[bytes]"] = None
         self._profile_template = use_profile  # profile that is used as a template
         self._xvfb = None
         self._working_path = working_path
-        self.profile: str | None = None  # path to profile
-        self.reason: Reason | None = Reason.CLOSED
+        self.profile: Optional[str] = None  # path to profile
+        self.reason: Optional[Reason] = Reason.CLOSED
 
         if use_xvfb:
             if not system().startswith("Linux"):
@@ -143,7 +142,7 @@ class FFPuppet:
                 raise EnvironmentError("Please install xvfbwrapper") from None
             self._xvfb.start()
 
-    def __enter__(self) -> FFPuppet:
+    def __enter__(self) -> "FFPuppet":
         return self
 
     def __exit__(self, *exc: Any) -> None:
@@ -212,7 +211,7 @@ class FFPuppet:
         Yields:
             Log on the filesystem.
         """
-        assert isinstance(self._logs.working_path, str)
+        assert self._logs.working_path is not None
         try:
             for entry in Path(self._logs.working_path).iterdir():
                 # scan for sanitizer logs
@@ -230,8 +229,8 @@ class FFPuppet:
             pass
 
         # check for minidumps
-        assert isinstance(self.profile, str)
         if not skip_md:
+            assert self.profile is not None
             try:
                 for entry in (Path(self.profile) / "minidumps").iterdir():
                     if ".dmp" in entry.name:
@@ -343,7 +342,7 @@ class FFPuppet:
         assert token and isinstance(token, str)
         self._abort_tokens.add(re_compile(token))
 
-    def available_logs(self) -> list[str]:
+    def available_logs(self) -> List[str]:
         """List of IDs for the currently available logs.
 
         Args:
@@ -355,8 +354,8 @@ class FFPuppet:
         return list(self._logs.available_logs())
 
     def build_launch_cmd(
-        self, bin_path: str, additional_args: list[str] | None = None
-    ) -> list[str]:
+        self, bin_path: str, additional_args: Optional[List[str]] = None
+    ) -> List[str]:
         """Build a command that can be used to launch the browser.
 
         Args:
@@ -382,8 +381,8 @@ class FFPuppet:
             assert all(isinstance(x, str) for x in additional_args)
             cmd.extend(additional_args)
 
-        assert isinstance(self._logs.working_path, str)
         if self._dbg == Debugger.VALGRIND:
+            assert self._logs.working_path is not None
             valgrind_cmd = [
                 "valgrind",
                 "-q",
@@ -500,8 +499,11 @@ class FFPuppet:
         self._launches = -1
 
     def clone_log(
-        self, log_id: str, offset: int | None = None, target_file: str | None = None
-    ) -> str | None:
+        self,
+        log_id: str,
+        offset: Optional[int] = None,
+        target_file: Optional[str] = None,
+    ) -> Optional[str]:
         """Create a copy of the selected browser log.
 
         Args:
@@ -529,7 +531,7 @@ class FFPuppet:
         if self.reason is not None:
             # make sure browser logs are closed
             self._logs.close()
-            return None
+            return
 
         assert self._proc is not None
         pid = self.get_pid()
@@ -563,6 +565,7 @@ class FFPuppet:
         if self.is_running():
             LOG.debug("browser needs to be terminated")
             # when running under a debugger be less aggressive
+            assert pid is not None
             self._terminate(pid, start_mode=1 if self._dbg == Debugger.NONE else 0)
         # wait for any remaining processes to close
         if wait_procs(procs, timeout=1 if force_close else 30)[1]:
@@ -589,14 +592,17 @@ class FFPuppet:
                 for log_path in self._crashreports(skip_md=True, skip_benign=False):
                     self._logs.add_log(log_path.name, log_path.open("rb"))
                 # check for minidumps in the profile and dump them if possible
+                assert self.profile is not None
+                assert self._bin_path is not None
                 process_minidumps(
                     pathjoin(self.profile, "minidumps"),
                     pathjoin(self._bin_path, "symbols"),
                     self._logs.add_log,
                     working_path=self._working_path,
                 )
-                if self._logs.get_fp("stderr"):
-                    self._logs.get_fp("stderr").write(
+                stderr_fp = self._logs.get_fp("stderr")
+                if stderr_fp:
+                    stderr_fp.write(
                         ("[ffpuppet] Reason code: %s\n" % r_code.name).encode("utf-8")
                     )
         # reset remaining to closed state
@@ -606,6 +612,7 @@ class FFPuppet:
             self._checks = list()
             # remove temporary profile directory if necessary
             try:
+                assert self.profile is not None
                 rmtree(self.profile, onerror=onerror)
             except OSError:  # pragma: no cover
                 LOG.error("Failed to remove profile %r", self.profile)
@@ -617,7 +624,7 @@ class FFPuppet:
             LOG.debug("reason code: %s", r_code.name)
             self.reason = r_code
 
-    def cpu_usage(self) -> Iterator[tuple[int, float]]:
+    def cpu_usage(self) -> Iterator[Tuple[int, float]]:
         """Collect percentage of CPU usage per process.
 
         Args:
@@ -634,7 +641,7 @@ class FFPuppet:
                 except (AccessDenied, NoSuchProcess):  # pragma: no cover
                     continue
 
-    def get_pid(self) -> int | None:
+    def get_pid(self) -> Optional[int]:
         """Get the browser process ID.
 
         Args:
@@ -644,7 +651,7 @@ class FFPuppet:
             Browser PID.
         """
         try:
-            return self._proc.pid
+            return self._proc.pid  # type: ignore[union-attr]
         except AttributeError:
             return None
 
@@ -684,20 +691,20 @@ class FFPuppet:
             True if the process is running otherwise False.
         """
         try:
-            return self._proc.poll() is None
+            return self._proc.poll() is None  # type: ignore[union-attr]
         except AttributeError:
             return False
 
     def launch(
         self,
         bin_path: str,
-        env_mod: dict[str, str] | None = None,
+        env_mod: Optional[Dict[str, Optional[str]]] = None,
         launch_timeout: int = 300,
-        location: str | None = None,
+        location: Optional[str] = None,
         log_limit: int = 0,
         memory_limit: int = 0,
-        prefs_js: str | None = None,
-        extension: str | None = None,
+        prefs_js: Optional[str] = None,
+        extension: Optional[str] = None,
     ) -> None:
         """Launch a new browser process.
 
@@ -801,7 +808,7 @@ class FFPuppet:
             stderr.write(" ".join(cmd).encode("utf-8"))
             stderr.write(b"\n\n")
             stderr.flush()
-            assert isinstance(self._logs.working_path, str)
+            assert self._logs.working_path is not None
             sanitizer_logs = pathjoin(self._logs.working_path, self._logs.PREFIX_SAN)
             # launch the browser
             LOG.debug("launch command: %r", " ".join(cmd))
@@ -827,9 +834,9 @@ class FFPuppet:
                 raise InvalidPrefs("%r is invalid" % prefs_js)
 
         logs_fp_stderr = self._logs.get_fp("stderr")
-        assert isinstance(logs_fp_stderr, BinaryIO)
+        assert logs_fp_stderr is not None
         logs_fp_stdout = self._logs.get_fp("stdout")
-        assert isinstance(logs_fp_stdout, BinaryIO)
+        assert logs_fp_stdout is not None
         if log_limit:
             self._checks.append(
                 CheckLogSize(
@@ -840,7 +847,7 @@ class FFPuppet:
             )
         if memory_limit:
             curr_pid = self.get_pid()
-            assert isinstance(curr_pid, int)
+            assert curr_pid is not None
             self._checks.append(CheckMemoryUsage(curr_pid, memory_limit))
         if self._abort_tokens:
             self._checks.append(
@@ -868,7 +875,7 @@ class FFPuppet:
         assert self._launches > -1, "clean_up() has been called"
         return self._launches
 
-    def log_length(self, log_id: str) -> int | None:
+    def log_length(self, log_id: str) -> Optional[int]:
         """Get the length of the selected browser log.
 
         Args:
@@ -904,7 +911,7 @@ class FFPuppet:
             rr_pack=self._dbg in (Debugger.PERNOSCO, Debugger.RR),
         )
 
-    def wait(self, timeout: float | None = None) -> bool:
+    def wait(self, timeout: Optional[float] = None) -> bool:
         """Wait for browser process(es) to terminate. This call will block until
         all process(es) exit unless a timeout is specified. If a timeout of zero
         or greater is specified the call will block until the timeout expires.

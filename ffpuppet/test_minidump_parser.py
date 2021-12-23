@@ -5,11 +5,9 @@
 # You can obtain one at http://mozilla.org/MPL/2.0/.
 # pylint: disable=protected-access
 
-from __future__ import annotations
-
 from os import SEEK_END
 from pathlib import Path
-from typing import IO
+from typing import IO, List, Optional, Union
 
 from pytest import mark, raises
 from pytest_mock import MockerFixture
@@ -91,7 +89,7 @@ def test_minidump_parser_04(mocker: MockerFixture, tmp_path: Path) -> None:
     """test MinidumpParser._read_stacktrace()"""
 
     def fake_call_mdsw(  # pylint: disable=unused-argument
-        _: str, out_fp: IO[bytes], extra_flags: list[str] | None = None
+        _: str, out_fp: IO[bytes], extra_flags: Optional[List[str]] = None
     ) -> None:
         out_fp.write(
             b"OS|Linux|0.0.0 sys info...\n"
@@ -182,7 +180,7 @@ def test_minidump_parser_06(
     tmp_path: Path,
     call_result: int,
     record: bool,
-    stat_result: OSError | int | None,
+    stat_result: Optional[Union[OSError, int]],
     log_count: int,
     dmp_exists: bool,
 ) -> None:

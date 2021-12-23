@@ -25,21 +25,16 @@ known_first_party = "ffpuppet"
 profile = "black"
 
 [tool.mypy]
+ignore_missing_imports = true
 strict = true
 show_error_codes = true
-
-# Add Python modules to be ignored by mypy here
-[[tool.mypy.overrides]]
-module = [
-    "xvfbwrapper",
-]
-ignore_missing_imports = true
 
 [tool.pylint.format]
 max-line-length = 88
 
 [tool.pylint.messages_control]
 disable = [
+    "duplicate-code",
     "fixme",
     "too-few-public-methods",
     "too-many-arguments",

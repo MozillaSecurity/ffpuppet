@@ -5,9 +5,6 @@
 # pylint: disable=invalid-name,missing-docstring,protected-access
 """ffpuppet tests"""
 
-from __future__ import annotations
-
-from collections.abc import Callable
 import errno
 import os
 import platform
@@ -19,7 +16,7 @@ import time
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 from subprocess import Popen
-from typing import Any
+from typing import Any, Callable, Optional
 
 import pytest
 from psutil import Process
@@ -50,8 +47,8 @@ class ReqHandler(BaseHTTPRequestHandler):
 
 
 class HTTPTestServer:
-    def __init__(self, handler=None) -> None:
-        self._handler = handler if handler is not None else ReqHandler
+    def __init__(self) -> None:
+        self._handler = ReqHandler
         while True:
             try:
                 self._httpd = HTTPServer(("127.0.0.1", 0), self._handler)
@@ -65,7 +62,7 @@ class HTTPTestServer:
         )
         self._thread.start()
 
-    def __enter__(self) -> HTTPTestServer:
+    def __enter__(self) -> "HTTPTestServer":
         return self
 
     def __exit__(self, *exc: Any) -> None:
@@ -81,7 +78,7 @@ class HTTPTestServer:
             self._thread.join()
 
     @staticmethod
-    def _srv_thread(httpd) -> None:
+    def _srv_thread(httpd: HTTPServer) -> None:
         try:
             httpd.serve_forever()
         finally:
@@ -105,13 +102,13 @@ def test_ffpuppet_01() -> None:
         assert not ffp.is_running()
         with HTTPTestServer() as srv:
             ffp.launch(TESTFF_BIN, location=srv.get_addr())
-        assert not ffp._checks
-        assert ffp.launches == 1
-        assert not ffp.wait(timeout=0)
-        assert ffp.is_running()
-        assert ffp.is_healthy()
-        assert ffp.reason is None
-        ffp.close()
+            assert not ffp._checks
+            assert ffp.launches == 1
+            assert not ffp.wait(timeout=0)
+            assert ffp.is_running()
+            assert ffp.is_healthy()
+            assert ffp.reason is None
+            ffp.close()
         assert ffp.reason == Reason.CLOSED
         assert ffp._proc is None
         assert not ffp.is_running()
@@ -185,9 +182,10 @@ def test_ffpuppet_05(mocker: MockerFixture) -> None:
     with FFPuppet() as ffp:
         assert not ffp.is_running()
         ffp._proc = mocker.Mock(pid=123)
-        ffp._proc.poll.return_value = None
+        assert ffp._proc is not None
+        ffp._proc.poll.return_value = None  # type: ignore[attr-defined]
         assert ffp.is_running()
-        ffp._proc.poll.return_value = 0
+        ffp._proc.poll.return_value = 0  # type: ignore[attr-defined]
         assert not ffp.is_running()
         ffp._proc = None
         assert not ffp.is_running()
@@ -197,13 +195,14 @@ def test_ffpuppet_06(mocker: MockerFixture) -> None:
     """test wait()"""
 
     class StubbedProc(FFPuppet):
-        def close(self, **_: Any) -> None:  # pylint: disable=arguments-differ
+        # pylint: disable=arguments-differ
+        def close(self, **_: Any) -> None:  # type: ignore[override]
             self.reason = Reason.CLOSED
 
-        def launch(self) -> None:  # pylint: disable=arguments-differ
+        def launch(self) -> None:  # type: ignore[override]
             self.reason = None
 
-        def get_pid(self) -> int | None:
+        def get_pid(self) -> Optional[int]:
             if self.reason is None:
                 return 123
             return None
@@ -215,7 +214,7 @@ def test_ffpuppet_06(mocker: MockerFixture) -> None:
         assert fake_wait_procs.call_count == 0
         # process closed
         fake_wait_procs.return_value = ([], [])
-        ffp.launch()
+        ffp.launch()  # type: ignore[call-arg]
         assert ffp.wait()
         assert fake_wait_procs.call_count == 1
         fake_wait_procs.reset_mock()
@@ -475,9 +474,13 @@ def test_ffpuppet_19() -> None:
         assert ffp.log_length("INVALID") is None
         assert ffp.log_length("stderr") is None
         ffp.launch(TESTFF_BIN)
-        assert ffp.log_length("stderr") > 0
+        ll = ffp.log_length("stderr")
+        assert ll is not None
+        assert ll > 0
         ffp.close()
-        assert ffp.log_length("stderr") > 0
+        ll = ffp.log_length("stderr")
+        assert ll is not None
+        assert ll > 0
         ffp.clean_up()
         # verify clean_up() removed the logs
         assert ffp.log_length("stderr") is None
@@ -533,7 +536,7 @@ def test_ffpuppet_22(tmp_path: Path) -> None:
     test_logs = list()
     with FFPuppet() as ffp:
         ffp.launch(TESTFF_BIN)
-        assert isinstance(ffp._logs.working_path, str)
+        assert ffp._logs.working_path is not None
         asan_prefix = os.path.join(ffp._logs.working_path, ffp._logs.PREFIX_SAN)
         for i in range(4):
             test_logs.append(".".join([asan_prefix, str(i)]))
@@ -592,8 +595,11 @@ def test_ffpuppet_23(mocker: MockerFixture, tmp_path: Path) -> None:
 
     # pylint: disable=unused-argument
     def _fake_process_minidumps(
-        dmps: str, _: str, add_log: Callable[..., Any], working_path: str | None = None
-    ):
+        dmps: str,
+        _: str,
+        add_log: Callable[..., Any],
+        working_path: Optional[str] = None,
+    ) -> None:
         for num, _ in enumerate(x for x in os.listdir(dmps) if x.endswith(".dmp")):
             lfp = add_log("minidump_%02d" % (num + 1,))
             lfp.write(b"test")
@@ -606,7 +612,7 @@ def test_ffpuppet_23(mocker: MockerFixture, tmp_path: Path) -> None:
         ffp.launch(TESTFF_BIN)
         ffp._bin_path = ffp.profile
         # create "test.dmp" files
-        assert isinstance(ffp._bin_path, str)
+        assert ffp._bin_path is not None
         md_path = os.path.join(ffp._bin_path, "minidumps")
         with open(os.path.join(md_path, "test1.dmp"), "w") as out_fp:
             out_fp.write("1a\n1b")
@@ -651,8 +657,8 @@ def test_ffpuppet_25(tmp_path: Path) -> None:
     # normal profile creation
     # - just create a puppet, write a readonly file in its profile, then call close()
     with FFPuppet() as ffp:
-        assert isinstance(ffp.profile, str)
         ffp.launch(TESTFF_BIN)
+        assert ffp.profile is not None
         ro_file = Path(ffp.profile) / "read-only-test.txt"
         ro_file.touch()
         ro_file.chmod(stat.S_IREAD)
@@ -667,8 +673,8 @@ def test_ffpuppet_25(tmp_path: Path) -> None:
     ro_file.chmod(stat.S_IREAD)
     with FFPuppet(use_profile=str(profile)) as ffp:
         ffp.launch(TESTFF_BIN)
+        assert ffp.profile is not None
         prof_path = ffp.profile
-        assert isinstance(prof_path, str)
         assert os.path.isdir(prof_path)
         ffp.close()
         assert not os.path.isdir(prof_path)
@@ -686,7 +692,7 @@ def test_ffpuppet_26(tmp_path: Path) -> None:
         ffp.launch(TESTFF_BIN, extension=str(ext), prefs_js=str(prefs))
         prof_path = ffp.profile
         ffp.close()
-        assert isinstance(prof_path, str)
+        assert prof_path is not None
         assert not os.path.isdir(prof_path)
 
 
@@ -697,14 +703,15 @@ def test_ffpuppet_27(mocker: MockerFixture, tmp_path: Path) -> None:
     )
 
     class StubbedLaunch(FFPuppet):
-        def launch(self) -> None:  # pylint: disable=arguments-differ
+        # pylint: disable=arguments-differ
+        def launch(self) -> None:  # type: ignore[override]
             profile = tmp_path / "profile"
             profile.mkdir()
             (profile / "minidumps").mkdir()
             self.profile = str(profile)
 
         def close(self, force_close: bool = False) -> None:
-            assert isinstance(self.profile, str)
+            assert self.profile is not None
             if os.path.isdir(self.profile):
                 shutil.rmtree(self.profile)
             self.profile = None
@@ -713,12 +720,11 @@ def test_ffpuppet_27(mocker: MockerFixture, tmp_path: Path) -> None:
     # only check Valgrind logs on Linux
     debugger = Debugger.VALGRIND if is_linux else Debugger.NONE
     with StubbedLaunch(debugger=debugger) as ffp:
-        assert isinstance(ffp._logs.working_path, str)
-        assert isinstance(ffp.profile, str)
         assert ffp._dbg == debugger
-        ffp.launch()
+        ffp.launch()  # type: ignore[call-arg]
         assert not any(ffp._crashreports())
         # benign sanitizer warnings
+        assert ffp._logs.working_path is not None
         ign_log = Path(ffp._logs.working_path) / ("%s.1" % (ffp._logs.PREFIX_SAN,))
         ign_log.write_text(
             "==123==WARNING: Symbolizer buffer too small\n\n"
@@ -738,6 +744,7 @@ def test_ffpuppet_27(mocker: MockerFixture, tmp_path: Path) -> None:
         # nothing interesting
         (Path(ffp._logs.working_path) / "junk.log").write_text("test\n")
         # valid minidump
+        assert ffp.profile is not None
         (Path(ffp.profile) / "minidumps" / "test.dmp").write_text("test\n")
         # nothing interesting
         (Path(ffp.profile) / "minidumps" / "test.junk").write_text("\n")
@@ -908,12 +915,13 @@ def test_ffpuppet_32(mocker: MockerFixture, tmp_path: Path) -> None:
     """test FFPuppet.close() setting reason"""
 
     class StubbedProc(FFPuppet):
-        def launch(self) -> None:  # pylint: disable=arguments-differ
+        # pylint: disable=arguments-differ
+        def launch(self) -> None:  # type: ignore[override]
             self.reason = None
             self._bin_path = str(tmp_path)
             self._logs.reset()
             self._proc = mocker.Mock(spec=Popen, pid=123)
-            self._proc.poll.return_value = None
+            self._proc.poll.return_value = None  # type: ignore[union-attr]
             profile = tmp_path / "profile"
             profile.mkdir(exist_ok=True)
             self.profile = str(profile)
@@ -931,24 +939,24 @@ def test_ffpuppet_32(mocker: MockerFixture, tmp_path: Path) -> None:
     mocker.patch("ffpuppet.core.wait_procs", autospec=True)
     # process exited - no crash
     with StubbedProc() as ffp:
-        ffp.launch()
-        ffp._proc.poll.return_value = 0
+        ffp.launch()  # type: ignore[call-arg]
+        ffp._proc.poll.return_value = 0  # type: ignore[union-attr]
         ffp.close()
         assert ffp._proc is None
         assert ffp._logs.closed
         assert ffp.reason == Reason.EXITED
     # process exited - exit code - crash
     with StubbedProc() as ffp:
-        ffp.launch()
-        ffp._proc.poll.return_value = -11
+        ffp.launch()  # type: ignore[call-arg]
+        ffp._proc.poll.return_value = -11  # type: ignore[union-attr]
         ffp.close()
         assert ffp._proc is None
         assert ffp._logs.closed
         assert ffp.reason == Reason.ALERT
     # process running - no crash reports
     with StubbedProc() as ffp:
-        ffp.launch()
-        ffp._proc.poll.return_value = None
+        ffp.launch()  # type: ignore[call-arg]
+        ffp._proc.poll.return_value = None  # type: ignore[union-attr]
         ffp.close()
         assert ffp._proc is None
         assert ffp._logs.closed
@@ -956,8 +964,8 @@ def test_ffpuppet_32(mocker: MockerFixture, tmp_path: Path) -> None:
     # process running - with crash reports, hang waiting to close
     (tmp_path / "fake_report1").touch()
     with StubbedProc() as ffp:
-        ffp.launch()
-        ffp._proc.poll.return_value = None
+        ffp.launch()  # type: ignore[call-arg]
+        ffp._proc.poll.return_value = None  # type: ignore[union-attr]
         fake_reports.return_value = (tmp_path / "fake_report1",)
         fake_wait_files.return_value = False
         ffp.close()
@@ -967,8 +975,8 @@ def test_ffpuppet_32(mocker: MockerFixture, tmp_path: Path) -> None:
     # process running - with crash reports, multiple logs
     (tmp_path / "fake_report2").touch()
     with StubbedProc() as ffp:
-        ffp.launch()
-        ffp._proc.poll.return_value = None
+        ffp.launch()  # type: ignore[call-arg]
+        ffp._proc.poll.return_value = None  # type: ignore[union-attr]
         fake_reports.return_value = None
         fake_reports.side_effect = (
             (tmp_path / "fake_report1",),
@@ -988,7 +996,7 @@ def test_ffpuppet_33() -> None:
     """test ignoring benign sanitizer logs"""
     with FFPuppet() as ffp:
         ffp.launch(TESTFF_BIN)
-        assert isinstance(ffp._logs.working_path, str)
+        assert ffp._logs.working_path is not None
         san_log = "%s.1" % os.path.join(ffp._logs.working_path, ffp._logs.PREFIX_SAN)
         assert not ffp._logs.watching
         # ignore benign ASan warning

@@ -3,10 +3,6 @@
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
 """browser and debugger log management"""
 
-from __future__ import annotations
-
-from collections.abc import Iterator
-from collections.abc import KeysView
 from json import dump as json_dump
 from logging import getLogger
 from os import close as os_close
@@ -17,8 +13,7 @@ from os.path import realpath
 from shutil import copy2, copyfileobj, copytree, rmtree
 from subprocess import STDOUT, CalledProcessError, check_output
 from tempfile import mkdtemp, mkstemp
-from typing import Any
-from typing import IO
+from typing import IO, Any, Dict, Iterator, KeysView, Optional
 
 from .helpers import onerror, warn_open
 
@@ -39,22 +34,22 @@ class PuppetLogger:  # pylint: disable=missing-docstring
 
     __slots__ = ("_base", "_logs", "_rr_packed", "closed", "watching", "working_path")
 
-    def __init__(self, base_path: str | None = None) -> None:
+    def __init__(self, base_path: Optional[str] = None) -> None:
         self._base = base_path
-        self._logs: dict[str, IO[bytes]] = dict()
+        self._logs: Dict[str, IO[bytes]] = dict()
         self._rr_packed = False
         self.closed = True
-        self.watching: dict[str, int] = dict()
-        self.working_path: str | None = None
+        self.watching: Dict[str, int] = dict()
+        self.working_path: Optional[str] = None
         self.reset()
 
-    def __enter__(self) -> PuppetLogger:
+    def __enter__(self) -> "PuppetLogger":
         return self
 
     def __exit__(self, *exc: Any) -> None:
         self.clean_up()
 
-    def add_log(self, log_id: str, logfp: IO[bytes] | None = None) -> IO[bytes]:
+    def add_log(self, log_id: str, logfp: Optional[IO[bytes]] = None) -> IO[bytes]:
         """Add a log file to the log manager.
 
         Args:
@@ -83,7 +78,7 @@ class PuppetLogger:  # pylint: disable=missing-docstring
             Path of newly created directory.
         """
         assert not self.closed
-        assert isinstance(self.working_path, str)
+        assert self.working_path is not None
         path = pathjoin(self.working_path, name)
         LOG.debug("adding path %r as %r", name, path)
         mkdir(path)
@@ -128,8 +123,11 @@ class PuppetLogger:  # pylint: disable=missing-docstring
         self.working_path = None
 
     def clone_log(
-        self, log_id: str, offset: int | None = None, target_file: str | None = None
-    ) -> str | None:
+        self,
+        log_id: str,
+        offset: Optional[int] = None,
+        target_file: Optional[str] = None,
+    ) -> Optional[str]:
         """Create a copy of the specified log.
 
         Args:
@@ -188,7 +186,7 @@ class PuppetLogger:  # pylint: disable=missing-docstring
             if lfp.name is not None:
                 yield lfp.name
 
-    def get_fp(self, log_id: str) -> IO[bytes] | None:
+    def get_fp(self, log_id: str) -> Optional[IO[bytes]]:
         """Lookup log file object by ID.
 
         Args:
@@ -206,7 +204,7 @@ class PuppetLogger:  # pylint: disable=missing-docstring
             raise IOError("log file %r does not exist" % log_fp.name)
         return log_fp
 
-    def log_length(self, log_id: str) -> int | None:
+    def log_length(self, log_id: str) -> Optional[int]:
         """Get the length of the specified log.
 
         Args:
@@ -223,7 +221,7 @@ class PuppetLogger:  # pylint: disable=missing-docstring
         return stat(log_fp.name).st_size
 
     @staticmethod
-    def open_unique(base_dir: str | None = None, mode: str = "wb") -> IO[bytes]:
+    def open_unique(base_dir: Optional[str] = None, mode: str = "wb") -> IO[bytes]:
         """Create and open a unique file.
 
         Args:
@@ -258,7 +256,7 @@ class PuppetLogger:  # pylint: disable=missing-docstring
         dest: str,
         logs_only: bool = False,
         meta: bool = False,
-        bin_path: str | None = None,
+        bin_path: Optional[str] = None,
         rr_pack: bool = False,
     ) -> None:
         """The browser logs will be saved to dest. This can only be called

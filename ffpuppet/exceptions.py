@@ -3,8 +3,6 @@
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
 """ffpuppet exceptions"""
 
-from __future__ import annotations
-
 
 class LaunchError(Exception):
     """

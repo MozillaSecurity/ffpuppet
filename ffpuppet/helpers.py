@@ -3,11 +3,9 @@
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
 """ffpuppet helper utilities"""
 
-from __future__ import annotations
-
 from json import load as json_load
 from logging import getLogger
-from os import _Environ, W_OK, access, chmod, environ, mkdir, remove
+from os import W_OK, access, chmod, environ, mkdir, remove
 from os.path import abspath, basename, isdir, isfile
 from os.path import join as pathjoin
 from pathlib import Path
@@ -16,7 +14,7 @@ from shutil import copyfile, copytree, rmtree
 from stat import S_IWUSR
 from tempfile import mkdtemp
 from time import sleep, time
-from typing import Iterable
+from typing import Any, Callable, Dict, Iterable, Iterator, List, Optional, Tuple, Union
 from xml.etree import ElementTree
 
 from psutil import AccessDenied, NoSuchProcess, Process, process_iter
@@ -38,7 +36,7 @@ __all__ = (
 )
 
 
-def append_prefs(profile_path: str, prefs: dict[str, str]) -> None:
+def append_prefs(profile_path: str, prefs: Dict[str, str]) -> None:
     """Write or append preferences from prefs to prefs.js file in profile_path.
 
     Args:
@@ -81,8 +79,8 @@ def check_prefs(prof_prefs: str, input_prefs: str) -> bool:
 
 
 def _configure_sanitizers(
-    orig_env: dict[str, str], target_dir: str, log_path: str
-) -> dict[str, str]:
+    orig_env: Dict[str, str], target_dir: str, log_path: str
+) -> Dict[str, str]:
     """Copy environment and update default values in *SAN_OPTIONS entries.
     These values are only updated if they are not provided, with the exception of
     'log_path'. 'log_path' is used by FFPuppet to detect results.
@@ -95,7 +93,7 @@ def _configure_sanitizers(
     Returns:
         Environment with *SAN_OPTIONS defaults set.
     """
-    env: dict[str, str] = dict(orig_env)
+    env: Dict[str, str] = dict(orig_env)
     # https://github.com/google/sanitizers/wiki/SanitizerCommonFlags
     common_flags = [
         ("abort_on_error", "false"),
@@ -113,16 +111,14 @@ def _configure_sanitizers(
         ("symbolize", "true"),
     ]
     # set llvm-symbolizer path
-    if env.get("ASAN_SYMBOLIZER_PATH"):
-        # *SAN_OPTIONS=external_symbolizer_path takes priority if it is defined in env
-        llvm_sym = env.get("ASAN_SYMBOLIZER_PATH")
-    else:
+    # *SAN_OPTIONS=external_symbolizer_path takes priority if it is defined in env
+    llvm_sym = env.get("ASAN_SYMBOLIZER_PATH")
+    if not llvm_sym:
         # used packaged location
         bin_name = "llvm-symbolizer%s" % (
             ".exe" if system().startswith("Windows") else "",
         )
         llvm_sym = pathjoin(target_dir, bin_name)
-    assert isinstance(llvm_sym, str)
     if isfile(llvm_sym):
         # add *SAN_OPTIONS=external_symbolizer_path
         common_flags.append(("external_symbolizer_path", "'%s'" % (llvm_sym,)))
@@ -132,9 +128,7 @@ def _configure_sanitizers(
 
     # setup Address Sanitizer options ONLY if not set manually in environment
     # https://github.com/google/sanitizers/wiki/AddressSanitizerFlags
-    env_asan_opts = env.get("ASAN_OPTIONS")
-    assert isinstance(env_asan_opts, str)
-    asan_config = SanitizerOptions(env_asan_opts)
+    asan_config = SanitizerOptions(env.get("ASAN_OPTIONS"))
     assert asan_config.check_path("suppressions"), "missing suppressions file"
     for flag in common_flags:
         asan_config.add(*flag)
@@ -160,9 +154,7 @@ def _configure_sanitizers(
 
     # setup Leak Sanitizer options ONLY if not set manually in environment
     # https://github.com/google/sanitizers/wiki/AddressSanitizerLeakSanitizer
-    env_lsan_opts = env.get("LSAN_OPTIONS")
-    assert isinstance(env_lsan_opts, str)
-    lsan_config = SanitizerOptions(env_lsan_opts)
+    lsan_config = SanitizerOptions(env.get("LSAN_OPTIONS"))
     assert lsan_config.check_path("suppressions"), "missing suppressions file"
     lsan_config.add("max_leaks", "1")
     lsan_config.add("print_suppressions", "false")
@@ -171,9 +163,7 @@ def _configure_sanitizers(
     env["LSAN_OPTIONS"] = lsan_config.options
 
     # setup Thread Sanitizer options ONLY if not set manually in environment
-    env_tsan_opts = env.get("TSAN_OPTIONS")
-    assert isinstance(env_tsan_opts, str)
-    tsan_config = SanitizerOptions(env_tsan_opts)
+    tsan_config = SanitizerOptions(env.get("TSAN_OPTIONS"))
     assert tsan_config.check_path("suppressions"), "missing suppressions file"
     tsan_config.add("halt_on_error", "1")
     if "log_path" in tsan_config:
@@ -184,9 +174,7 @@ def _configure_sanitizers(
     env["TSAN_OPTIONS"] = tsan_config.options
 
     # setup Undefined Behavior Sanitizer options ONLY if not set manually in environment
-    env_ubsan_opts = env.get("UBSAN_OPTIONS")
-    assert isinstance(env_ubsan_opts, str)
-    ubsan_config = SanitizerOptions(env_ubsan_opts)
+    ubsan_config = SanitizerOptions(env.get("UBSAN_OPTIONS"))
     assert ubsan_config.check_path("suppressions"), "missing suppressions file"
     for flag in common_flags:
         ubsan_config.add(*flag)
@@ -203,10 +191,10 @@ def _configure_sanitizers(
 
 
 def create_profile(
-    extension: list[str] | str | None = None,
-    prefs_js: str | None = None,
-    template: str | None = None,
-    working_path: str | None = None,
+    extension: Optional[Union[List[str], str]] = None,
+    prefs_js: Optional[str] = None,
+    template: Optional[str] = None,
+    working_path: Optional[str] = None,
 ) -> str:
     """Create a profile to be used with Firefox.
 
@@ -291,12 +279,14 @@ def create_profile(
     return profile
 
 
-def files_in_use(files, procs) -> Iterable[tuple[Path, int, str]]:
+def files_in_use(
+    files: Iterable[Path], procs: Iterable[Process]
+) -> Iterator[Tuple[Path, int, str]]:
     """Check if any of the given files are open by any of the given processes.
 
     Args:
-        files (iterable(Path)): Files to check.
-        procs (iterable(Process)): Processes to scan for open files.
+        files: Files to check.
+        procs: Processes to scan for open files.
 
     Yields:
         Path of file, process ID and process name.
@@ -320,7 +310,7 @@ def files_in_use(files, procs) -> Iterable[tuple[Path, int, str]]:
                 pass
 
 
-def get_processes(pid: int, recursive: bool = True) -> list[Process]:
+def get_processes(pid: int, recursive: bool = True) -> List[Process]:
     """From a given PID create a psutil.Process object and lookup all of its
     children.
 
@@ -346,7 +336,9 @@ def get_processes(pid: int, recursive: bool = True) -> list[Process]:
     return procs
 
 
-def onerror(func, path, _exc_info) -> None:  # pragma: no cover
+def onerror(
+    func: Callable[[str], Any], path: str, _exc_info: Any
+) -> None:  # pragma: no cover
     """
     Error handler for `shutil.rmtree`.
 
@@ -370,7 +362,11 @@ def onerror(func, path, _exc_info) -> None:  # pragma: no cover
         raise  # pylint: disable=misplaced-bare-raise
 
 
-def prepare_environment(target_dir: str, sanitizer_log: str, env_mod=None):
+def prepare_environment(
+    target_dir: str,
+    sanitizer_log: str,
+    env_mod: Optional[Dict[str, Optional[str]]] = None,
+) -> Dict[str, str]:
     """Create environment that can be used when launching the browser.
 
     Args:
@@ -382,10 +378,10 @@ def prepare_environment(target_dir: str, sanitizer_log: str, env_mod=None):
                         value (str) and remove by setting entry value to None.
 
     Returns:
-        dict: Environment to use when launching browser.
+        Environment to use when launching browser.
     """
-    base = dict()
-    env: dict[str, str] = dict(environ)
+    base: Dict[str, Optional[str]] = dict()
+    env: Dict[str, str] = dict(environ)
 
     # https://developer.gimp.org/api/2.0/glib/glib-running.html#G_SLICE
     base["G_SLICE"] = "always-malloc"
@@ -449,13 +445,16 @@ def prepare_environment(target_dir: str, sanitizer_log: str, env_mod=None):
 
 
 def wait_on_files(
-    procs, wait_files, poll_rate: float = 0.25, timeout: float = 60
+    procs: Iterable[Process],
+    wait_files: Iterable[Path],
+    poll_rate: float = 0.25,
+    timeout: float = 60,
 ) -> bool:
     """Wait for files in wait_files to no longer be use by any process.
 
     Args:
-        procs (iterable(Process)): Processes to scan for open files.
-        wait_files (iterable(str)): Files that must no longer be open by a process.
+        procs: Processes to scan for open files.
+        wait_files: Files that must no longer be open by a process.
         poll_rate: Amount of time in seconds to wait between checks.
         timeout: Amount of time in seconds to poll.
 

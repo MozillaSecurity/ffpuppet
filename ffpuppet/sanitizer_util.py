@@ -3,12 +3,10 @@
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
 """ffpuppet sanitizer utilities"""
 
-from __future__ import annotations
-
 from logging import getLogger
 from os.path import exists
 from re import compile as re_compile
-from typing import Optional
+from typing import Dict, Optional
 
 LOG = getLogger(__name__)
 
@@ -22,9 +20,8 @@ class SanitizerOptions:  # pylint: disable=missing-docstring
     __slots__ = ("_options",)
 
     def __init__(self, options: Optional[str] = None) -> None:
-        self._options: dict[str, str] = dict()
+        self._options: Dict[str, str] = dict()
         if options is not None:
-            assert isinstance(options, str)
             self.load_options(options)
 
     def __contains__(self, item: str) -> bool:
@@ -65,7 +62,7 @@ class SanitizerOptions:  # pylint: disable=missing-docstring
             return exists(value)
         return True
 
-    def get(self, flag: str) -> str | None:
+    def get(self, flag: str) -> Optional[str]:
         """Get sanitizer flag.
 
         Args:
@@ -93,7 +90,7 @@ class SanitizerOptions:  # pylint: disable=missing-docstring
                 return True
         return False
 
-    def load_options(self, options: str) -> None:
+    def load_options(self, options: Optional[str]) -> None:
         """Load flags from *SAN_OPTIONS in env.
 
         Args:
@@ -106,7 +103,7 @@ class SanitizerOptions:  # pylint: disable=missing-docstring
         if options:
             for option in self.re_delim.split(options):
                 try:
-                    self.add(*option.split("=", maxsplit=1))
+                    self.add(*option.split("=", maxsplit=1))  # type: ignore
                 except TypeError:
                     LOG.warning("Malformed option %r", option)
 
@@ -122,7 +119,7 @@ class SanitizerOptions:  # pylint: disable=missing-docstring
         """
         return ":".join("=".join(kv) for kv in self._options.items())
 
-    def pop(self, flag: str) -> str | None:
+    def pop(self, flag: str) -> Optional[str]:
         """Pop sanitizer flag.
 
         Args:
