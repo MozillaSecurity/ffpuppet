@@ -4,9 +4,8 @@
 # License, v. 2.0. If a copy of the MPL was not distributed with this file,
 # You can obtain one at http://mozilla.org/MPL/2.0/.
 
-from __future__ import annotations
-
 from pathlib import Path
+from typing import List, Optional
 
 from pytest import mark, raises
 from pytest_mock import MockerFixture
@@ -33,9 +32,9 @@ from .main import dump_to_console, main, parse_args
 def test_main_01(
     mocker: MockerFixture,
     tmp_path: Path,
-    reason: Reason | None,
+    reason: Optional[Reason],
     user_exit: bool,
-    extra_args: list[str],
+    extra_args: List[str],
 ) -> None:
     """test main()"""
     fake_ffp = mocker.patch("ffpuppet.main.FFPuppet", autospec=True)

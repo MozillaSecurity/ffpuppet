@@ -4,22 +4,20 @@
 # You can obtain one at http://mozilla.org/MPL/2.0/.
 """ffpuppet helpers tests"""
 
-from __future__ import annotations
-
-import multiprocessing
 import os
-from pathlib import Path
 import shutil
 import sys
 import tempfile
+from multiprocessing import Event, Process
+from multiprocessing.synchronize import Event as EventType
 from pathlib import Path
+from typing import Dict
 
 import psutil
 import pytest
 from pytest_mock import MockerFixture
 
 from .helpers import (
-    SanitizerOptions,
     _configure_sanitizers,
     append_prefs,
     check_prefs,
@@ -30,6 +28,7 @@ from .helpers import (
     wait_on_files,
     warn_open,
 )
+from .sanitizer_util import SanitizerOptions
 
 
 def test_helpers_01(tmp_path: Path) -> None:
@@ -194,7 +193,7 @@ def test_helpers_03(mocker: MockerFixture, tmp_path: Path) -> None:
 def test_helpers_04(tmp_path: Path) -> None:
     """test _configure_sanitizers()"""
 
-    def parse(opt_str: str) -> dict[str, str]:
+    def parse(opt_str: str) -> Dict[str, str]:
         opts = dict()
         for entry in SanitizerOptions.re_delim.split(opt_str):
             try:
@@ -205,7 +204,7 @@ def test_helpers_04(tmp_path: Path) -> None:
         return opts
 
     # test with empty environment
-    env: dict[str, str] = {}
+    env: Dict[str, str] = {}
     env = _configure_sanitizers(env, str(tmp_path), "blah")
     assert "ASAN_OPTIONS" in env
     asan_opts = parse(env["ASAN_OPTIONS"])
@@ -385,7 +384,7 @@ def test_helpers_07(tmp_path: Path) -> None:
 
 
 # this needs to be here in order to work correctly on Windows
-def _dummy_process(is_alive, is_done) -> None:
+def _dummy_process(is_alive: EventType, is_done: EventType) -> None:
     is_alive.set()
     sys.stdout.write("I'm process %d\n" % os.getpid())
     is_done.wait(30)
@@ -395,9 +394,9 @@ def test_helpers_08() -> None:
     """test get_processes()"""
     assert len(get_processes(os.getpid(), recursive=False)) == 1
     assert not get_processes(0xFFFFFF)
-    is_alive = multiprocessing.Event()
-    is_done = multiprocessing.Event()
-    proc = multiprocessing.Process(target=_dummy_process, args=(is_alive, is_done))
+    is_alive = Event()
+    is_done = Event()
+    proc = Process(target=_dummy_process, args=(is_alive, is_done))
     proc.start()
     try:
         is_alive.wait(30)

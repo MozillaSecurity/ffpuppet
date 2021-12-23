@@ -2,17 +2,13 @@
 # License, v. 2.0. If a copy of the MPL was not distributed with this
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
 """ffpuppet bootstrapper module"""
-
-from __future__ import annotations
-
 import socket
-from collections.abc import Callable
 from errno import EADDRINUSE
 from logging import getLogger
 from platform import system
 from random import randint
 from time import time
-from typing import Any
+from typing import Any, Callable, Optional
 
 from .exceptions import BrowserTerminatedError, BrowserTimeoutError, LaunchError
 
@@ -32,7 +28,7 @@ class Bootstrapper:  # pylint: disable=missing-docstring
     __slots__ = ("_socket",)
 
     def __init__(self) -> None:
-        self._socket: socket.socket | None = socket.socket(
+        self._socket: Optional[socket.socket] = socket.socket(
             socket.AF_INET, socket.SOCK_STREAM
         )
         if system().startswith("Windows"):
@@ -56,7 +52,7 @@ class Bootstrapper:  # pylint: disable=missing-docstring
             self._socket.close()
             raise LaunchError("Could not find available port")
 
-    def __enter__(self) -> Bootstrapper:
+    def __enter__(self) -> "Bootstrapper":
         return self
 
     def __exit__(self, *exc: Any) -> None:
@@ -105,7 +101,7 @@ class Bootstrapper:  # pylint: disable=missing-docstring
         self,
         cb_continue: Callable[[], bool],
         timeout: float = 60,
-        url: str | None = None,
+        url: Optional[str] = None,
     ) -> None:
         """Wait for browser connection, read request and send response.
 

@@ -1,1 +1,2 @@
 include ffpuppet/cmds.gdb
+include ffpuppet/py.typed

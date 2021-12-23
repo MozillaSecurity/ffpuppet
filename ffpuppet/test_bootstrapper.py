@@ -4,8 +4,6 @@
 # You can obtain one at http://mozilla.org/MPL/2.0/.
 """ffpuppet bootstrapper tests"""
 
-from __future__ import annotations
-
 # pylint: disable=protected-access
 import socket
 import threading

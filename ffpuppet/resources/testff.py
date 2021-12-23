@@ -1,13 +1,12 @@
 #!/usr/bin/env python
 """fake firefox"""
 
-from __future__ import annotations
-
 import os
 import platform
 import sys
 import time
-from urllib.request import URLError, urlopen
+from urllib.error import URLError
+from urllib.request import urlopen
 
 EXIT_DELAY = 45
 
@@ -59,7 +58,7 @@ def main() -> int:  # pylint: disable=missing-docstring
     # sys.stdout.write('cmd: %s\n' % cmd)
     # sys.stdout.flush()
 
-    assert isinstance(profile, str)
+    assert profile is not None
     if cmd == "invalid_js":
         with open(os.path.join(profile, "Invalidprefs.js"), "w") as prefs_js:
             prefs_js.write("bad!")
@@ -72,7 +71,7 @@ def main() -> int:  # pylint: disable=missing-docstring
         except URLError as req_err:
             # can't redirect to file:// from http://
             # pylint: disable=consider-using-with
-            conn = urlopen(req_err.reason.split("'")[1])
+            conn = urlopen(str(req_err.reason).split("'")[1])
         try:
             target_url = conn.geturl()
             if target_url == url:

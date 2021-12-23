@@ -4,9 +4,8 @@
 # You can obtain one at http://mozilla.org/MPL/2.0/.
 """ffpuppet sanitizer_util tests"""
 
-from __future__ import annotations
-
 from pathlib import Path
+from typing import Dict, List
 
 from pytest import mark
 
@@ -40,7 +39,7 @@ from .sanitizer_util import SanitizerOptions
     ],
 )
 def test_sanitizer_options_01(
-    init: str, add: dict[str, str], result: list[str], overwrite: bool
+    init: str, add: Dict[str, str], result: List[str], overwrite: bool
 ) -> None:
     """test SanitizerOptions() - parsing and adding"""
     opts = SanitizerOptions(init)

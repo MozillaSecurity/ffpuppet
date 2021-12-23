@@ -4,9 +4,7 @@
 # License, v. 2.0. If a copy of the MPL was not distributed with this file,
 # You can obtain one at http://mozilla.org/MPL/2.0/.
 
-from __future__ import annotations
-
-from os import getpid, path
+from os import getpid
 from pathlib import Path
 from re import compile as re_compile
 
@@ -40,10 +38,10 @@ def test_check_01(mocker: MockerFixture, tmp_path: Path) -> None:
         checker.dump_log(lfp)
         assert not lfp.tell()
     # input exceeds chunk_size
-    with test_log.open("w") as lfp:
-        lfp.write("A" * (CheckLogContents.buf_limit - 2))
-        lfp.write("test123")
-        lfp.write("A" * 20)
+    with test_log.open("w") as lfp_txt:
+        lfp_txt.write("A" * (CheckLogContents.buf_limit - 2))
+        lfp_txt.write("test123")
+        lfp_txt.write("A" * 20)
     checker = CheckLogContents([str(test_log)], [re_compile("test123")])
     mocker.patch(
         "ffpuppet.checks.CheckLogContents.chunk_size", CheckLogContents.buf_limit

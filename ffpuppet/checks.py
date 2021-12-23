@@ -3,11 +3,9 @@
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
 """ffpuppet checks module"""
 
-from __future__ import annotations
-
 from abc import ABC, abstractmethod
 from os import SEEK_SET, stat
-from typing import IO
+from typing import IO, Iterable, List, Optional, Pattern
 
 from psutil import AccessDenied, NoSuchProcess
 
@@ -17,20 +15,29 @@ __author__ = "Tyson Smith"
 __credits__ = ["Tyson Smith"]
 
 
+class _LogContentsCheckState:
+    __slots__ = ("buffer", "fname", "offset")
+
+    def __init__(self, fname: str) -> None:
+        self.fname: str = fname
+        self.buffer: bytes = b""
+        self.offset: int = 0
+
+
 class Check(ABC):
     """
     Check base class
     """
 
-    name: str | None = None
+    name: Optional[str] = None
 
     __slots__ = ("message",)
 
     def __init__(self) -> None:
-        self.message: str | None = None
+        self.message: Optional[str] = None
 
     @abstractmethod
-    def check(self) -> bool | None:
+    def check(self) -> Optional[bool]:
         """
         Implement a check that returns True when the abort conditions are met.
         """
@@ -59,13 +66,15 @@ class CheckLogContents(Check):
 
     __slots__ = ("logs", "tokens")
 
-    def __init__(self, log_files, search_tokens) -> None:
+    def __init__(
+        self, log_files: Iterable[str], search_tokens: Iterable[Pattern[str]]
+    ) -> None:
         assert log_files, "log_files is empty"
         assert search_tokens, "search_tokens is empty"
         super().__init__()
-        self.logs = list()
+        self.logs: List[_LogContentsCheckState] = list()
         for log_file in log_files:
-            self.logs.append({"fname": log_file, "buffer": b"", "offset": 0})
+            self.logs.append(_LogContentsCheckState(log_file))
         self.tokens = search_tokens
 
     def check(self) -> bool:
@@ -80,14 +89,14 @@ class CheckLogContents(Check):
         for log in self.logs:
             try:
                 # check if file has new data
-                if stat(log["fname"]).st_size <= log["offset"]:
+                if stat(log.fname).st_size <= log.offset:
                     continue
-                with open(log["fname"], "rb") as scan_fp:
+                with open(log.fname, "rb") as scan_fp:
                     # only collect new data
-                    scan_fp.seek(log["offset"], SEEK_SET)
+                    scan_fp.seek(log.offset, SEEK_SET)
                     # read and prepend chunk of previously read data
-                    data = b"".join([log["buffer"], scan_fp.read(self.chunk_size)])
-                    log["offset"] = scan_fp.tell()
+                    data = b"".join([log.buffer, scan_fp.read(self.chunk_size)])
+                    log.offset = scan_fp.tell()
             except (IOError, OSError):
                 # log does not exist
                 continue
@@ -96,7 +105,7 @@ class CheckLogContents(Check):
                 if match:
                     self.message = "TOKEN_LOCATED: %s\n" % (match.group(),)
                     return True
-            log["buffer"] = data[-1 * self.buf_limit :]
+            log.buffer = data[-1 * self.buf_limit :]
         return False
 
 
