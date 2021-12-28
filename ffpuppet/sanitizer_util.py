@@ -17,8 +17,11 @@ class SanitizerOptions:  # pylint: disable=missing-docstring
 
     __slots__ = ("_options",)
 
-    def __init__(self):
+    def __init__(self, options=None):
         self._options = dict()
+        if options is not None:
+            assert isinstance(options, str)
+            self.load_options(options)
 
     def __contains__(self, item):
         return item in self._options
