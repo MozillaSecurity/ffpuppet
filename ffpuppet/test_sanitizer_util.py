@@ -37,8 +37,7 @@ from .sanitizer_util import SanitizerOptions
 )
 def test_sanitizer_options_01(init, add, result, overwrite):
     """test SanitizerOptions() - parsing and adding"""
-    opts = SanitizerOptions()
-    opts.load_options(init)
+    opts = SanitizerOptions(init)
     for key, value in add.items():
         opts.add(key, value, overwrite=overwrite)
     split_opts = SanitizerOptions.re_delim.split(opts.options)

@@ -116,7 +116,7 @@ def _configure_sanitizers(env, target_dir, log_path):
         bin_name = "llvm-symbolizer%s" % (
             ".exe" if system().startswith("Windows") else "",
         )
-        llvm_sym = pathjoin(target_dir, "".join(bin_name))
+        llvm_sym = pathjoin(target_dir, bin_name)
     if isfile(llvm_sym):
         # add *SAN_OPTIONS=external_symbolizer_path
         common_flags.append(("external_symbolizer_path", "'%s'" % (llvm_sym,)))
@@ -126,8 +126,7 @@ def _configure_sanitizers(env, target_dir, log_path):
 
     # setup Address Sanitizer options ONLY if not set manually in environment
     # https://github.com/google/sanitizers/wiki/AddressSanitizerFlags
-    asan_config = SanitizerOptions()
-    asan_config.load_options(env.get("ASAN_OPTIONS"))
+    asan_config = SanitizerOptions(env.get("ASAN_OPTIONS"))
     assert asan_config.check_path("suppressions"), "missing suppressions file"
     for flag in common_flags:
         asan_config.add(*flag)
@@ -153,8 +152,7 @@ def _configure_sanitizers(env, target_dir, log_path):
 
     # setup Leak Sanitizer options ONLY if not set manually in environment
     # https://github.com/google/sanitizers/wiki/AddressSanitizerLeakSanitizer
-    lsan_config = SanitizerOptions()
-    lsan_config.load_options(env.get("LSAN_OPTIONS"))
+    lsan_config = SanitizerOptions(env.get("LSAN_OPTIONS"))
     assert lsan_config.check_path("suppressions"), "missing suppressions file"
     lsan_config.add("max_leaks", "1")
     lsan_config.add("print_suppressions", "false")
@@ -163,8 +161,7 @@ def _configure_sanitizers(env, target_dir, log_path):
     env["LSAN_OPTIONS"] = lsan_config.options
 
     # setup Thread Sanitizer options ONLY if not set manually in environment
-    tsan_config = SanitizerOptions()
-    tsan_config.load_options(env.get("TSAN_OPTIONS"))
+    tsan_config = SanitizerOptions(env.get("TSAN_OPTIONS"))
     assert tsan_config.check_path("suppressions"), "missing suppressions file"
     tsan_config.add("halt_on_error", "1")
     if "log_path" in tsan_config:
@@ -175,8 +172,7 @@ def _configure_sanitizers(env, target_dir, log_path):
     env["TSAN_OPTIONS"] = tsan_config.options
 
     # setup Undefined Behavior Sanitizer options ONLY if not set manually in environment
-    ubsan_config = SanitizerOptions()
-    ubsan_config.load_options(env.get("UBSAN_OPTIONS"))
+    ubsan_config = SanitizerOptions(env.get("UBSAN_OPTIONS"))
     assert ubsan_config.check_path("suppressions"), "missing suppressions file"
     for flag in common_flags:
         ubsan_config.add(*flag)
