@@ -182,6 +182,7 @@ def _configure_sanitizers(env, target_dir, log_path):
         )
     ubsan_config.add("log_path", "'%s'" % log_path, overwrite=True)
     ubsan_config.add("print_stacktrace", "1")
+    ubsan_config.add("report_error_type", "1")
     env["UBSAN_OPTIONS"] = ubsan_config.options
 
     return env
