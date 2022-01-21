@@ -696,6 +696,7 @@ def test_ffpuppet_27(mocker, tmp_path):
             self.profile = None
 
     is_linux = platform.system() == "Linux"
+    # only check Valgrind logs on Linux
     debugger = Debugger.VALGRIND if is_linux else Debugger.NONE
     with StubbedLaunch(debugger=debugger) as ffp:
         assert ffp._dbg == debugger
@@ -725,7 +726,6 @@ def test_ffpuppet_27(mocker, tmp_path):
         # nothing interesting
         (Path(ffp.profile) / "minidumps" / "test.junk").write_text("\n")
         assert not ffp._logs.watching
-        # NOTE: Valgrind logs are only checked on Linux
         assert len(list(ffp._crashreports())) == (3 if is_linux else 2)
         assert ffp._logs.watching
         assert len(list(ffp._crashreports(skip_md=True))) == (2 if is_linux else 1)
@@ -734,7 +734,7 @@ def test_ffpuppet_27(mocker, tmp_path):
             # not tested on Windows because chmod() does not work
             ffp._logs.watching.clear()
             ign_log.chmod(stat.S_IWRITE)
-            assert len(list(ffp._crashreports())) == 4
+            assert len(list(ffp._crashreports())) == (4 if is_linux else 3)
             assert not ffp._logs.watching
 
 
