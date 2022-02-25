@@ -3,7 +3,7 @@
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
 """ffpuppet main.py"""
 
-import argparse
+from argparse import ArgumentParser, Namespace
 from logging import DEBUG, ERROR, INFO, WARNING, basicConfig, getLogger
 from os import scandir
 from os.path import abspath, exists, isdir, isfile
@@ -64,12 +64,19 @@ def dump_to_console(log_dir: str, log_quota: int = 0x8000) -> str:
     return "".join(lines)
 
 
-def parse_args(  # pylint: disable=missing-docstring
-    argv: Optional[List[str]] = None,
-) -> argparse.Namespace:
+def parse_args(argv: Optional[List[str]] = None) -> Namespace:
+    """Handle argument parsing.
+
+    Args:
+        argv: Arguments from the user.
+
+    Returns:
+        Parsed and sanitized arguments.
+    """
+
     log_level_map = {"ERROR": ERROR, "WARN": WARNING, "INFO": INFO, "DEBUG": DEBUG}
 
-    parser = argparse.ArgumentParser(
+    parser = ArgumentParser(
         description="FFPuppet - Firefox process launcher and log collector. "
         "Happy bug hunting!"
     )
@@ -82,9 +89,9 @@ def parse_args(  # pylint: disable=missing-docstring
     )
     parser.add_argument(
         "--log-level",
+        choices=sorted(log_level_map),
         default="INFO",
-        help="Configure console logging. Options: %s (default: %%(default)s)"
-        % ", ".join(k for k, v in sorted(log_level_map.items(), key=lambda x: x[1])),
+        help="Configure console logging (default: %(default)s)",
     )
 
     cfg_group = parser.add_argument_group("Browser Configuration")
@@ -195,9 +202,7 @@ def parse_args(  # pylint: disable=missing-docstring
             help="Use Valgrind.",
         )
 
-    parser.set_defaults(
-        debugger=Debugger.NONE,
-    )
+    parser.set_defaults(debugger=Debugger.NONE)
 
     args = parser.parse_args(argv)
 
@@ -210,16 +215,13 @@ def parse_args(  # pylint: disable=missing-docstring
                 parser.error("Extension %r does not exist" % ext)
     if not isdir(args.logs):
         parser.error("Log output directory is invalid %r" % args.logs)
-    log_level = log_level_map.get(args.log_level.upper(), None)
-    if log_level is None:
-        parser.error("Invalid log-level %r" % args.log_level)
-    args.log_level = log_level
+    args.log_level = log_level_map[args.log_level]
     if args.log_limit < 0:
         parser.error("--log-limit must be >= 0")
-    args.log_limit *= 1048576
+    args.log_limit *= 1_048_576
     if args.memory < 0:
         parser.error("--memory must be >= 0")
-    args.memory *= 1048576
+    args.memory *= 1_048_576
     if args.prefs is not None and not isfile(args.prefs):
         parser.error("Invalid prefs.js file %r" % args.prefs)
 
