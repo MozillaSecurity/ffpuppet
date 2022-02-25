@@ -93,9 +93,6 @@ def test_parse_args_01(tmp_path: Path) -> None:
     (tmp_path / "junk.log").touch()
     with raises(SystemExit):
         parse_args([str(fake_bin), "--logs", "/missing/path/"])
-    # invalid log level
-    with raises(SystemExit):
-        parse_args([str(fake_bin), "--log-level", "bad"])
     # success
     assert parse_args([str(fake_bin)])
 
