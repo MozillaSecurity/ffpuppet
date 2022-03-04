@@ -1,20 +1,19 @@
-# coding=utf-8
 # This Source Code Form is subject to the terms of the Mozilla Public
 # License, v. 2.0. If a copy of the MPL was not distributed with this file,
 # You can obtain one at http://mozilla.org/MPL/2.0/.
 """ffpuppet helpers tests"""
 
 import os
-import shutil
-import sys
-import tempfile
 from multiprocessing import Event, Process
 from multiprocessing.synchronize import Event as EventType
 from pathlib import Path
+from platform import system
+from shutil import rmtree
+from tempfile import NamedTemporaryFile
 from typing import Dict
 
-import psutil
-import pytest
+from psutil import Process as PSProcess
+from pytest import raises
 from pytest_mock import MockerFixture
 
 from .helpers import (
@@ -56,7 +55,7 @@ def test_helpers_01(tmp_path: Path) -> None:
     assert "Invalidprefs.js" not in contents
     # cleanup on failure
     (tmp_path / "dst3").mkdir()
-    with pytest.raises(OSError):
+    with raises(OSError):
         create_profile(prefs_js="fake", working_path=str(tmp_path / "dst3"))
     assert not any((tmp_path / "dst3").iterdir())
 
@@ -95,7 +94,7 @@ def test_helpers_03(mocker: MockerFixture, tmp_path: Path) -> None:
     )
     # create a profile with a non-existent ext
     (tmp_path / "dst").mkdir()
-    with pytest.raises(RuntimeError, match="Unknown extension: 'fake_ext'"):
+    with raises(RuntimeError, match="Unknown extension: 'fake_ext'"):
         create_profile(extension="fake_ext")
     assert not (tmp_path / "dst").is_dir()
     # create a profile with an xpi ext
@@ -105,12 +104,12 @@ def test_helpers_03(mocker: MockerFixture, tmp_path: Path) -> None:
     prof = create_profile(extension=str(xpi))
     assert "extensions" in os.listdir(prof)
     assert "xpi-ext.xpi" in os.listdir(os.path.join(prof, "extensions"))
-    shutil.rmtree(str(tmp_path / "dst"))
+    rmtree(tmp_path / "dst")
     # create a profile with an unknown ext
     (tmp_path / "dst").mkdir()
     dummy_ext = tmp_path / "dummy_ext"
     dummy_ext.mkdir()
-    with pytest.raises(
+    with raises(
         RuntimeError, match=r"Failed to find extension id in manifest: '.+?dummy_ext'"
     ):
         create_profile(extension=str(dummy_ext))
@@ -120,7 +119,7 @@ def test_helpers_03(mocker: MockerFixture, tmp_path: Path) -> None:
     bad_legacy = tmp_path / "bad_legacy"
     bad_legacy.mkdir()
     (bad_legacy / "install.rdf").touch()
-    with pytest.raises(
+    with raises(
         RuntimeError, match=r"Failed to find extension id in manifest: '.+?bad_legacy'"
     ):
         create_profile(extension=str(bad_legacy))
@@ -146,13 +145,13 @@ def test_helpers_03(mocker: MockerFixture, tmp_path: Path) -> None:
         "install.rdf",
         "example.js",
     }
-    shutil.rmtree(str(tmp_path / "dst"))
+    rmtree(tmp_path / "dst")
     # create a profile with a bad webext
     (tmp_path / "dst").mkdir()
     bad_webext = tmp_path / "bad_webext"
     bad_webext.mkdir()
     (bad_webext / "manifest.json").touch()
-    with pytest.raises(
+    with raises(
         RuntimeError, match=r"Failed to find extension id in manifest: '.+?bad_webext'"
     ):
         create_profile(extension=str(bad_webext))
@@ -173,7 +172,7 @@ def test_helpers_03(mocker: MockerFixture, tmp_path: Path) -> None:
         "manifest.json",
         "example.js",
     }
-    shutil.rmtree(str(tmp_path / "dst"))
+    rmtree(tmp_path / "dst")
     # create a profile with multiple extensions
     (tmp_path / "dst").mkdir()
     prof = create_profile(extension=[str(good_webext), str(good_legacy)])
@@ -232,7 +231,7 @@ def test_helpers_04(tmp_path: Path) -> None:
     # test suppression file
     sup = tmp_path / "test.sup"
     sup.touch()
-    env = {"ASAN_OPTIONS": "suppressions='%s'" % str(sup)}
+    env = {"ASAN_OPTIONS": f"suppressions='{sup}'"}
     env = _configure_sanitizers(env, str(tmp_path), "blah")
     asan_opts = parse(env["ASAN_OPTIONS"])
     assert "suppressions" in asan_opts
@@ -251,11 +250,11 @@ def test_helpers_04(tmp_path: Path) -> None:
     assert ubsan_opts["log_path"] == "'blah'"
     # test missing suppression file
     env = {"ASAN_OPTIONS": "suppressions=not_a_file"}
-    with pytest.raises(AssertionError, match="missing suppressions file"):
+    with raises(AssertionError, match="missing suppressions file"):
         _configure_sanitizers(env, str(tmp_path), "blah")
     # unquoted path containing ':'
     env = {"ASAN_OPTIONS": "strip_path_prefix=x:\\foo\\bar"}
-    with pytest.raises(AssertionError, match=r"\(strip_path_prefix\) must be quoted"):
+    with raises(AssertionError, match=r"\(strip_path_prefix\) must be quoted"):
         _configure_sanitizers(env, str(tmp_path), "blah")
     # multiple options
     options = (
@@ -274,7 +273,7 @@ def test_helpers_04(tmp_path: Path) -> None:
     for key, value in (x.split(sep="=", maxsplit=1) for x in options):
         assert asan_opts[key] == value
     # test using packaged llvm-symbolizer
-    if sys.platform.startswith("win"):
+    if system().startswith("Windows"):
         llvm_sym_packed = tmp_path / "llvm-symbolizer.exe"
     else:
         llvm_sym_packed = tmp_path / "llvm-symbolizer"
@@ -305,7 +304,7 @@ def test_helpers_04(tmp_path: Path) -> None:
     llvm_sym_b.touch()
     env = {
         "ASAN_SYMBOLIZER_PATH": str(llvm_sym_a),
-        "ASAN_OPTIONS": "external_symbolizer_path='%s'" % (str(llvm_sym_b),),
+        "ASAN_OPTIONS": f"external_symbolizer_path='{str(llvm_sym_b)}'",
     }
     env = _configure_sanitizers(env, str(tmp_path), "blah")
     asan_opts = parse(env["ASAN_OPTIONS"])
@@ -371,7 +370,7 @@ def test_helpers_07(tmp_path: Path) -> None:
     t_file.touch()
     # test with open file
     procs = get_processes(os.getpid(), recursive=False)
-    with tempfile.NamedTemporaryFile() as wait_fp:
+    with NamedTemporaryFile() as wait_fp:
         assert not wait_on_files(procs, [Path(wait_fp.name), t_file], timeout=0.1)
     # existing but closed file
     procs = get_processes(os.getpid(), recursive=False)
@@ -386,7 +385,7 @@ def test_helpers_07(tmp_path: Path) -> None:
 # this needs to be here in order to work correctly on Windows
 def _dummy_process(is_alive: EventType, is_done: EventType) -> None:
     is_alive.set()
-    sys.stdout.write("I'm process %d\n" % os.getpid())
+    print(f"I'm process {os.getpid()}\n")
     is_done.wait(30)
 
 
@@ -423,9 +422,9 @@ def test_helpers_10(tmp_path: Path) -> None:
     """test files_in_use()"""
     t_file = tmp_path / "file.bin"
     t_file.touch()
-    procs = [psutil.Process(os.getpid())]
+    procs = [PSProcess(os.getpid())]
     # test with open file
-    with tempfile.NamedTemporaryFile() as wait_fp:
+    with NamedTemporaryFile() as wait_fp:
         assert any(files_in_use([t_file, Path(wait_fp.name)], procs))
     # existing but closed file
     assert not any(files_in_use([t_file], procs))
@@ -434,5 +433,5 @@ def test_helpers_10(tmp_path: Path) -> None:
 def test_helpers_11(tmp_path: Path) -> None:
     """test warn_open()"""
     (tmp_path / "file.bin").touch()
-    with tempfile.NamedTemporaryFile(dir=str(tmp_path)) as _:
+    with NamedTemporaryFile(dir=str(tmp_path)) as _:
         warn_open(str(tmp_path))

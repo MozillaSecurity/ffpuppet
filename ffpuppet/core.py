@@ -134,12 +134,12 @@ class FFPuppet:
         if use_xvfb:
             if not system().startswith("Linux"):
                 self._logs.clean_up(ignore_errors=True)
-                raise EnvironmentError("Xvfb is only supported on Linux")
+                raise OSError("Xvfb is only supported on Linux")
             try:
                 self._xvfb = Xvfb(width=1280, height=1024)
             except NameError:
                 self._logs.clean_up(ignore_errors=True)
-                raise EnvironmentError("Please install xvfbwrapper") from None
+                raise OSError("Please install xvfbwrapper") from None
             self._xvfb.start()
 
     def __enter__(self) -> "FFPuppet":
@@ -189,7 +189,7 @@ class FFPuppet:
                     break
                 else:
                     # nothing interesting was found
-                    LOG.debug("benign log has changed %r", str(report))
+                    LOG.debug("benign log has changed '%s'", report)
                     self._logs.watching[str(report)] = log_fp.tell()
                     return True
 
@@ -251,32 +251,30 @@ class FFPuppet:
         LOG.debug("checking %s support", dbg)
         if dbg == Debugger.GDB:
             if not system().startswith("Linux"):
-                raise EnvironmentError("GDB is only supported on Linux")
+                raise OSError("GDB is only supported on Linux")
             try:
                 check_output(["gdb", "--version"])
             except OSError:
-                raise EnvironmentError("Please install GDB") from None
+                raise OSError("Please install GDB") from None
         elif dbg in (Debugger.PERNOSCO, Debugger.RR):
             if not system().startswith("Linux"):
-                raise EnvironmentError("rr is only supported on Linux")
+                raise OSError("rr is only supported on Linux")
             try:
                 check_output(["rr", "--version"])
             except OSError:
-                raise EnvironmentError("Please install rr") from None
+                raise OSError("Please install rr") from None
         elif dbg == Debugger.VALGRIND:
             if not system().startswith("Linux"):
-                raise EnvironmentError("Valgrind is only supported on Linux")
+                raise OSError("Valgrind is only supported on Linux")
             try:
                 match = re_match(
                     b"valgrind-(?P<ver>\\d+\\.\\d+)",
                     check_output(["valgrind", "--version"]),
                 )
             except OSError:
-                raise EnvironmentError("Please install Valgrind") from None
+                raise OSError("Please install Valgrind") from None
             if not match or float(match.group("ver")) < cls.VALGRIND_MIN_VERSION:
-                raise EnvironmentError(
-                    "Valgrind >= %0.2f is required" % cls.VALGRIND_MIN_VERSION
-                )
+                raise OSError(f"Valgrind >= {cls.VALGRIND_MIN_VERSION:.2f} is required")
 
     @staticmethod
     def _terminate(pid: int, retry_delay: int = 30, start_mode: int = 0) -> None:
@@ -383,6 +381,9 @@ class FFPuppet:
 
         if self._dbg == Debugger.VALGRIND:
             assert self._logs.working_path is not None
+            valgrind_log_prefix = pathjoin(
+                self._logs.working_path, self._logs.PREFIX_VALGRIND
+            )
             valgrind_cmd = [
                 "valgrind",
                 "-q",
@@ -392,8 +393,7 @@ class FFPuppet:
                 "--fair-sched=try",
                 "--gen-suppressions=all",
                 "--leak-check=no",
-                "--log-file=%s.%%p"
-                % pathjoin(self._logs.working_path, self._logs.PREFIX_VALGRIND),
+                f"--log-file={valgrind_log_prefix}.%p",
                 "--read-inline-info=no",
                 "--show-mismatched-frees=no",
                 "--show-possibly-lost=no",
@@ -407,9 +407,9 @@ class FFPuppet:
             sup_file = getenv("VALGRIND_SUP_PATH")
             if sup_file:
                 if not isfile(sup_file):
-                    raise IOError("Missing Valgrind suppressions %r" % sup_file)
+                    raise OSError(f"Missing Valgrind suppressions {sup_file!r}")
                 LOG.debug("using Valgrind suppressions: %r", sup_file)
-                valgrind_cmd.append("--suppressions=%s" % sup_file)
+                valgrind_cmd.append(f"--suppressions={sup_file}")
 
             cmd = valgrind_cmd + cmd
 
@@ -586,7 +586,7 @@ class FFPuppet:
                     if check.message is not None:
                         r_code = Reason.WORKER
                         check.dump_log(
-                            dst_fp=self._logs.add_log("ffp_worker_%s" % check.name)
+                            dst_fp=self._logs.add_log(f"ffp_worker_{check.name}")
                         )
                 # collect logs (excluding minidumps)
                 for log_path in self._crashreports(skip_md=True, skip_benign=False):
@@ -602,9 +602,7 @@ class FFPuppet:
                 )
                 stderr_fp = self._logs.get_fp("stderr")
                 if stderr_fp:
-                    stderr_fp.write(
-                        ("[ffpuppet] Reason code: %s\n" % r_code.name).encode("utf-8")
-                    )
+                    stderr_fp.write(f"[ffpuppet] Reason code: {r_code.name}\n".encode())
         # reset remaining to closed state
         try:
             self._proc = None
@@ -733,7 +731,7 @@ class FFPuppet:
 
         bin_path = abspath(bin_path)
         if not isfile(bin_path) or not access(bin_path, X_OK):
-            raise IOError("%s is not an executable" % bin_path)
+            raise OSError(f"{bin_path} is not an executable")
         # need the path to help find symbols
         self._bin_path = dirname(bin_path)
 
@@ -744,7 +742,7 @@ class FFPuppet:
                     ["file:", pathname2url(realpath(location)).lstrip("/")]
                 )
             elif re_match(r"http(s)?://", location, IGNORECASE) is None:
-                raise IOError("Cannot find %r" % location)
+                raise OSError(f"Cannot find {location!r}")
 
         # create and modify a profile
         self.profile = create_profile(
@@ -770,8 +768,7 @@ class FFPuppet:
             # reducing older Grizzly test cases.
             prefs = {
                 "capability.policy.localfilelinks.checkloaduri.enabled": "'allAccess'",
-                "capability.policy.localfilelinks.sites": "'%s'"
-                % bootstrapper.location,
+                "capability.policy.localfilelinks.sites": f"'{bootstrapper.location}'",
                 "capability.policy.policynames": "'localfilelinks'",
                 "network.proxy.allow_bypass": "false",
                 "network.proxy.failover_direct": "false",
@@ -804,9 +801,7 @@ class FFPuppet:
             # open logs
             self._logs.add_log("stdout")
             stderr = self._logs.add_log("stderr")
-            stderr.write(b"[ffpuppet] Launch command: ")
-            stderr.write(" ".join(cmd).encode("utf-8"))
-            stderr.write(b"\n\n")
+            stderr.write(f"[ffpuppet] Launch command: {' '.join(cmd)}\n\n".encode())
             stderr.flush()
             assert self._logs.working_path is not None
             sanitizer_logs = pathjoin(self._logs.working_path, self._logs.PREFIX_SAN)
@@ -831,7 +826,7 @@ class FFPuppet:
             if prefs_js is not None and isfile(
                 pathjoin(self.profile, "Invalidprefs.js")
             ):
-                raise InvalidPrefs("%r is invalid" % prefs_js)
+                raise InvalidPrefs(f"{prefs_js!r} is invalid")
 
         logs_fp_stderr = self._logs.get_fp("stderr")
         assert logs_fp_stderr is not None

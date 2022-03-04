@@ -29,8 +29,8 @@ class PuppetLogger:  # pylint: disable=missing-docstring
     BUF_SIZE = 0x10000  # buffer size used to copy logs
     META_FILE = "log_metadata.json"
     PATH_RR = "rr-traces"
-    PREFIX_SAN = "ffp_asan_%d.log" % (getpid(),)
-    PREFIX_VALGRIND = "valgrind.%d" % (getpid(),)
+    PREFIX_SAN = f"ffp_asan_{getpid()}.log"
+    PREFIX_VALGRIND = f"valgrind.{getpid()}"
 
     __slots__ = ("_base", "_logs", "_rr_packed", "closed", "watching", "working_path")
 
@@ -201,7 +201,7 @@ class PuppetLogger:  # pylint: disable=missing-docstring
             LOG.warning("log_id %r does not exist", log_id)
             return None
         if log_fp.name is None or not isfile(log_fp.name):
-            raise IOError("log file %r does not exist" % log_fp.name)
+            raise OSError(f"log file {log_fp.name!r} does not exist")
         return log_fp
 
     def log_length(self, log_id: str) -> Optional[int]:
@@ -283,7 +283,7 @@ class PuppetLogger:  # pylint: disable=missing-docstring
 
         meta_map = dict()
         for log_id, log_fp in self._logs.items():
-            out_name = "log_%s.txt" % log_id
+            out_name = f"log_{log_id}.txt"
             if meta:
                 file_stat = stat(log_fp.name)
                 meta_map[out_name] = {
