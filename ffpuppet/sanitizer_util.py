@@ -41,7 +41,7 @@ class SanitizerOptions:  # pylint: disable=missing-docstring
         assert flag and isinstance(flag, str)
         assert isinstance(value, str)
         if ":" in value or " " in value:
-            assert self.is_quoted(value), "%s (%s) must be quoted" % (value, flag)
+            assert self.is_quoted(value), f"{value} ({flag}) must be quoted"
         if flag not in self._options or overwrite:
             self._options[flag] = value
 
@@ -83,11 +83,8 @@ class SanitizerOptions:  # pylint: disable=missing-docstring
         Returns:
             True if token is quoted otherwise False.
         """
-        if len(token) > 1:
-            if token.startswith("'") and token.endswith("'"):
-                return True
-            if token.startswith('"') and token.endswith('"'):
-                return True
+        if len(token) > 1 and token[0] == token[-1] and token[0] in ('"', "'"):
+            return True
         return False
 
     def load_options(self, options: Optional[str]) -> None:

@@ -25,7 +25,7 @@ def main() -> int:  # pylint: disable=missing-docstring
         elif arg == "-profile":
             profile = sys.argv.pop(1)
         else:
-            raise RuntimeError("unknown argument: %s" % arg)
+            raise RuntimeError(f"unknown argument: {arg}")
     if url is None:
         sys.stderr.write("missing url\n")
         return 1
@@ -33,7 +33,7 @@ def main() -> int:  # pylint: disable=missing-docstring
     cmd = None
     exit_code = 0
     if profile is not None:
-        with open(os.path.join(profile, "prefs.js"), "r") as prefs_js:
+        with open(os.path.join(profile, "prefs.js")) as prefs_js:
             for line in prefs_js:
                 if line.startswith("user_pref"):
                     pass
@@ -54,8 +54,8 @@ def main() -> int:  # pylint: disable=missing-docstring
                 elif line.startswith("#"):
                     pass  # skip comments
                 elif line.strip():
-                    raise RuntimeError("unknown value in prefs.js: %s" % line)
-    # sys.stdout.write('cmd: %s\n' % cmd)
+                    raise RuntimeError(f"unknown value in prefs.js: {line}")
+    # sys.stdout.write(f'cmd: {cmd}\n')
     # sys.stdout.flush()
 
     assert profile is not None
@@ -76,13 +76,13 @@ def main() -> int:  # pylint: disable=missing-docstring
             target_url = conn.geturl()
             if target_url == url:
                 target_url = None
-            sys.stdout.write(conn.read().decode("utf-8"))
+            sys.stdout.write(conn.read().decode())
             sys.stdout.write("\n")
             sys.stdout.flush()
         finally:
             conn.close()
 
-    sys.stdout.write("url: %r\n" % target_url)
+    sys.stdout.write(f"url: {target_url!r}\n")
     sys.stdout.flush()
 
     if cmd == "memory":
@@ -106,11 +106,11 @@ def main() -> int:  # pylint: disable=missing-docstring
             sys.stdout.flush()
             sys.stderr.flush()
     elif cmd == "exit_code":
-        sys.stdout.write("exit code test (%d)\n" % exit_code)
+        sys.stdout.write(f"exit code test ({exit_code})\n")
         sys.stdout.flush()
         return exit_code
 
-    sys.stdout.write("running... (sleep %d)\n" % EXIT_DELAY)
+    sys.stdout.write(f"running... (sleep {EXIT_DELAY})\n")
     sys.stdout.flush()
     time.sleep(EXIT_DELAY)  # wait before closing (should be terminated before elapse)
     sys.stdout.write("exiting normally\n")

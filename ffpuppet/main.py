@@ -53,12 +53,12 @@ def dump_to_console(log_dir: str, log_quota: int = 0x8000) -> str:
     for log in logs:
         fsize = log.stat().st_size
         lines.append("\n===\n")
-        lines.append("=== Dumping %r (%0.2fKB)" % (log.name, fsize / 1024.0))
+        lines.append(f"=== Dumping {log.name!r} ({fsize / 1024.0:0.2f}KB)")
         with open(log.path, "rb") as log_fp:
             # tail log if needed
             log_fp.seek(max(fsize - log_quota, 0))
             if log_fp.tell() > 0:
-                lines.append(" - tailed (%0.2fKB)" % (log_quota / 1024.0))
+                lines.append(f" - tailed ({log_quota / 1024.0:0.2f}KB)")
             lines.append("\n===\n")
             lines.append(log_fp.read().decode("ascii", errors="ignore"))
     return "".join(lines)
@@ -208,13 +208,13 @@ def parse_args(argv: Optional[List[str]] = None) -> Namespace:
 
     # sanity checks
     if not isfile(args.binary):
-        parser.error("Invalid browser binary %r" % args.binary)
+        parser.error(f"Invalid browser binary {args.binary!r}")
     if args.extension is not None:
         for ext in args.extension:
             if not exists(ext):
-                parser.error("Extension %r does not exist" % ext)
+                parser.error(f"Extension {ext!r} does not exist")
     if not isdir(args.logs):
-        parser.error("Log output directory is invalid %r" % args.logs)
+        parser.error(f"Log output directory is invalid {args.logs!r}")
     args.log_level = log_level_map[args.log_level]
     if args.log_limit < 0:
         parser.error("--log-limit must be >= 0")
@@ -223,7 +223,7 @@ def parse_args(argv: Optional[List[str]] = None) -> Namespace:
         parser.error("--memory must be >= 0")
     args.memory *= 1_048_576
     if args.prefs is not None and not isfile(args.prefs):
-        parser.error("Invalid prefs.js file %r" % args.prefs)
+        parser.error(f"Invalid prefs.js file {args.prefs!r}")
 
     return args
 

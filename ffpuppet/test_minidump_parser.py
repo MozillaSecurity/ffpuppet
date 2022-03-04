@@ -1,8 +1,7 @@
-# coding=utf-8
-"""ffpuppet minidump parser tests"""
 # This Source Code Form is subject to the terms of the Mozilla Public
 # License, v. 2.0. If a copy of the MPL was not distributed with this file,
 # You can obtain one at http://mozilla.org/MPL/2.0/.
+"""ffpuppet minidump parser tests"""
 # pylint: disable=protected-access
 
 from os import SEEK_END
@@ -17,7 +16,7 @@ from .minidump_parser import MinidumpParser, process_minidumps
 
 def test_minidump_parser_01(mocker: MockerFixture, tmp_path: Path) -> None:
     """test MinidumpParser() with missing and empty scan path"""
-    with raises(IOError):
+    with raises(OSError):
         MinidumpParser("/path/does/not/exist/")
     mdp = MinidumpParser(str(tmp_path))
     assert not mdp.md_files

@@ -52,7 +52,7 @@ class Check(ABC):
             None
         """
         if self.message is not None:
-            dst_fp.write(self.message.encode("utf-8", "ignore"))
+            dst_fp.write(self.message.encode(errors="ignore"))
 
 
 class CheckLogContents(Check):
@@ -95,15 +95,15 @@ class CheckLogContents(Check):
                     # only collect new data
                     scan_fp.seek(log.offset, SEEK_SET)
                     # read and prepend chunk of previously read data
-                    data = b"".join([log.buffer, scan_fp.read(self.chunk_size)])
+                    data = b"".join((log.buffer, scan_fp.read(self.chunk_size)))
                     log.offset = scan_fp.tell()
-            except (IOError, OSError):
+            except OSError:
                 # log does not exist
                 continue
             for token in self.tokens:
-                match = token.search(data.decode("utf-8", errors="replace"))
+                match = token.search(data.decode(errors="replace"))
                 if match:
-                    self.message = "TOKEN_LOCATED: %s\n" % (match.group(),)
+                    self.message = f"TOKEN_LOCATED: {match.group()}\n"
                     return True
             log.buffer = data[-1 * self.buf_limit :]
         return False
@@ -139,19 +139,10 @@ class CheckLogSize(Check):
         total_size = err_size + out_size
         if total_size > self.limit:
             self.message = (
-                "LOG_SIZE_LIMIT_EXCEEDED: %s\n"
-                "Limit: %s (%dMB)\n"
-                "stderr log: %s (%dMB)\n"
-                "stdout log: %s (%dMB)\n"
-                % (
-                    format(total_size, ","),
-                    format(self.limit, ","),
-                    self.limit / 1048576,
-                    format(err_size, ","),
-                    err_size / 1048576,
-                    format(out_size, ","),
-                    out_size / 1048576,
-                )
+                f"LOG_SIZE_LIMIT_EXCEEDED: {total_size:,}\n"
+                f"Limit: {self.limit:,} ({self.limit / 1_048_576}MB)\n"
+                f"stderr log: {err_size:,} ({err_size / 1_048_576}MB)\n"
+                f"stdout log: {out_size:,} ({out_size / 1_048_576}MB)\n"
             )
         return self.message is not None
 
@@ -192,11 +183,11 @@ class CheckMemoryUsage(Check):
                 pass
         if total_usage >= self.limit:
             msg = [
-                "MEMORY_LIMIT_EXCEEDED: %s\n" % (format(total_usage, ","),),
-                "Limit: %s (%dMB)\n" % (format(self.limit, ","), self.limit / 1048576),
-                "Parent PID: %d\n" % (self.pid,),
+                f"MEMORY_LIMIT_EXCEEDED: {total_usage:,}\n",
+                f"Limit: {self.limit:,} ({self.limit / 1_048_576}MB)\n",
+                f"Parent PID: {self.pid}\n",
             ]
             for pid, usage in proc_info:
-                msg.append("-> PID %6d: %s\n" % (pid, format(usage, "14,")))
+                msg.append(f"-> PID {pid: 6}: {usage: 14,}\n")
             self.message = "".join(msg)
         return self.message is not None

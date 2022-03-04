@@ -51,7 +51,7 @@ def append_prefs(profile_path: str, prefs: Dict[str, str]) -> None:
         # make sure there is a newline before appending to prefs.js
         prefs_fp.write("\n")
         for name, value in prefs.items():
-            prefs_fp.write("user_pref('%s', %s);\n" % (name, value))
+            prefs_fp.write(f"user_pref('{name}', {value});\n")
 
 
 def check_prefs(prof_prefs: str, input_prefs: str) -> bool:
@@ -69,7 +69,7 @@ def check_prefs(prof_prefs: str, input_prefs: str) -> bool:
     Returns:
         True if all expected preferences are found otherwise False.
     """
-    with open(prof_prefs, "r") as p_fp, open(input_prefs, "r") as i_fp:
+    with open(prof_prefs) as p_fp, open(input_prefs) as i_fp:
         p_prefs = {pref.split(",")[0] for pref in p_fp if pref.startswith("user_pref(")}
         i_prefs = {pref.split(",")[0] for pref in i_fp if pref.startswith("user_pref(")}
     missing_prefs = i_prefs - p_prefs
@@ -114,14 +114,14 @@ def _configure_sanitizers(
     # *SAN_OPTIONS=external_symbolizer_path takes priority if it is defined in env
     llvm_sym = env.get("ASAN_SYMBOLIZER_PATH")
     if not llvm_sym:
-        # used packaged location
-        bin_name = "llvm-symbolizer%s" % (
-            ".exe" if system().startswith("Windows") else "",
-        )
-        llvm_sym = pathjoin(target_dir, bin_name)
+        # use packaged llvm-symbolizer
+        if system().startswith("Windows"):
+            llvm_sym = pathjoin(target_dir, "llvm-symbolizer.exe")
+        else:
+            llvm_sym = pathjoin(target_dir, "llvm-symbolizer")
     if isfile(llvm_sym):
         # add *SAN_OPTIONS=external_symbolizer_path
-        common_flags.append(("external_symbolizer_path", "'%s'" % (llvm_sym,)))
+        common_flags.append(("external_symbolizer_path", f"'{llvm_sym}'"))
     else:
         # assume system llvm-symbolizer will be used
         LOG.debug("llvm-symbolizer not found (%s)", llvm_sym)
@@ -145,7 +145,7 @@ def _configure_sanitizers(
         LOG.warning(
             "ASAN_OPTIONS=log_path is used internally and cannot be set externally"
         )
-    asan_config.add("log_path", "'%s'" % log_path, overwrite=True)
+    asan_config.add("log_path", f"'{log_path}'", overwrite=True)
     asan_config.add("sleep_before_dying", "0")
     asan_config.add("strict_init_order", "true")
     # breaks old builds (esr52)
@@ -170,7 +170,7 @@ def _configure_sanitizers(
         LOG.warning(
             "TSAN_OPTIONS=log_path is used internally and cannot be set externally"
         )
-    tsan_config.add("log_path", "'%s'" % log_path, overwrite=True)
+    tsan_config.add("log_path", f"'{log_path}'", overwrite=True)
     env["TSAN_OPTIONS"] = tsan_config.options
 
     # setup Undefined Behavior Sanitizer options ONLY if not set manually in environment
@@ -182,7 +182,7 @@ def _configure_sanitizers(
         LOG.warning(
             "UBSAN_OPTIONS=log_path is used internally and cannot be set externally"
         )
-    ubsan_config.add("log_path", "'%s'" % log_path, overwrite=True)
+    ubsan_config.add("log_path", f"'{log_path}'", overwrite=True)
     ubsan_config.add("print_stacktrace", "1")
     ubsan_config.add("report_error_type", "1")
     env["UBSAN_OPTIONS"] = ubsan_config.options
@@ -224,7 +224,7 @@ def create_profile(
             times_json = pathjoin(profile, "times.json")
             if not isfile(times_json):
                 with open(times_json, "w") as times_fp:
-                    times_fp.write('{"created":%d}' % (int(time()) * 1000))
+                    times_fp.write(f'{{"created":{int(time()) * 1000}}}')
     except OSError:
         rmtree(profile)
         raise
@@ -250,7 +250,7 @@ def create_profile(
                         with open(pathjoin(ext, "manifest.json")) as manifest:
                             manifest_loaded_json = json_load(manifest)
                         ext_name = manifest_loaded_json["applications"]["gecko"]["id"]
-                    except (IOError, KeyError, ValueError) as exc:
+                    except (OSError, KeyError, ValueError) as exc:
                         LOG.debug("Failed to parse manifest.json: %s", exc)
                 elif isfile(pathjoin(ext, "install.rdf")):
                     try:
@@ -259,19 +259,19 @@ def create_profile(
                             "em": "http://www.mozilla.org/2004/em-rdf#",
                         }
                         tree = ElementTree.parse(pathjoin(ext, "install.rdf"))
-                        assert tree.getroot().tag == "{%s}RDF" % xmlns["x"]
+                        assert tree.getroot().tag == f"{{{xmlns['x']}}}RDF"
                         ids = tree.findall("./x:Description/em:id", namespaces=xmlns)
                         assert len(ids) == 1
                         ext_name = ids[0].text
-                    except (AssertionError, IOError, ElementTree.ParseError) as exc:
+                    except (AssertionError, OSError, ElementTree.ParseError) as exc:
                         LOG.debug("Failed to parse install.rdf: %s", exc)
                 if ext_name is None:
                     raise RuntimeError(
-                        "Failed to find extension id in manifest: %r" % ext
+                        f"Failed to find extension id in manifest: {ext!r}"
                     )
                 copytree(abspath(ext), pathjoin(profile, "extensions", ext_name))
             else:
-                raise RuntimeError("Unknown extension: %r" % ext)
+                raise RuntimeError(f"Unknown extension: {ext!r}")
     except Exception:
         # cleanup on failure
         rmtree(profile, True)

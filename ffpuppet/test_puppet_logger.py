@@ -1,18 +1,16 @@
-# coding=utf-8
-"""ffpuppet puppet logger tests"""
 # This Source Code Form is subject to the terms of the Mozilla Public
 # License, v. 2.0. If a copy of the MPL was not distributed with this file,
 # You can obtain one at http://mozilla.org/MPL/2.0/.
-
+"""ffpuppet puppet logger tests"""
 # pylint: disable=protected-access
 
-import json
 import os
-import tempfile
-import time
+from json import loads
 from pathlib import Path
+from tempfile import SpooledTemporaryFile
+from time import sleep
 
-import pytest
+from pytest import raises
 from pytest_mock import MockerFixture
 
 from .helpers import onerror
@@ -31,7 +29,7 @@ def test_puppet_logger_01(tmp_path: Path) -> None:
     plog.close()
     assert any(os.scandir(plog._base))
     assert plog.closed
-    with pytest.raises(AssertionError):
+    with raises(AssertionError):
         plog.add_log("test")
     assert plog.log_length("missing") is None
 
@@ -178,7 +176,7 @@ def test_puppet_logger_06(tmp_path: Path) -> None:
             meta_fp.write(b"blah")
             plog.add_log("test_meta", logfp=meta_fp)
         # delay to check if creation time was copied when save_logs is called
-        time.sleep(0.1)
+        sleep(0.1)
         plog.close()
         dest.mkdir()
         plog.save_logs(str(dest), meta=True)
@@ -191,7 +189,7 @@ def test_puppet_logger_06(tmp_path: Path) -> None:
         # verify meta data was copied
         meta_file = dest / PuppetLogger.META_FILE
         assert meta_file.is_file()
-        meta_map = json.loads(meta_file.read_text())
+        meta_map = loads(meta_file.read_text())
         assert len(meta_map) == 5
         assert meta_ctime == meta_map["log_test_meta.txt"]["st_ctime"]
         # verify all data was copied
@@ -237,9 +235,9 @@ def test_puppet_logger_07(mocker: MockerFixture, tmp_path: Path) -> None:
 def test_puppet_logger_08(tmp_path: Path) -> None:
     """test PuppetLogger.add_log() with file not on disk"""
     with PuppetLogger(base_path=str(tmp_path)) as plog:
-        with tempfile.SpooledTemporaryFile(max_size=2048) as log_fp:
+        with SpooledTemporaryFile(max_size=2048) as log_fp:
             plog.add_log("test", logfp=log_fp)
-            with pytest.raises(IOError, match="log file None does not exist"):
+            with raises(OSError, match="log file None does not exist"):
                 plog.get_fp("test")
 
 
@@ -251,7 +249,7 @@ def test_puppet_logger_09(mocker: MockerFixture, tmp_path: Path) -> None:
         working_path = plog.working_path
         # test with ignore_errors=False
         fake_rmtree.side_effect = OSError
-        with pytest.raises(OSError):
+        with raises(OSError):
             plog.clean_up()
         assert fake_rmtree.call_count == 2
         fake_rmtree.assert_called_with(

@@ -1,4 +1,3 @@
-# coding=utf-8
 # This Source Code Form is subject to the terms of the Mozilla Public
 # License, v. 2.0. If a copy of the MPL was not distributed with this file,
 # You can obtain one at http://mozilla.org/MPL/2.0/.
@@ -72,7 +71,7 @@ def test_sanitizer_options_03(tmp_path: Path) -> None:
     # test exists
     file = tmp_path / "file.bin"
     file.touch()
-    opts.add("file", "'%s'" % (str(file),))
+    opts.add("file", f"'{str(file)}'")
     assert opts.check_path("file")
     # test missing file
     file.unlink()

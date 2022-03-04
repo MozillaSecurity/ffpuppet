@@ -86,7 +86,7 @@ class MinidumpParser:  # pylint: disable=missing-docstring
                     dmp_size = stat(dump_file).st_size
                 except OSError:
                     dmp_size = None
-                raise RuntimeError("MDSW Error (dmp size: %r)" % (dmp_size,))
+                raise RuntimeError(f"MDSW Error (dmp size: {dmp_size!r})")
 
         out_fp.seek(0)
 
@@ -185,12 +185,10 @@ class MinidumpParser:  # pylint: disable=missing-docstring
         # sort dumps by modified date since the oldest is likely the most interesting
         # this does assume that the dumps are written sequentially
         for count, file_path in enumerate(sorted(self.md_files, key=getmtime), start=1):
-            log_fp = cb_create_log("minidump_%02d" % count)
+            log_fp = cb_create_log("minidump_{count:02}")
             self._read_registers(file_path, log_fp)
             # create log for raw mdsw stack output if needed
-            raw_fp = (
-                cb_create_log("raw_mdsw_%02d" % count) if self._include_raw else None
-            )
+            raw_fp = cb_create_log("raw_mdsw_{count:02}") if self._include_raw else None
             self._read_stacktrace(file_path, log_fp, raw_fp)
             if log_fp.tell() < 1:
                 LOG.warning("minidump_stackwalk log was empty (minidump_%02d)", count)

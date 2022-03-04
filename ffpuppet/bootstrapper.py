@@ -42,7 +42,7 @@ class Bootstrapper:  # pylint: disable=missing-docstring
             try:
                 self._socket.bind(("127.0.0.1", randint(self.PORT_MIN, self.PORT_MAX)))
                 self._socket.listen(5)
-            except socket.error as soc_e:
+            except OSError as soc_e:
                 if soc_e.errno in (EADDRINUSE, 10013):
                     # Address already in use
                     continue
@@ -82,7 +82,7 @@ class Bootstrapper:  # pylint: disable=missing-docstring
             Location.
         """
         assert self._socket is not None
-        return "http://127.0.0.1:%d" % (self.port,)
+        return f"http://127.0.0.1:{self.port}"
 
     @property
     def port(self) -> int:
@@ -164,8 +164,8 @@ class Bootstrapper:  # pylint: disable=missing-docstring
             else:
                 resp = (
                     "HTTP/1.1 301 Moved Permanently\r\n"
-                    "Location: %s\r\n"
-                    "Connection: close\r\n\r\n" % (url,)
+                    f"Location: {url}\r\n"
+                    "Connection: close\r\n\r\n"
                 )
             conn.settimeout(max(int(time_limit - time()), 1))
             LOG.debug("sending response (redirect %r)", url)
@@ -180,10 +180,8 @@ class Bootstrapper:  # pylint: disable=missing-docstring
             if resp_timeout:
                 raise BrowserTimeoutError("Timeout sending response")
             LOG.debug("bootstrap complete (%0.2fs)", time() - start_time)
-        except socket.error as soc_e:  # pragma: no cover
-            raise LaunchError(
-                "Error attempting to launch browser: %s" % (soc_e,)
-            ) from soc_e
+        except OSError as soc_e:  # pragma: no cover
+            raise LaunchError(f"Error attempting to launch browser: {soc_e}") from soc_e
         finally:
             if conn is not None:
                 conn.close()
