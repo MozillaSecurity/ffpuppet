@@ -139,7 +139,18 @@ def test_minidump_parser_04(mocker: MockerFixture, tmp_path: Path) -> None:
     assert md_lines[-1].startswith(b"0|3|")
 
 
-def test_minidump_parser_05(mocker: MockerFixture, tmp_path: Path) -> None:
+@mark.parametrize(
+    "include_raw",
+    [
+        # include unprocessed output from mdsw
+        (True,),
+        # don't include unprocessed output from mdsw
+        (False,),
+    ],
+)
+def test_minidump_parser_05(
+    mocker: MockerFixture, tmp_path: Path, include_raw: bool
+) -> None:
     """test MinidumpParser.collect_logs()"""
     (tmp_path / "dummy.dmp").touch()
     (tmp_path / "dummy.txt").touch()
@@ -155,10 +166,16 @@ def test_minidump_parser_05(mocker: MockerFixture, tmp_path: Path) -> None:
     )
     mocker.patch("ffpuppet.minidump_parser.call", autospec=True, return_value=0)
     mdp = MinidumpParser(str(tmp_path))
+    mdp._include_raw = include_raw
     callback = mocker.mock_open()
     callback.return_value.tell.return_value = 0
     mdp.collect_logs(callback, str(tmp_path))
-    assert callback.call_count == 2
+    if include_raw:
+        assert callback.call_count == 4
+        assert callback.call_args[0] == ("raw_mdsw_02",)
+    else:
+        assert callback.call_count == 2
+        assert callback.call_args[0] == ("minidump_02",)
 
 
 @mark.parametrize(
