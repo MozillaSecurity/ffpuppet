@@ -120,44 +120,47 @@ class Bootstrapper:  # pylint: disable=missing-docstring
         time_limit = start_time + timeout
         conn = None
         try:
-            LOG.debug("waiting for browser connection...")
-            while True:
-                try:
-                    conn, _ = self._socket.accept()
-                except socket.timeout:
-                    conn = None
-                if conn is not None:
-                    break
-                if not cb_continue():
-                    raise BrowserTerminatedError(
-                        "Failure waiting for browser connection"
-                    )
-                if time() >= time_limit:
-                    raise BrowserTimeoutError("Timeout waiting for browser connection")
-            conn.settimeout(1)
-            received = False
-            LOG.debug("waiting to receive browser request...")
-            while True:
-                try:
-                    request = conn.recv(self.BUF_SIZE)
-                except socket.timeout:
-                    if not cb_continue():
-                        raise BrowserTerminatedError(
-                            "Failure waiting for request"
-                        ) from None
-                    if time() >= time_limit:
-                        raise BrowserTimeoutError(
-                            "Timeout waiting for request"
-                        ) from None
-                    if not received:
+            while conn is None:
+                LOG.debug("waiting for browser connection...")
+                while conn is None:
+                    try:
+                        conn, _ = self._socket.accept()
+                    except socket.timeout:
+                        if not cb_continue():
+                            raise BrowserTerminatedError(
+                                "Failure waiting for browser connection"
+                            ) from None
+                        if time() >= time_limit:
+                            raise BrowserTimeoutError(
+                                "Timeout waiting for browser connection"
+                            ) from None
+
+                conn.settimeout(1)
+                count_recv = 0
+                total_recv = 0
+                LOG.debug("waiting for browser request...")
+                while True:
+                    try:
+                        count_recv = len(conn.recv(self.BUF_SIZE))
+                        total_recv += count_recv
+                    except socket.timeout:
+                        count_recv = None
+                    if count_recv == self.BUF_SIZE:
+                        # check if there is more to read
                         continue
-                if not received and not request:
-                    LOG.warning("Empty request received from browser during bootstrap!")
-                elif len(request) == self.BUF_SIZE:
-                    # maybe there is more to read...
-                    received = True
-                    continue
-                break
+                    if total_recv:
+                        LOG.debug("request size: %d bytes(s)", total_recv)
+                        break
+                    if not cb_continue():
+                        raise BrowserTerminatedError("Failure waiting for request")
+                    if time() >= time_limit:
+                        raise BrowserTimeoutError("Timeout waiting for request")
+                    if count_recv == 0:
+                        LOG.debug("connection failed, retrying")
+                        conn.close()
+                        conn = None
+                        break
+
             # build response
             if url is None:
                 resp = "HTTP/1.1 204 No Content\r\nConnection: close\r\n\r\n"

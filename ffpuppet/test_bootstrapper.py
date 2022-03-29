@@ -6,8 +6,9 @@
 
 from socket import AF_INET, SOCK_STREAM, error, socket, timeout
 from threading import Thread
+from typing import Any, Optional, Tuple
 
-from pytest import raises
+from pytest import mark, raises
 from pytest_mock import MockerFixture
 
 from .bootstrapper import Bootstrapper
@@ -99,8 +100,7 @@ def test_bootstrapper_05(mocker: MockerFixture) -> None:
     """test Bootstrapper.wait() target crashed"""
     fake_sock = mocker.Mock(spec_set=socket)
     fake_conn = mocker.Mock(spec_set=socket)
-    # return empty buffer for test coverage
-    fake_conn.recv.return_value = ""
+    fake_conn.recv.return_value = "foo"
     fake_sock.accept.return_value = (fake_conn, None)
     mocker.patch("ffpuppet.bootstrapper.socket.socket", return_value=fake_sock)
     with Bootstrapper() as bts:
@@ -109,36 +109,40 @@ def test_bootstrapper_05(mocker: MockerFixture) -> None:
     assert fake_conn.close.call_count == 1
 
 
-def test_bootstrapper_06(mocker: MockerFixture) -> None:
-    """test Bootstrapper.wait() successful without redirect"""
+@mark.parametrize(
+    "redirect, recv, closed",
+    [
+        # normal startup
+        (None, ("foo",), 1),
+        # with a redirect url
+        ("http://127.0.0.1:9999/test.html", ("foo",), 1),
+        # request size matches buffer size
+        (None, ("A" * Bootstrapper.BUF_SIZE, timeout), 1),
+        # large request
+        (None, ("A" * Bootstrapper.BUF_SIZE, "foo"), 1),
+        # slow startup
+        (None, (timeout, timeout, "foo"), 1),
+        # slow failed startup with retry
+        (None, (timeout, "", "foo"), 2),
+    ],
+)
+def test_bootstrapper_06(
+    mocker: MockerFixture, redirect: Optional[str], recv: Tuple[Any], closed: int
+) -> None:
+    """test Bootstrapper.wait()"""
     fake_sock = mocker.Mock(spec_set=socket)
     fake_conn = mocker.Mock(spec_set=socket)
-    fake_conn.recv.side_effect = ("A" * Bootstrapper.BUF_SIZE, "")
+    fake_conn.recv.side_effect = recv
     fake_sock.accept.return_value = (fake_conn, None)
     mocker.patch("ffpuppet.bootstrapper.socket.socket", return_value=fake_sock)
     with Bootstrapper() as bts:
-        bts.wait(lambda: True)
-    assert fake_conn.close.call_count == 1
-    assert fake_conn.recv.call_count == 2
+        bts.wait(lambda: True, url=redirect)
+    assert fake_conn.close.call_count == closed
+    assert fake_conn.recv.call_count == len(recv)
     assert fake_conn.sendall.call_count == 1
 
 
-def test_bootstrapper_07(mocker: MockerFixture) -> None:
-    """test Bootstrapper.wait() successful with redirect"""
-    fake_sock = mocker.Mock(spec_set=socket)
-    fake_conn = mocker.Mock(spec_set=socket)
-    fake_conn.recv.return_value = "AAAA"
-    fake_sock.accept.return_value = (fake_conn, None)
-    mocker.patch("ffpuppet.bootstrapper.socket.socket", return_value=fake_sock)
-    # without redirect
-    with Bootstrapper() as bts:
-        bts.wait(lambda: True, url="http://127.0.0.1:9999/test.html")
-    assert fake_conn.close.call_count == 1
-    assert fake_conn.recv.call_count == 1
-    assert fake_conn.sendall.call_count == 1
-
-
-def test_bootstrapper_08() -> None:
+def test_bootstrapper_07() -> None:
     """test Bootstrapper.wait() with a fake browser"""
 
     def _fake_browser(port: int, payload_size: int = 5120) -> None:
@@ -171,7 +175,7 @@ def test_bootstrapper_08() -> None:
             browser_thread.join()
 
 
-def test_bootstrapper_09(mocker: MockerFixture) -> None:
+def test_bootstrapper_08(mocker: MockerFixture) -> None:
     """test Bootstrapper() hit PORT_RETRIES"""
     fake_sock = mocker.Mock(spec_set=socket)
     fake_sock.bind.side_effect = error(10013, "TEST")
