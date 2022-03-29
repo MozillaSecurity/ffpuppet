@@ -774,9 +774,6 @@ class FFPuppet:
                 "network.proxy.failover_direct": "false",
                 "privacy.partition.network_state": "false",
             }
-            if self._dbg in (Debugger.PERNOSCO, Debugger.RR, Debugger.VALGRIND):
-                # if the browser is running slowly socket reads can fail if this is > 0
-                prefs["network.http.speculative-parallel-limit"] = "0"
             append_prefs(self.profile, prefs)
 
             launch_args = [bootstrapper.location]
