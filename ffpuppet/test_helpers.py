@@ -1,3 +1,4 @@
+# type: ignore
 # This Source Code Form is subject to the terms of the Mozilla Public
 # License, v. 2.0. If a copy of the MPL was not distributed with this file,
 # You can obtain one at http://mozilla.org/MPL/2.0/.
@@ -5,16 +6,13 @@
 
 import os
 from multiprocessing import Event, Process
-from multiprocessing.synchronize import Event as EventType
 from pathlib import Path
 from platform import system
 from shutil import rmtree
 from tempfile import NamedTemporaryFile
-from typing import Dict
 
 from psutil import Process as PSProcess
 from pytest import raises
-from pytest_mock import MockerFixture
 
 from .helpers import (
     _configure_sanitizers,
@@ -30,7 +28,7 @@ from .helpers import (
 from .sanitizer_util import SanitizerOptions
 
 
-def test_helpers_01(tmp_path: Path) -> None:
+def test_helpers_01(tmp_path):
     """test create_profile()"""
     # try creating a profile from scratch
     # does nothing but create a directory to be populated
@@ -60,7 +58,7 @@ def test_helpers_01(tmp_path: Path) -> None:
     assert not any((tmp_path / "dst3").iterdir())
 
 
-def test_helpers_02(tmp_path: Path) -> None:
+def test_helpers_02(tmp_path):
     """test check_prefs()"""
     dummy_prefs = tmp_path / "dummy.js"
     dummy_prefs.write_text(
@@ -87,7 +85,7 @@ def test_helpers_02(tmp_path: Path) -> None:
     assert not check_prefs(str(dummy_prefs), str(custom_prefs))
 
 
-def test_helpers_03(mocker: MockerFixture, tmp_path: Path) -> None:
+def test_helpers_03(mocker, tmp_path):
     """test create_profile() extension support"""
     mocker.patch(
         "ffpuppet.helpers.mkdtemp", autospec=True, return_value=str(tmp_path / "dst")
@@ -189,10 +187,10 @@ def test_helpers_03(mocker: MockerFixture, tmp_path: Path) -> None:
     }
 
 
-def test_helpers_04(tmp_path: Path) -> None:
+def test_helpers_04(tmp_path):
     """test _configure_sanitizers()"""
 
-    def parse(opt_str: str) -> Dict[str, str]:
+    def parse(opt_str):
         opts = dict()
         for entry in SanitizerOptions.re_delim.split(opt_str):
             try:
@@ -203,7 +201,7 @@ def test_helpers_04(tmp_path: Path) -> None:
         return opts
 
     # test with empty environment
-    env: Dict[str, str] = {}
+    env = {}
     env = _configure_sanitizers(env, str(tmp_path), "blah")
     assert "ASAN_OPTIONS" in env
     asan_opts = parse(env["ASAN_OPTIONS"])
@@ -312,7 +310,7 @@ def test_helpers_04(tmp_path: Path) -> None:
     assert asan_opts["external_symbolizer_path"].strip("'") == str(llvm_sym_b)
 
 
-def test_helpers_05() -> None:
+def test_helpers_05():
     """test prepare_environment()"""
     env = prepare_environment("", "blah")
     assert "ASAN_OPTIONS" in env
@@ -322,7 +320,7 @@ def test_helpers_05() -> None:
     assert "MOZ_CRASHREPORTER" in env
 
 
-def test_helpers_06() -> None:
+def test_helpers_06():
     """test prepare_environment() using some predefined environment variables"""
     pre = {
         "LSAN_OPTIONS": "lopt=newopt",
@@ -364,7 +362,7 @@ def test_helpers_06() -> None:
     assert "MOZ_CRASHREPORTER" not in env
 
 
-def test_helpers_07(tmp_path: Path) -> None:
+def test_helpers_07(tmp_path):
     """test wait_on_files()"""
     t_file = tmp_path / "file.bin"
     t_file.touch()
@@ -383,13 +381,13 @@ def test_helpers_07(tmp_path: Path) -> None:
 
 
 # this needs to be here in order to work correctly on Windows
-def _dummy_process(is_alive: EventType, is_done: EventType) -> None:
+def _dummy_process(is_alive, is_done):
     is_alive.set()
     print(f"I'm process {os.getpid()}\n")
     is_done.wait(30)
 
 
-def test_helpers_08() -> None:
+def test_helpers_08():
     """test get_processes()"""
     assert len(get_processes(os.getpid(), recursive=False)) == 1
     assert not get_processes(0xFFFFFF)
@@ -405,7 +403,7 @@ def test_helpers_08() -> None:
     proc.join()
 
 
-def test_helpers_09(tmp_path: Path) -> None:
+def test_helpers_09(tmp_path):
     """test append_prefs()"""
     prefs = tmp_path / "prefs.js"
     prefs.write_bytes(b"user_pref('pre.existing', 1);")
@@ -418,7 +416,7 @@ def test_helpers_09(tmp_path: Path) -> None:
     assert "user_pref('foo', 'a1b2c3');" in data
 
 
-def test_helpers_10(tmp_path: Path) -> None:
+def test_helpers_10(tmp_path):
     """test files_in_use()"""
     t_file = tmp_path / "file.bin"
     t_file.touch()
@@ -430,7 +428,7 @@ def test_helpers_10(tmp_path: Path) -> None:
     assert not any(files_in_use([t_file], procs))
 
 
-def test_helpers_11(tmp_path: Path) -> None:
+def test_helpers_11(tmp_path):
     """test warn_open()"""
     (tmp_path / "file.bin").touch()
     with NamedTemporaryFile(dir=str(tmp_path)) as _:

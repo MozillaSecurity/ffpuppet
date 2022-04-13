@@ -1,18 +1,16 @@
+# type: ignore
 # This Source Code Form is subject to the terms of the Mozilla Public
 # License, v. 2.0. If a copy of the MPL was not distributed with this file,
 # You can obtain one at http://mozilla.org/MPL/2.0/.
 """checks.py tests"""
 
 from os import getpid
-from pathlib import Path
 from re import compile as re_compile
-
-from pytest_mock import MockerFixture
 
 from .checks import CheckLogContents, CheckLogSize, CheckMemoryUsage
 
 
-def test_check_01(mocker: MockerFixture, tmp_path: Path) -> None:
+def test_check_01(mocker, tmp_path):
     """test CheckLogContents()"""
     test_log = tmp_path / "test.log"
     # input contains token
@@ -52,7 +50,7 @@ def test_check_01(mocker: MockerFixture, tmp_path: Path) -> None:
         assert lfp.tell()
 
 
-def test_check_02(tmp_path: Path) -> None:
+def test_check_02(tmp_path):
     """test CheckLogSize()"""
     stde = tmp_path / "stderr"
     stde.write_text("test\n")
@@ -72,7 +70,7 @@ def test_check_02(tmp_path: Path) -> None:
         assert not lfp.tell()
 
 
-def test_check_03(tmp_path: Path) -> None:
+def test_check_03(tmp_path):
     """test CheckMemoryUsage()"""
     checker = CheckMemoryUsage(getpid(), 300 * 1024 * 1024)
     # don't exceed limit

@@ -1,3 +1,4 @@
+# type: ignore
 # This Source Code Form is subject to the terms of the Mozilla Public
 # License, v. 2.0. If a copy of the MPL was not distributed with this file,
 # You can obtain one at http://mozilla.org/MPL/2.0/.
@@ -6,16 +7,14 @@
 
 from socket import AF_INET, SOCK_STREAM, error, socket, timeout
 from threading import Thread
-from typing import Any, Optional, Tuple
 
 from pytest import mark, raises
-from pytest_mock import MockerFixture
 
 from .bootstrapper import Bootstrapper
 from .exceptions import BrowserTerminatedError, BrowserTimeoutError, LaunchError
 
 
-def test_bootstrapper_01() -> None:
+def test_bootstrapper_01():
     """test simple Bootstrapper()"""
     with Bootstrapper() as bts:
         assert bts._socket is not None
@@ -26,7 +25,7 @@ def test_bootstrapper_01() -> None:
         assert bts._socket is None
 
 
-def test_bootstrapper_02(mocker: MockerFixture) -> None:
+def test_bootstrapper_02(mocker):
     """test Bootstrapper.wait() failure waiting for initial connection"""
     fake_sock = mocker.Mock(spec_set=socket)
     fake_sock.accept.side_effect = timeout
@@ -49,7 +48,7 @@ def test_bootstrapper_02(mocker: MockerFixture) -> None:
         assert fake_sock.accept.call_count > 1
 
 
-def test_bootstrapper_03(mocker: MockerFixture) -> None:
+def test_bootstrapper_03(mocker):
     """test Bootstrapper.wait() failure waiting for request"""
     fake_sock = mocker.Mock(spec_set=socket)
     fake_conn = mocker.Mock(spec_set=socket)
@@ -72,7 +71,7 @@ def test_bootstrapper_03(mocker: MockerFixture) -> None:
         assert fake_conn.close.call_count == 1
 
 
-def test_bootstrapper_04(mocker: MockerFixture) -> None:
+def test_bootstrapper_04(mocker):
     """test Bootstrapper.wait() failure sending response"""
     fake_sock = mocker.Mock(spec_set=socket)
     fake_conn = mocker.Mock(spec_set=socket)
@@ -96,7 +95,7 @@ def test_bootstrapper_04(mocker: MockerFixture) -> None:
         assert fake_conn.close.call_count == 1
 
 
-def test_bootstrapper_05(mocker: MockerFixture) -> None:
+def test_bootstrapper_05(mocker):
     """test Bootstrapper.wait() target crashed"""
     fake_sock = mocker.Mock(spec_set=socket)
     fake_conn = mocker.Mock(spec_set=socket)
@@ -126,9 +125,7 @@ def test_bootstrapper_05(mocker: MockerFixture) -> None:
         (None, (timeout, "", "foo"), 2),
     ],
 )
-def test_bootstrapper_06(
-    mocker: MockerFixture, redirect: Optional[str], recv: Tuple[Any], closed: int
-) -> None:
+def test_bootstrapper_06(mocker, redirect, recv, closed):
     """test Bootstrapper.wait()"""
     fake_sock = mocker.Mock(spec_set=socket)
     fake_conn = mocker.Mock(spec_set=socket)
@@ -142,10 +139,10 @@ def test_bootstrapper_06(
     assert fake_conn.sendall.call_count == 1
 
 
-def test_bootstrapper_07() -> None:
+def test_bootstrapper_07():
     """test Bootstrapper.wait() with a fake browser"""
 
-    def _fake_browser(port: int, payload_size: int = 5120) -> None:
+    def _fake_browser(port, payload_size=5120):
         conn = socket(AF_INET, SOCK_STREAM)
         # 50 x 0.1 = 5 seconds
         conn.settimeout(0.1)
@@ -175,7 +172,7 @@ def test_bootstrapper_07() -> None:
             browser_thread.join()
 
 
-def test_bootstrapper_08(mocker: MockerFixture) -> None:
+def test_bootstrapper_08(mocker):
     """test Bootstrapper() hit PORT_RETRIES"""
     fake_sock = mocker.Mock(spec_set=socket)
     fake_sock.bind.side_effect = error(10013, "TEST")

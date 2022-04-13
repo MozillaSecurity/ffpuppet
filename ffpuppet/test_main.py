@@ -1,13 +1,10 @@
+# type: ignore
 # This Source Code Form is subject to the terms of the Mozilla Public
 # License, v. 2.0. If a copy of the MPL was not distributed with this file,
 # You can obtain one at http://mozilla.org/MPL/2.0/.
 """ffpuppet main.py tests"""
 
-from pathlib import Path
-from typing import List, Optional
-
 from pytest import mark, raises
-from pytest_mock import MockerFixture
 
 from .core import Reason
 from .main import dump_to_console, main, parse_args
@@ -28,13 +25,7 @@ from .main import dump_to_console, main, parse_args
         (None, False, []),
     ],
 )
-def test_main_01(
-    mocker: MockerFixture,
-    tmp_path: Path,
-    reason: Optional[Reason],
-    user_exit: bool,
-    extra_args: List[str],
-) -> None:
+def test_main_01(mocker, tmp_path, reason, user_exit, extra_args):
     """test main()"""
     fake_ffp = mocker.patch("ffpuppet.main.FFPuppet", autospec=True)
     fake_ffp.return_value.get_pid.return_value = 12345
@@ -64,7 +55,7 @@ def test_main_01(
     assert fake_ffp.return_value.clean_up.call_count == 1
 
 
-def test_parse_args_01(tmp_path: Path) -> None:
+def test_parse_args_01(tmp_path):
     """test parse_args()"""
     with raises(SystemExit):
         parse_args(["-h"])
@@ -96,7 +87,7 @@ def test_parse_args_01(tmp_path: Path) -> None:
     assert parse_args([str(fake_bin)])
 
 
-def test_dump_to_console_01(tmp_path: Path) -> None:
+def test_dump_to_console_01(tmp_path):
     """test dump_to_console()"""
     # call with no logs
     assert not dump_to_console(str(tmp_path))

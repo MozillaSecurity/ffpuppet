@@ -1,15 +1,13 @@
+# type: ignore
 # This Source Code Form is subject to the terms of the Mozilla Public
 # License, v. 2.0. If a copy of the MPL was not distributed with this file,
 # You can obtain one at http://mozilla.org/MPL/2.0/.
 """ffpuppet minidump parser tests"""
 
 from json import JSONDecodeError
-from pathlib import Path
 from subprocess import TimeoutExpired
-from typing import Any
 
 from pytest import mark
-from pytest_mock import MockerFixture
 
 from .minidump_parser import MinidumpParser, process_minidumps
 
@@ -27,9 +25,7 @@ from .minidump_parser import MinidumpParser, process_minidumps
         ((JSONDecodeError("test", "test", 0),), True, None),
     ],
 )
-def test_minidump_parser_01(
-    mocker: MockerFixture, tmp_path: Path, run_return: Any, symbols: bool, result: Any
-) -> None:
+def test_minidump_parser_01(mocker, tmp_path, run_return, symbols, result):
     """test MinidumpParser.load()"""
     mocker.patch("ffpuppet.minidump_parser.run", autospec=True, side_effect=run_return)
     mocker.patch("ffpuppet.minidump_parser.load", autospec=True, return_value=dict())
@@ -40,7 +36,7 @@ def test_minidump_parser_01(
     assert parser.load(tmp_path) == result
 
 
-def test_minidump_parser_02(tmp_path: Path) -> None:
+def test_minidump_parser_02(tmp_path):
     """test MinidumpParser.format_output() - un-symbolized"""
     data = {
         "crash_info": {
@@ -82,7 +78,7 @@ def test_minidump_parser_02(tmp_path: Path) -> None:
     assert formatted[4] == "0|0|xul.dll||||"
 
 
-def test_minidump_parser_03(tmp_path: Path) -> None:
+def test_minidump_parser_03(tmp_path):
     """test MinidumpParser.format_output() - symbolized"""
     data = {
         "crash_info": {
@@ -156,9 +152,7 @@ def test_minidump_parser_03(tmp_path: Path) -> None:
         (OSError, False),
     ],
 )
-def test_minidump_parser_04(
-    mocker: MockerFixture, call_result: Any, result: bool
-) -> None:
+def test_minidump_parser_04(mocker, call_result, result):
     """test MinidumpParser.mdsw_available()"""
     mocker.patch("ffpuppet.minidump_parser.call", side_effect=call_result)
     assert MinidumpParser.mdsw_available() == result
@@ -177,9 +171,7 @@ def test_minidump_parser_04(
         (False, False, False),
     ],
 )
-def test_process_minidumps_01(
-    mocker: MockerFixture, tmp_path: Path, mdsw: bool, minidumps: bool, syms: bool
-) -> None:
+def test_process_minidumps_01(mocker, tmp_path, mdsw, minidumps, syms):
     """test process_minidumps()"""
     fake_mdp = mocker.patch("ffpuppet.minidump_parser.MinidumpParser", autospec=True)
     fake_mdp.mdsw_available.return_value = mdsw

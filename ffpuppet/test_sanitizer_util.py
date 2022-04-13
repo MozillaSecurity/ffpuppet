@@ -1,10 +1,8 @@
+# type: ignore
 # This Source Code Form is subject to the terms of the Mozilla Public
 # License, v. 2.0. If a copy of the MPL was not distributed with this file,
 # You can obtain one at http://mozilla.org/MPL/2.0/.
 """ffpuppet sanitizer_util tests"""
-
-from pathlib import Path
-from typing import Dict, List
 
 from pytest import mark
 
@@ -37,9 +35,7 @@ from .sanitizer_util import SanitizerOptions
         ),
     ],
 )
-def test_sanitizer_options_01(
-    init: str, add: Dict[str, str], result: List[str], overwrite: bool
-) -> None:
+def test_sanitizer_options_01(init, add, result, overwrite):
     """test SanitizerOptions() - parsing and adding"""
     opts = SanitizerOptions(init)
     for key, value in add.items():
@@ -53,7 +49,7 @@ def test_sanitizer_options_01(
         assert not result[-1]
 
 
-def test_sanitizer_options_02() -> None:
+def test_sanitizer_options_02():
     """test SanitizerOptions() - get() and pop()"""
     opts = SanitizerOptions()
     assert opts.get("missing") is None
@@ -63,7 +59,7 @@ def test_sanitizer_options_02() -> None:
     assert opts.get("exists") is None
 
 
-def test_sanitizer_options_03(tmp_path: Path) -> None:
+def test_sanitizer_options_03(tmp_path):
     """test SanitizerOptions() - check_path()"""
     opts = SanitizerOptions()
     # test missing key
@@ -78,7 +74,7 @@ def test_sanitizer_options_03(tmp_path: Path) -> None:
     assert not opts.check_path("file")
 
 
-def test_sanitizer_options_04() -> None:
+def test_sanitizer_options_04():
     """test SanitizerOptions.is_quoted()"""
     assert SanitizerOptions.is_quoted("'quoted'")
     assert SanitizerOptions.is_quoted('"quoted"')

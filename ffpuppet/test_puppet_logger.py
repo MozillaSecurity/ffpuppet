@@ -1,3 +1,4 @@
+# type: ignore
 # This Source Code Form is subject to the terms of the Mozilla Public
 # License, v. 2.0. If a copy of the MPL was not distributed with this file,
 # You can obtain one at http://mozilla.org/MPL/2.0/.
@@ -6,18 +7,16 @@
 
 import os
 from json import loads
-from pathlib import Path
 from tempfile import SpooledTemporaryFile
 from time import sleep
 
 from pytest import raises
-from pytest_mock import MockerFixture
 
 from .helpers import onerror
 from .puppet_logger import PuppetLogger
 
 
-def test_puppet_logger_01(tmp_path: Path) -> None:
+def test_puppet_logger_01(tmp_path):
     """test simple PuppetLogger()"""
     plog = PuppetLogger(base_path=str(tmp_path))
     assert not plog.closed
@@ -34,7 +33,7 @@ def test_puppet_logger_01(tmp_path: Path) -> None:
     assert plog.log_length("missing") is None
 
 
-def test_puppet_logger_02(tmp_path: Path) -> None:
+def test_puppet_logger_02(tmp_path):
     """test PuppetLogger.add_log() and PuppetLogger.available_logs()"""
     with PuppetLogger(base_path=str(tmp_path)) as plog:
         assert not plog._logs
@@ -57,7 +56,7 @@ def test_puppet_logger_02(tmp_path: Path) -> None:
         assert plog.log_length("test_existing") == 4
 
 
-def test_puppet_logger_03(tmp_path: Path) -> None:
+def test_puppet_logger_03(tmp_path):
     """test PuppetLogger.clean_up()"""
     with PuppetLogger(base_path=str(tmp_path)) as plog:
         assert not plog.closed
@@ -75,7 +74,7 @@ def test_puppet_logger_03(tmp_path: Path) -> None:
         assert not plog._logs
 
 
-def test_puppet_logger_04(tmp_path: Path) -> None:
+def test_puppet_logger_04(tmp_path):
     """test PuppetLogger.reset()"""
     with PuppetLogger(base_path=str(tmp_path)) as plog:
         plog.add_log("test_new")
@@ -89,7 +88,7 @@ def test_puppet_logger_04(tmp_path: Path) -> None:
         assert len(os.listdir(plog._base)) == 1
 
 
-def test_puppet_logger_05(tmp_path: Path) -> None:
+def test_puppet_logger_05(tmp_path):
     """test PuppetLogger.clone_log()"""
     with PuppetLogger(base_path=str(tmp_path)) as plog:
         plog.add_log("test_empty")
@@ -142,7 +141,7 @@ def test_puppet_logger_05(tmp_path: Path) -> None:
         os.remove(cloned)
 
 
-def test_puppet_logger_06(tmp_path: Path) -> None:
+def test_puppet_logger_06(tmp_path):
     """test PuppetLogger.save_logs()"""
     with PuppetLogger(base_path=str(tmp_path)) as plog:
         plog.close()
@@ -198,7 +197,7 @@ def test_puppet_logger_06(tmp_path: Path) -> None:
         assert os.stat(plog_fp_test_3.name).st_size == 500 * 1234
 
 
-def test_puppet_logger_07(mocker: MockerFixture, tmp_path: Path) -> None:
+def test_puppet_logger_07(mocker, tmp_path):
     """test PuppetLogger.save_logs() rr trace directory"""
     fake_ck = mocker.patch("ffpuppet.puppet_logger.check_output", autospec=True)
     with PuppetLogger(base_path=str(tmp_path)) as plog:
@@ -232,7 +231,7 @@ def test_puppet_logger_07(mocker: MockerFixture, tmp_path: Path) -> None:
         assert plog._rr_packed
 
 
-def test_puppet_logger_08(tmp_path: Path) -> None:
+def test_puppet_logger_08(tmp_path):
     """test PuppetLogger.add_log() with file not on disk"""
     with PuppetLogger(base_path=str(tmp_path)) as plog:
         with SpooledTemporaryFile(max_size=2048) as log_fp:
@@ -241,7 +240,7 @@ def test_puppet_logger_08(tmp_path: Path) -> None:
                 plog.get_fp("test")
 
 
-def test_puppet_logger_09(mocker: MockerFixture, tmp_path: Path) -> None:
+def test_puppet_logger_09(mocker, tmp_path):
     """test PuppetLogger.clean_up() with in-use file or inaccessible directory"""
     fake_rmtree = mocker.patch("ffpuppet.puppet_logger.rmtree", autospec=True)
     with PuppetLogger(base_path=str(tmp_path)) as plog:
@@ -267,7 +266,7 @@ def test_puppet_logger_09(mocker: MockerFixture, tmp_path: Path) -> None:
         assert plog.working_path is None
 
 
-def test_puppet_logger_10(tmp_path: Path) -> None:
+def test_puppet_logger_10(tmp_path):
     """test PuppetLogger.add_path()"""
     with PuppetLogger(base_path=str(tmp_path)) as plog:
         path = plog.add_path("test")
