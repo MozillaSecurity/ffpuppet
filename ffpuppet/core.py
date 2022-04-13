@@ -16,15 +16,15 @@ from re import compile as re_compile
 from re import match as re_match
 from shutil import rmtree
 from subprocess import Popen, check_output
+from sys import executable
 from typing import Any, Dict, Iterator, List, Optional, Pattern, Set, Tuple, Union
+from urllib.request import pathname2url
 
 try:
     # pylint: disable=ungrouped-imports
     from subprocess import CREATE_NEW_PROCESS_GROUP  # type: ignore[attr-defined]
 except ImportError:
     pass
-from sys import executable
-from urllib.request import pathname2url
 
 from psutil import AccessDenied, NoSuchProcess, wait_procs
 
@@ -591,15 +591,17 @@ class FFPuppet:
                 # collect logs (excluding minidumps)
                 for log_path in self._crashreports(skip_md=True, skip_benign=False):
                     self._logs.add_log(log_path.name, log_path.open("rb"))
-                # check for minidumps in the profile and dump them if possible
                 assert self.profile is not None
                 assert self._bin_path is not None
-                process_minidumps(
-                    pathjoin(self.profile, "minidumps"),
-                    pathjoin(self._bin_path, "symbols"),
-                    self._logs.add_log,
-                    working_path=self._working_path,
-                )
+                # check for minidumps and process them if possible
+                md_path = Path(self.profile) / "minidumps"
+                if any(md_path.glob("*.dmp")):
+                    process_minidumps(
+                        md_path,
+                        Path(self._bin_path) / "symbols",
+                        self._logs.add_log,
+                        working_path=self._working_path,
+                    )
                 stderr_fp = self._logs.get_fp("stderr")
                 if stderr_fp:
                     stderr_fp.write(f"[ffpuppet] Reason code: {r_code.name}\n".encode())

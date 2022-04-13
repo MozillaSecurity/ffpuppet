@@ -28,12 +28,9 @@ from .exceptions import (
     LaunchError,
     TerminateError,
 )
-from .minidump_parser import MinidumpParser
 
 Bootstrapper.POLL_WAIT = 0.2
 TESTFF_BIN = str((Path(__file__).parent / "resources" / "testff.py").resolve())
-
-MinidumpParser.MDSW_MAX_STACK = 8
 
 
 class ReqHandler(BaseHTTPRequestHandler):
