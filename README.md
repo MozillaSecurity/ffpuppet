@@ -25,13 +25,10 @@ To install `xvfb` on Ubuntu run:
 
     apt-get install xvfb
 
-##### Installing minidump_stackwalk
+##### Installing minidump-stackwalk
 
-`minidump_stackwalk` is used to extract a crash report when the browser crashes without a debugger (GDB/Valgrind) or
-instrumentation (ASan). If desired, `minidump_stackwalk` should be installed in the users path after obtaining
-it from [FirefoxCI](https://firefox-ci-tc.services.mozilla.com/tasks/index/gecko.cache.level-1.toolchains.v3).
-Choose the appropriate tool for your platform (`linux64-minidump-stackwalk`, `macosx64-minidump-stackwalk`, `win32-minidump-stackwalk`, etc.),
-choose `latest`, then extract the executable from the downloaded tar archive.
+`minidump-stackwalk` is used to collect crash reports from minidump files. More
+information can be found [here](https://lib.rs/crates/minidump-stackwalk).
 
 Browser Builds
 --------------

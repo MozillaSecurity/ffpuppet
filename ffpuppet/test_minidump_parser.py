@@ -2,281 +2,199 @@
 # License, v. 2.0. If a copy of the MPL was not distributed with this file,
 # You can obtain one at http://mozilla.org/MPL/2.0/.
 """ffpuppet minidump parser tests"""
-# pylint: disable=protected-access
 
-from os import SEEK_END
+from json import JSONDecodeError
 from pathlib import Path
-from typing import IO, List, Optional, Union
+from subprocess import TimeoutExpired
+from typing import Any
 
-from pytest import mark, raises
+from pytest import mark
 from pytest_mock import MockerFixture
 
 from .minidump_parser import MinidumpParser, process_minidumps
 
 
-def test_minidump_parser_01(mocker: MockerFixture, tmp_path: Path) -> None:
-    """test MinidumpParser() with missing and empty scan path"""
-    with raises(OSError):
-        MinidumpParser("/path/does/not/exist/")
-    mdp = MinidumpParser(str(tmp_path))
-    assert not mdp.md_files
-    callback = mocker.Mock()
-    assert callback.call_count == 0
-    mdp.collect_logs(callback, str(tmp_path))
-    assert callback.call_count == 0
+@mark.parametrize(
+    "run_return, symbols, result",
+    [
+        # succeeded - with symbols
+        (None, True, dict()),
+        # succeeded - without symbols
+        (None, False, dict()),
+        # failed - parse hung
+        ((TimeoutExpired(["test"], 0.0),), True, None),
+        # failed - json parse error
+        ((JSONDecodeError("test", "test", 0),), True, None),
+    ],
+)
+def test_minidump_parser_01(
+    mocker: MockerFixture, tmp_path: Path, run_return: Any, symbols: bool, result: Any
+) -> None:
+    """test MinidumpParser.load()"""
+    mocker.patch("ffpuppet.minidump_parser.run", autospec=True, side_effect=run_return)
+    mocker.patch("ffpuppet.minidump_parser.load", autospec=True, return_value=dict())
+    parser = MinidumpParser(
+        symbols_path=tmp_path if symbols else None,
+        working_path=str(tmp_path),
+    )
+    assert parser.load(tmp_path) == result
 
 
-def test_minidump_parser_02(mocker: MockerFixture, tmp_path: Path) -> None:
-    """test MinidumpParser() with empty minidumps (ignore mdsw failures)"""
-    md_path = tmp_path / "minidumps"
-    md_path.mkdir()
-    (md_path / "not_a_dmp.txt").touch()
-    (md_path / "test.dmp").touch()
-    callback = mocker.mock_open()
-    callback.return_value.tell.return_value = 0
-    log_path = tmp_path / "logs"
-    log_path.mkdir()
-    working = tmp_path / "working"
-    working.mkdir()
-    mocker.patch("ffpuppet.minidump_parser.call", autospec=True, return_value=0)
-    mdp = MinidumpParser(str(md_path), record_failures=False, working_path=str(working))
-    assert len(mdp.md_files) == 1
-    mdp.collect_logs(callback, str(log_path))
-    assert callback.return_value.tell.call_count == 1
-    assert callback.return_value.write.call_count == 1
-    assert not any(working.iterdir())
+def test_minidump_parser_02(tmp_path: Path) -> None:
+    """test MinidumpParser.format_output() - un-symbolized"""
+    data = {
+        "crash_info": {
+            "address": "0x00007ffe4e09af8d",
+            "crashing_thread": 0,
+            "type": "EXCEPTION_BREAKPOINT",
+        },
+        "crashing_thread": {
+            "frame_count": 49,
+            "frames": [
+                {
+                    "file": None,
+                    "frame": 0,
+                    "function": None,
+                    "function_offset": None,
+                    "line": None,
+                    "module": "xul.dll",
+                    "registers": {"r10": "0x0"},
+                },
+            ],
+        },
+        "system_info": {
+            "cpu_arch": "amd64",
+            "cpu_count": 8,
+            "cpu_info": "family 6 model 70 stepping 1",
+            "os": "Windows NT",
+            "os_ver": "10.0.19044",
+        },
+    }
+    with (tmp_path / "out.txt").open("w+b") as ofp:
+        MinidumpParser.format_output(data, ofp, limit=2)
+        ofp.seek(0)
+        formatted = ofp.read().strip().decode().split("\n")
+    assert len(formatted) == 5
+    assert formatted[0] == "r10 = 0x0"
+    assert formatted[1] == "OS|Windows NT|10.0.19044"
+    assert formatted[2] == "CPU|amd64|family 6 model 70 stepping 1|8"
+    assert formatted[3] == "Crash|EXCEPTION_BREAKPOINT|0x00007ffe4e09af8d|0"
+    assert formatted[4] == "0|0|xul.dll||||"
 
 
-def test_minidump_parser_03(mocker: MockerFixture, tmp_path: Path) -> None:
-    """test MinidumpParser._read_registers()"""
-
-    def fake_call_mdsw(_: str, out_fp: IO[bytes]) -> None:
-        out_fp.write(
-            b"Crash reason:  SIGSEGV\n"
-            b"Crash address: 0x0\n"
-            b"Process uptime: not available\n\n"
-            b"Thread 0 (crashed)\n"
-            b" 0  libxul.so + 0x123456788\n"
-            b"    rax = 0xe5423423423fffe8   rdx = 0x0000000000000000\n"
-            b"    rcx = 0x0000000000000000   rbx = 0xe54234234233e5e5\n"
-            b"    rsi = 0x0000000000000000   rdi = 0x00007fedc31fe308\n"
-            b"    rbp = 0x00007fffca0dab00   rsp = 0x00007fffca0daad0\n"
-            b"     r8 = 0x0000000000000000    r9 = 0x0000000000000008\n"
-            b"    r10 = 0xffff00ffffffffff   r11 = 0xffffff00ffffffff\n"
-            b"    r12 = 0x0000743564566308   r13 = 0x00007fedce9d8000\n"
-            b"    r14 = 0x0000000000000001   r15 = 0x0000000000000000\n"
-            b"    rip = 0x0000745666666ac\n"
-            b"    Found by: given as instruction pointer in context\n"
-            b" 1  libxul.so + 0x1f4361c]\n\n"
-        )
-        out_fp.seek(0)
-
-    mocker.patch.object(MinidumpParser, "_call_mdsw", side_effect=fake_call_mdsw)
-    mdp = MinidumpParser(str(tmp_path))
-    md_lines = list()
-    with (tmp_path / "md_out").open("w+b") as log_fp:
-        mdp._read_registers("fake.dmp", log_fp)
-        log_fp.seek(0)
-        for line in log_fp:
-            if b"=" not in line:
-                break
-            md_lines.append(line)
-    assert len(md_lines) == 9  # only register info should be in here
-
-
-def test_minidump_parser_04(mocker: MockerFixture, tmp_path: Path) -> None:
-    """test MinidumpParser._read_stacktrace()"""
-
-    def fake_call_mdsw(  # pylint: disable=unused-argument
-        _: str, out_fp: IO[bytes], extra_flags: Optional[List[str]] = None
-    ) -> None:
-        out_fp.write(
-            b"OS|Linux|0.0.0 sys info...\n"
-            b"CPU|amd64|more info|8\n"
-            b"GPU|||\n"
-            b"Crash|SIGSEGV|0x7fff27aaeff8|0\n"
-            b"Module|firefox||firefox|a|0x1|0x1|1\n"
-            b"Module|firefox||firefox|a|0x1|0x2|1\n"
-            b"Module|firefox||firefox|a|0x1|0x3|1\n"
-            b"  \n\n"
-            b"0|0|blah|foo|a/bar.c|123|0x0\n"
-            b"0|1|blat|foo|a/bar.c|223|0x0\n"
-            b"junk\n"
-            b"0|2|blas|foo|a/bar.c|423|0x0\n"
-            b"0|3|blas|foo|a/bar.c|423|0x0\n"
-            b"1|0|libpthread-2.23.so||||0xd360\n"
-            b"junk\n"
-            b"1|1|swrast_dri.so||||0x7237f3\n"
-            b"1|2|libplds4.so|_fini|||0x163\n"
-            b"2|0|swrast_dri.so||||0x723657\n"
-            b"junk\n"
-            b"2|1|libpthread-2.23.so||||0x76ba\n"
-            b"2|3|libc-2.23.so||||0x1073dd\n\n"
-        )
-        out_fp.seek(0)
-
-    mocker.patch.object(MinidumpParser, "_call_mdsw", side_effect=fake_call_mdsw)
-    mdp = MinidumpParser(str(tmp_path))
-    with (tmp_path / "md_out").open("w+b") as log_fp:
-        mdp._read_stacktrace("fake.dmp", log_fp, limit=7)
-        log_fp.seek(0)
-        md_lines = log_fp.readlines()
-    assert len(md_lines) == 8  # only the interesting stack info should be in here
-    assert md_lines[-1].startswith(b"WARNING: Hit stack size output limit!")
-    assert md_lines[-2].startswith(b"0|2|")
-    # test raw_fp set
-    with (tmp_path / "md_out").open("w+b") as log_fp:
-        with (tmp_path / "md_raw").open("w+b") as raw_fp:
-            mdp._read_stacktrace("fake.dmp", log_fp, raw_fp=raw_fp)
-            raw_size = raw_fp.tell()
-        log_fp.seek(0)
-        md_lines = log_fp.readlines()
-    with (tmp_path / "md_out").open("w+b") as log_fp:
-        fake_call_mdsw("x", log_fp)
-        log_fp.seek(0, SEEK_END)
-        assert raw_size == log_fp.tell()
-    assert len(md_lines) == 8
-    assert md_lines[-1].startswith(b"0|3|")
+def test_minidump_parser_03(tmp_path: Path) -> None:
+    """test MinidumpParser.format_output() - symbolized"""
+    data = {
+        "crash_info": {
+            "address": "0x00007ffe4e09af8d",
+            "crashing_thread": 0,
+            "type": "EXCEPTION_BREAKPOINT",
+        },
+        "crashing_thread": {
+            "frames": [
+                {
+                    "file": "file0.cpp",
+                    "frame": 0,
+                    "function": "function00()",
+                    "function_offset": "0x00000000000001ed",
+                    "line": 47,
+                    "module": "xul.dll",
+                    "registers": {
+                        "r10": "0x12345678",
+                        "r11": "0x0badf00d",
+                        "r12": "0x00000000",
+                        "r13": "0x000000dceebfc2e8",
+                    },
+                },
+                {
+                    "file": "file1.cpp",
+                    "frame": 1,
+                    "function": "function01()",
+                    "function_offset": "0x00000000000001bb",
+                    "line": 210,
+                    "module": "xul.dll",
+                },
+                {
+                    "file": "file2.cpp",
+                    "frame": 2,
+                    "function": "function02()",
+                    "function_offset": "0x0000000000000123",
+                    "line": 123,
+                    "module": "xul.dll",
+                },
+            ],
+        },
+        "system_info": {
+            "cpu_arch": "amd64",
+            "cpu_count": 8,
+            "cpu_info": "family 6 model 70 stepping 1",
+            "os": "Windows NT",
+            "os_ver": "10.0.19044",
+        },
+    }
+    with (tmp_path / "out.txt").open("w+b") as ofp:
+        MinidumpParser.format_output(data, ofp, limit=2)
+        ofp.seek(0)
+        formatted = ofp.read().strip().decode().split("\n")
+    assert len(formatted) == 8
+    assert formatted[0] == "r10 = 0x12345678\tr11 = 0x0badf00d\tr12 = 0x00000000"
+    assert formatted[1] == "r13 = 0x000000dceebfc2e8"
+    assert formatted[2] == "OS|Windows NT|10.0.19044"
+    assert formatted[3] == "CPU|amd64|family 6 model 70 stepping 1|8"
+    assert formatted[4] == "Crash|EXCEPTION_BREAKPOINT|0x00007ffe4e09af8d|0"
+    assert formatted[5] == "0|0|xul.dll|function00()|file0.cpp|47|0x1ed"
+    assert formatted[6] == "0|1|xul.dll|function01()|file1.cpp|210|0x1bb"
+    assert formatted[7] == "WARNING: Hit stack size output limit!"
 
 
 @mark.parametrize(
-    "include_raw",
+    "call_result, result",
     [
-        # include unprocessed output from mdsw
-        (True,),
-        # don't include unprocessed output from mdsw
-        (False,),
+        # minidump-stackwalk is available
+        ((0,), True),
+        # minidump-stackwalk is not available
+        (OSError, False),
     ],
 )
-def test_minidump_parser_05(
-    mocker: MockerFixture, tmp_path: Path, include_raw: bool
+def test_minidump_parser_04(
+    mocker: MockerFixture, call_result: Any, result: bool
 ) -> None:
-    """test MinidumpParser.collect_logs()"""
-    (tmp_path / "dummy.dmp").touch()
-    (tmp_path / "dummy.txt").touch()
-    (tmp_path / "test.dmp").write_text(
-        "Crash reason:  SIGSEGV\n"
-        "Crash address: 0x0\n"
-        "Thread 0 (crashed)\n"
-        " 0  libxul.so + 0x123456788\n"
-        "    rax = 0xe5423423423fffe8   rdx = 0x0000000000000000\n"
-        "OS|Linux|0.0.0 sys info...\n"
-        "Crash|SIGSEGV|0x7fff27aaeff8|0\n"
-        "0|0|blah|foo|a/bar.c|123|0x0\n"
-    )
-    mocker.patch("ffpuppet.minidump_parser.call", autospec=True, return_value=0)
-    mdp = MinidumpParser(str(tmp_path))
-    mdp._include_raw = include_raw
-    callback = mocker.mock_open()
-    callback.return_value.tell.return_value = 0
-    mdp.collect_logs(callback, str(tmp_path))
-    if include_raw:
-        assert callback.call_count == 4
-        assert callback.call_args[0] == ("raw_mdsw_02",)
-    else:
-        assert callback.call_count == 2
-        assert callback.call_args[0] == ("minidump_02",)
-
-
-@mark.parametrize(
-    "call_result, record, stat_result, log_count, dmp_exists",
-    [
-        # minidump_stackwalk succeeded - no failures
-        (0, False, None, 0, False),
-        # minidump_stackwalk failed - don't record mdsw error
-        (1, False, 123, 0, False),
-        # minidump_stackwalk failed - record mdsw error results
-        (1, True, 123, 3, True),
-        # minidump_stackwalk failed - stat raises
-        (1, False, OSError, 0, False),
-    ],
-)
-def test_minidump_parser_06(
-    mocker: MockerFixture,
-    tmp_path: Path,
-    call_result: int,
-    record: bool,
-    stat_result: Optional[Union[OSError, int]],
-    log_count: int,
-    dmp_exists: bool,
-) -> None:
-    """test MinidumpParser._call_mdsw()"""
-    fake_call = mocker.patch(
-        "ffpuppet.minidump_parser.call", autospec=True, return_value=call_result
-    )
-    # create path for error reports
-    working = tmp_path / "fake_tmpd"
-    working.mkdir()
-    mocker.patch(
-        "ffpuppet.minidump_parser.mkdtemp", autospec=True, return_value=str(working)
-    )
-    fake_stat = mocker.patch("ffpuppet.minidump_parser.stat", autospec=True)
-    if isinstance(stat_result, int):
-        fake_stat.return_value.st_size.return_value = stat_result
-    else:
-        fake_stat.side_effect = stat_result
-    # create dmp file
-    dmp_path = tmp_path / "dmps"
-    dmp_path.mkdir()
-    dmp_file = dmp_path / "test.dmp"
-    dmp_file.write_text("fakedmp")
-    # create MinidumpParser
-    mdp = MinidumpParser(str(dmp_path), record_failures=record)
-    mdp.symbols_path = "sympath"
-    if call_result != 0:
-        with raises(RuntimeError, match="MDSW Error"):
-            mdp._call_mdsw(str(dmp_file), mocker.mock_open()())
-    else:
-        mdp._call_mdsw(str(dmp_file), mocker.mock_open()())
-    assert fake_call.call_count == 1
-    assert len(tuple(working.glob("**/mdsw_*.txt"))) == log_count
-    assert any(working.glob("**/test.dmp")) == dmp_exists
-
-
-def test_minidump_parser_07(mocker: MockerFixture) -> None:
     """test MinidumpParser.mdsw_available()"""
-    fake_call = mocker.patch(
-        "ffpuppet.minidump_parser.call", autospec=True, return_value=0
-    )
-    assert MinidumpParser.mdsw_available()
-    fake_call.side_effect = OSError
-    assert not MinidumpParser.mdsw_available()
+    mocker.patch("ffpuppet.minidump_parser.call", side_effect=call_result)
+    assert MinidumpParser.mdsw_available() == result
 
 
-def test_process_minidumps_01(mocker: MockerFixture, tmp_path: Path) -> None:
+@mark.parametrize(
+    "mdsw, minidumps, syms",
+    [
+        # test loading minidump files
+        (True, True, True),
+        # test scan_path does not exist
+        (True, False, True),
+        # test symbols_path does not exist
+        (True, True, False),
+        # test minidump-stackwalk not available
+        (False, False, False),
+    ],
+)
+def test_process_minidumps_01(
+    mocker: MockerFixture, tmp_path: Path, mdsw: bool, minidumps: bool, syms: bool
+) -> None:
     """test process_minidumps()"""
     fake_mdp = mocker.patch("ffpuppet.minidump_parser.MinidumpParser", autospec=True)
-    fake_mdp.return_value.mdsw_available.return_value = True
-    callback = mocker.Mock()
-    # test scan_path does not exist
-    process_minidumps("/missing/path/", "symbols_path", callback)
-    assert fake_mdp.call_count == 0
-    assert fake_mdp.return_value.mdsw_available.call_count == 0
-    assert fake_mdp.return_value.collect_logs.call_count == 0
-    # test empty scan_path (no .dmp files)
-    fake_mdp.return_value.md_files = []
-    process_minidumps(str(tmp_path), "symbols_path", callback)
-    assert fake_mdp.call_count == 1
-    assert fake_mdp.call_args[0][0] == str(tmp_path)
-    assert fake_mdp.return_value.mdsw_available.call_count == 0
-    assert fake_mdp.return_value.collect_logs.call_count == 0
-    fake_mdp.reset_mock()
-    # test symbols_path does not exist
-    fake_mdp.return_value.md_files = [mocker.Mock()]
-    process_minidumps(str(tmp_path), "symbols_path", callback)
-    assert fake_mdp.return_value.mdsw_available.call_count == 1
-    assert fake_mdp.return_value.collect_logs.call_count == 1
-    assert fake_mdp.return_value.collect_logs.call_args[0][-1] is None
-    fake_mdp.reset_mock()
-    # test minidump_stackwalk not available
-    fake_mdp.return_value.mdsw_available.return_value = False
-    process_minidumps(str(tmp_path), str(tmp_path), callback)
-    assert fake_mdp.return_value.mdsw_available.call_count == 1
-    assert fake_mdp.return_value.collect_logs.call_count == 0
-    fake_mdp.reset_mock()
-    # test success
-    fake_mdp.return_value.mdsw_available.return_value = True
-    process_minidumps(str(tmp_path), str(tmp_path), callback)
-    assert fake_mdp.return_value.collect_logs.call_count == 1
-    assert fake_mdp.return_value.collect_logs.call_args[0][0] == callback
-    assert fake_mdp.return_value.collect_logs.call_args[0][-1] == str(tmp_path)
+    fake_mdp.mdsw_available.return_value = mdsw
+    missing = tmp_path / "missing"
+    if minidumps:
+        md_path = tmp_path
+        # add two minidump files
+        (tmp_path / "fake01.dmp").touch()
+        (tmp_path / "fake02.dmp").touch()
+        # one load success and one load failure
+        fake_mdp.return_value.load.side_effect = ({"A"}, None)
+    else:
+        md_path = missing
+    process_minidumps(md_path, tmp_path if syms else missing, lambda _: True)
+    assert fake_mdp.mdsw_available.call_count == 1
+    if mdsw and minidumps:
+        assert fake_mdp.return_value.load.call_count == 2
+        assert fake_mdp.return_value.format_output.call_count == 1
