@@ -592,9 +592,14 @@ class FFPuppet:
                 # check for minidumps and process them if possible
                 md_path = Path(self.profile) / "minidumps"
                 if any(md_path.glob("*.dmp")):
+                    # check for local build symbols
+                    sym_path = Path(self._bin_path) / ".." / "crashreporter-symbols"
+                    if not sym_path.is_dir():
+                        # use packaged symbols
+                        sym_path = Path(self._bin_path) / "symbols"
                     process_minidumps(
                         md_path,
-                        Path(self._bin_path) / "symbols",
+                        sym_path,
                         self._logs.add_log,
                         working_path=self._working_path,
                     )
