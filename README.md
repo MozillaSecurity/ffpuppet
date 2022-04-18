@@ -25,7 +25,7 @@ To install `xvfb` on Ubuntu run:
 
     apt-get install xvfb
 
-##### Installing minidump-stackwalk
+##### Install minidump-stackwalk
 
 `minidump-stackwalk` is used to collect crash reports from minidump files. More
 information can be found [here](https://lib.rs/crates/minidump-stackwalk).
@@ -35,17 +35,17 @@ Browser Builds
 
 If you are looking for builds to use with FFPuppet there are a few options.
 
-##### Downloading builds
+##### Download a build
 
 [fuzzfetch](https://github.com/MozillaSecurity/fuzzfetch) is the recommended method for obtaining builds and is also very helpful in automation.
 
 Taskcluster has a collection of many different build types for multiple platforms and branches.
 An index of the latest mozilla-central builds can be found [here](https://firefox-ci-tc.services.mozilla.com/tasks/index/gecko.v2.mozilla-central.latest.firefox/).
 
-##### Build your own
+##### Create your own build
 
-If you would like to compile your own, build instructions can be found [here](https://firefox-source-docs.mozilla.org/setup/index.html).
-
+If you would like to compile your own, build instructions can be found [here](https://firefox-source-docs.mozilla.org/setup/index.html). When using `minidump-stackwalk`
+breakpad [symbols](https://firefox-source-docs.mozilla.org/setup/building_with_debug_symbols.html#building-with-debug-symbols) are required for symbolized stacks.
 
 Usage
 -----
