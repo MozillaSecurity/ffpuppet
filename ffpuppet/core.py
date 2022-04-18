@@ -337,7 +337,7 @@ class FFPuppet:
         Returns:
             None
         """
-        assert token and isinstance(token, str)
+        assert token
         self._abort_tokens.add(re_compile(token))
 
     def available_logs(self) -> List[str]:
@@ -363,8 +363,6 @@ class FFPuppet:
         Returns:
             List of arguments that make up the launch command.
         """
-        assert isinstance(bin_path, str)
-
         # if a python script is passed use 'sys.executable' as the binary
         # this is used by the test framework
         cmd = list()
@@ -375,8 +373,6 @@ class FFPuppet:
             cmd += ["-profile", self.profile]
 
         if additional_args:
-            assert isinstance(additional_args, list)
-            assert all(isinstance(x, str) for x in additional_args)
             cmd.extend(additional_args)
 
         if self._dbg == Debugger.VALGRIND:
