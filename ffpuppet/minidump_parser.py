@@ -125,11 +125,12 @@ class MinidumpParser:
         Returns:
             Parsed minidump info or None.
         """
-        cmd = [self.MDSW_BIN, "--json", str(path)]
+        cmd = [self.MDSW_BIN, "--json"]
         if self._symbols_path:
-            cmd.append(str(self._symbols_path))
+            cmd.extend(["--symbols-path", str(self._symbols_path)])
         else:
             cmd.extend(["--symbols-url", "https://symbols.mozilla.org/"])
+        cmd.append(str(path))
         with TemporaryFile(dir=self._working_path) as ofp:
             try:
                 run(cmd, check=False, stderr=ofp, stdout=ofp, timeout=60)
@@ -184,12 +185,10 @@ def process_minidumps(
             " See README.md for how to obtain it."
         )
         return
-    if not path.is_dir():
-        LOG.debug("invalid minidump scan path %r", str(path))
-        return
+    assert path.is_dir(), f"missing minidump scan path '{path!s}'"
     local_symbols = True
     if not symbols_path.is_dir():
-        LOG.warning("Local packaged symbols not found: %r", symbols_path)
+        LOG.warning("Local packaged symbols not found: %r", str(symbols_path))
         local_symbols = False
     md_parser = MinidumpParser(
         symbols_path=symbols_path if local_symbols else None, working_path=working_path

@@ -159,34 +159,29 @@ def test_minidump_parser_04(mocker, call_result, result):
 
 
 @mark.parametrize(
-    "mdsw, minidumps, syms",
+    "mdsw, syms",
     [
         # test loading minidump files
-        (True, True, True),
-        # test scan_path does not exist
-        (True, False, True),
+        (True, True),
         # test symbols_path does not exist
-        (True, True, False),
+        (True, False),
         # test minidump-stackwalk not available
-        (False, False, False),
+        (False, False),
     ],
 )
-def test_process_minidumps_01(mocker, tmp_path, mdsw, minidumps, syms):
+def test_process_minidumps_01(mocker, tmp_path, mdsw, syms):
     """test process_minidumps()"""
     fake_mdp = mocker.patch("ffpuppet.minidump_parser.MinidumpParser", autospec=True)
     fake_mdp.mdsw_available.return_value = mdsw
     missing = tmp_path / "missing"
-    if minidumps:
-        md_path = tmp_path
-        # add two minidump files
-        (tmp_path / "fake01.dmp").touch()
-        (tmp_path / "fake02.dmp").touch()
-        # one load success and one load failure
-        fake_mdp.return_value.load.side_effect = ({"A"}, None)
-    else:
-        md_path = missing
+    md_path = tmp_path
+    # add two minidump files
+    (tmp_path / "fake01.dmp").touch()
+    (tmp_path / "fake02.dmp").touch()
+    # one load success and one load failure
+    fake_mdp.return_value.load.side_effect = ({"A"}, None)
     process_minidumps(md_path, tmp_path if syms else missing, lambda _: True)
     assert fake_mdp.mdsw_available.call_count == 1
-    if mdsw and minidumps:
+    if mdsw:
         assert fake_mdp.return_value.load.call_count == 2
         assert fake_mdp.return_value.format_output.call_count == 1
