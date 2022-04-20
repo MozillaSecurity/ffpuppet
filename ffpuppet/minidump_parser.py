@@ -140,10 +140,15 @@ class MinidumpParser:
             try:
                 run(cmd, check=True, stderr=out_fp, stdout=out_fp, timeout=60)
                 success = True
-            except CalledProcessError:
-                LOG.debug("error processing %r", str(path))
+            except CalledProcessError as exc:
+                LOG.warning(
+                    "%r returned %r while processing %r",
+                    self.MDSW_BIN,
+                    exc.returncode,
+                    str(path),
+                )
             except TimeoutExpired:
-                LOG.debug("timeout while processing %r", str(path))
+                LOG.warning("%r hung while processing %r", self.MDSW_BIN, str(path))
             md_out = Path(out_fp.name)
         return success, md_out
 
@@ -206,7 +211,7 @@ def process_minidumps(
                     md_data = load(json_fp)
                 md_json.unlink()
             except JSONDecodeError:
-                LOG.debug("JSONDecodeError while loading %r", str(file))
+                LOG.warning("Failed to load json from %r", str(file))
                 success = False
         # handle failures
         if not success:
