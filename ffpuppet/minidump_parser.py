@@ -5,9 +5,9 @@
 from json import JSONDecodeError, load
 from logging import getLogger
 from pathlib import Path
-from subprocess import DEVNULL, TimeoutExpired, call, run
-from tempfile import TemporaryFile
-from typing import IO, Any, Callable, Dict, List, Optional
+from subprocess import DEVNULL, CalledProcessError, TimeoutExpired, call, run
+from tempfile import NamedTemporaryFile
+from typing import IO, Any, Callable, Dict, List, Optional, Tuple
 
 LOG = getLogger(__name__)
 
@@ -116,14 +116,15 @@ class MinidumpParser:
         if limit < len(frames):
             out_fp.write(b"WARNING: Hit stack size output limit!\n")
 
-    def load(self, path: Path) -> Any:
-        """Load minidump file.
+    def to_json(self, path: Path) -> Tuple[bool, Path]:
+        """Convert a minidump to json a file.
 
         Args:
             path: Minidump file.
 
         Returns:
-            Parsed minidump info or None.
+            A boolean indicating success of the minidump-stackwalk call and a file
+            containing the output.
         """
         cmd = [self.MDSW_BIN, "--json"]
         if self._symbols_path:
@@ -131,18 +132,20 @@ class MinidumpParser:
         else:
             cmd.extend(["--symbols-url", "https://symbols.mozilla.org/"])
         cmd.append(str(path))
-        with TemporaryFile(dir=self._working_path) as ofp:
+        with NamedTemporaryFile(
+            delete=False, dir=self._working_path, prefix="mdsw_"
+        ) as out_fp:
+            success = False
+            LOG.debug("running %r", " ".join(cmd))
             try:
-                run(cmd, check=False, stderr=ofp, stdout=ofp, timeout=60)
-                ofp.seek(0)
-                md_data = load(ofp)
+                run(cmd, check=True, stderr=out_fp, stdout=out_fp, timeout=60)
+                success = True
+            except CalledProcessError:
+                LOG.debug("error processing %r", str(path))
             except TimeoutExpired:
-                LOG.debug("timeout while loading %r", str(path))
-                md_data = None
-            except JSONDecodeError:
-                LOG.debug("JSONDecodeError while loading %r", str(path))
-                md_data = None
-        return md_data
+                LOG.debug("timeout while processing %r", str(path))
+            md_out = Path(out_fp.name)
+        return success, md_out
 
     @classmethod
     def mdsw_available(cls) -> bool:
@@ -191,11 +194,25 @@ def process_minidumps(
         LOG.warning("Local packaged symbols not found: %r", str(symbols_path))
         local_symbols = False
     md_parser = MinidumpParser(
-        symbols_path=symbols_path if local_symbols else None, working_path=working_path
+        symbols_path=symbols_path if local_symbols else None,
+        working_path=working_path,
     )
     for count, file in enumerate(path.glob("*.dmp")):
-        md_data = md_parser.load(file)
-        if not md_data:
-            LOG.warning("Failed to parse minidump %r", str(file))
+        success, md_json = md_parser.to_json(file)
+        if success:
+            # load json data from file to dict
+            try:
+                with md_json.open("rb") as json_fp:
+                    md_data = load(json_fp)
+                md_json.unlink()
+            except JSONDecodeError:
+                LOG.debug("JSONDecodeError while loading %r", str(file))
+                success = False
+        # handle failures
+        if not success:
+            LOG.warning("Failed to process minidump %r", str(file))
+            # collect minidump-stackwalk stderr/stdout
+            cb_create_log(f"mdsw_out_{count:02}", logfp=md_json.open("rb"))
             continue
+        # write formatted minidump output to file
         md_parser.format_output(md_data, cb_create_log(f"minidump_{count:02}"))
