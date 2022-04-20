@@ -597,15 +597,12 @@ def test_ffpuppet_23(mocker, tmp_path):
     with FFPuppet(use_profile=str(profile)) as ffp:
         ffp.launch(TESTFF_BIN)
         ffp._bin_path = ffp.profile
-        # create "test.dmp" files
         assert ffp._bin_path is not None
-        md_path = os.path.join(ffp._bin_path, "minidumps")
-        with open(os.path.join(md_path, "test1.dmp"), "w") as out_fp:
-            out_fp.write("1a\n1b")
-        with open(os.path.join(md_path, "test2.dmp"), "w") as out_fp:
-            out_fp.write("2a\n2b")
-        with open(os.path.join(md_path, "test3.dmp"), "w") as out_fp:
-            out_fp.write("3a\n3b")
+        # create "test.dmp" files
+        md_path = Path(ffp._bin_path) / "minidumps"
+        (md_path / "test1.dmp").write_text("1a\n1b")
+        (md_path / "test2.dmp").write_text("2a\n2b")
+        (md_path / "test3.dmp").write_text("3a\n3b")
         assert not ffp.is_healthy()
         ffp.close()
         logs = tmp_path / "logs"
