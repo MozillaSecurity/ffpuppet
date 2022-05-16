@@ -399,6 +399,7 @@ def prepare_environment(
     base["MOZ_DISABLE_PDFIUM_SANDBOX"] = "1"
     base["MOZ_DISABLE_RDD_SANDBOX"] = "1"
     base["MOZ_DISABLE_SOCKET_PROCESS_SANDBOX"] = "1"
+    base["MOZ_DISABLE_UTILITY_SANDBOX"] = "1"
     base["MOZ_DISABLE_VR_SANDBOX"] = "1"
     base["MOZ_GDB_SLEEP"] = "0"
     # https://bugzilla.mozilla.org/show_bug.cgi?id=1305151
