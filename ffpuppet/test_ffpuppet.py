@@ -906,6 +906,7 @@ def test_ffpuppet_32(mocker, tmp_path):
             self.reason = None
             self._bin_path = str(tmp_path)
             self._logs.reset()
+            self._logs.add_log("stderr")
             self._proc = mocker.Mock(spec=Popen, pid=123)
             self._proc.poll.return_value = None
             profile = tmp_path / "profile"
