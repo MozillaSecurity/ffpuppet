@@ -212,31 +212,22 @@ class FFPuppet:
             Log on the filesystem.
         """
         assert self._logs.working_path is not None
-        try:
-            for entry in Path(self._logs.working_path).iterdir():
-                # scan for sanitizer logs
-                if entry.name.startswith(self._logs.PREFIX_SAN):
-                    if skip_benign and self._benign_sanitizer_report(entry):
-                        continue
+        log_path = Path(self._logs.working_path)
+        # scan for sanitizer logs
+        for entry in log_path.glob(f"{self._logs.PREFIX_SAN}*"):
+            if skip_benign and self._benign_sanitizer_report(entry):
+                continue
+            yield entry.resolve()
+        # scan for Valgrind logs
+        if self._dbg == Debugger.VALGRIND:
+            for entry in log_path.glob(f"{self._logs.PREFIX_VALGRIND}*"):
+                if entry.stat().st_size:
                     yield entry.resolve()
-                # scan for Valgrind logs
-                elif self._dbg == Debugger.VALGRIND and entry.name.startswith(
-                    self._logs.PREFIX_VALGRIND
-                ):
-                    if entry.stat().st_size:
-                        yield entry.resolve()
-        except OSError:  # pragma: no cover
-            pass
-
-        # check for minidumps
+        # scan for minidump files
         if not skip_md:
             assert self.profile is not None
-            try:
-                for entry in (Path(self.profile) / "minidumps").iterdir():
-                    if ".dmp" in entry.name:
-                        yield entry.resolve()
-            except OSError:  # pragma: no cover
-                pass
+            for entry in (Path(self.profile) / "minidumps").glob("*.dmp"):
+                yield entry.resolve()
 
     @classmethod
     def _dbg_sanity_check(cls, dbg: Debugger) -> None:
