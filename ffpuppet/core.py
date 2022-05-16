@@ -535,6 +535,7 @@ class FFPuppet:
         LOG.debug("browser pid: %r, %d proc(s)", pid, len(procs))
         # set reason code
         crash_reports = set(self._crashreports(skip_benign=True))
+        exit_code = None
         if crash_reports:
             r_code = Reason.ALERT
             while True:
@@ -553,8 +554,9 @@ class FFPuppet:
         elif self.is_running():
             r_code = Reason.CLOSED
         elif self._proc.poll() not in (0, -1, 1, -2):
+            exit_code = self._proc.poll()
             r_code = Reason.ALERT
-            LOG.debug("poll() returned %r", self._proc.poll())
+            LOG.warning("poll() returned %r but no crash reports were found", exit_code)
         else:
             r_code = Reason.EXITED
         # close processes
@@ -605,6 +607,8 @@ class FFPuppet:
                     )
                 stderr_fp = self._logs.get_fp("stderr")
                 if stderr_fp:
+                    if exit_code is not None:
+                        stderr_fp.write(f"[ffpuppet] Exit code: {exit_code}\n".encode())
                     stderr_fp.write(f"[ffpuppet] Reason code: {r_code.name}\n".encode())
         # reset remaining to closed state
         try:
