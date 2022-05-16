@@ -448,7 +448,7 @@ def prepare_environment(
 def wait_on_files(
     procs: Iterable[Process],
     wait_files: Iterable[Path],
-    poll_rate: float = 0.25,
+    poll_rate: float = 0.5,
     timeout: float = 60,
 ) -> bool:
     """Wait for files in wait_files to no longer be use by any process.
