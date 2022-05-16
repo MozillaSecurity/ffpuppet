@@ -175,7 +175,7 @@ def process_minidumps(
     cb_create_log: Callable[..., Any],
     working_path: Optional[str] = None,
 ) -> None:
-    """Scan for minidump (.dmp) files a in path. If files are found they
+    """Scan for minidump (.dmp) files in path. If files are found they
     are parsed and new logs are added via the cb_create_log callback.
 
     Args:
