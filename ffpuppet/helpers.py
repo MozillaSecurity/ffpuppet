@@ -148,8 +148,8 @@ def _configure_sanitizers(
     asan_config.add("log_path", f"'{log_path}'", overwrite=True)
     asan_config.add("sleep_before_dying", "0")
     asan_config.add("strict_init_order", "true")
-    # breaks old builds (esr52)
-    asan_config.add("strict_string_checks", "true")
+    # temporarily revert to default (false) until https://bugzil.la/1767068 is fixed
+    # asan_config.add("strict_string_checks", "true")
     env["ASAN_OPTIONS"] = asan_config.options
 
     # setup Leak Sanitizer options ONLY if not set manually in environment
