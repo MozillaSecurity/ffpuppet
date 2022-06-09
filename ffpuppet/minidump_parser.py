@@ -5,14 +5,21 @@
 from json import JSONDecodeError, load
 from logging import getLogger
 from pathlib import Path
+from shutil import copy2, rmtree
 from subprocess import DEVNULL, CalledProcessError, TimeoutExpired, call, run
-from tempfile import NamedTemporaryFile
-from typing import IO, Any, Callable, Dict, List, Optional, Tuple
+from tempfile import NamedTemporaryFile, mkdtemp
+from typing import IO, Any, Callable, Dict, List, Optional
 
 LOG = getLogger(__name__)
 
 __author__ = "Tyson Smith"
 __all__ = ("process_minidumps",)
+
+
+class MinidumpStackwalkFailure(Exception):
+    """
+    Raised when the minidump-stackwalk fails.
+    """
 
 
 class MinidumpParser:
@@ -21,18 +28,14 @@ class MinidumpParser:
 
     Attributes:
         symbols_path: Path containing debug symbols.
-        working_path: Path to use as base directory for temporary files.
     """
 
     MDSW_BIN = "minidump-stackwalk"
 
-    __slots__ = ("_symbols_path", "_working_path")
+    __slots__ = ("_symbols_path",)
 
-    def __init__(
-        self, symbols_path: Optional[Path] = None, working_path: Optional[str] = None
-    ):
+    def __init__(self, symbols_path: Optional[Path] = None):
         self._symbols_path = symbols_path
-        self._working_path = working_path
 
     @staticmethod
     def format_output(
@@ -50,7 +53,7 @@ class MinidumpParser:
             None
         """
         assert limit > 0
-        # generate regester information lines
+        # generate register information lines
         frames = md_data["crashing_thread"]["frames"]
         reg_lines: List[str] = list()
         for reg, value in frames[0]["registers"].items():
@@ -116,41 +119,35 @@ class MinidumpParser:
         if limit < len(frames):
             out_fp.write(b"WARNING: Hit stack size output limit!\n")
 
-    def to_json(self, path: Path) -> Tuple[bool, Path]:
+    def to_json(self, src: Path, dst: Path) -> Path:
         """Convert a minidump to json a file.
 
         Args:
-            path: Minidump file.
+            src: Minidump file.
+            dst: Location to save JSON file.
 
         Returns:
-            A boolean indicating success of the minidump-stackwalk call and a file
-            containing the output.
+            A file containing JSON output.
         """
         cmd = [self.MDSW_BIN, "--json"]
         if self._symbols_path:
             cmd.extend(["--symbols-path", str(self._symbols_path)])
         else:
             cmd.extend(["--symbols-url", "https://symbols.mozilla.org/"])
-        cmd.append(str(path))
-        with NamedTemporaryFile(
-            delete=False, dir=self._working_path, prefix="mdsw_"
-        ) as out_fp:
-            success = False
+        cmd.append(str(src))
+        with NamedTemporaryFile(delete=False, dir=dst, prefix="mdsw_") as out_fp:
             LOG.debug("running %r", " ".join(cmd))
             try:
                 run(cmd, check=True, stderr=out_fp, stdout=out_fp, timeout=60)
-                success = True
             except CalledProcessError as exc:
-                LOG.warning(
-                    "%r returned %r while processing %r",
-                    self.MDSW_BIN,
-                    exc.returncode,
-                    str(path),
-                )
+                raise MinidumpStackwalkFailure(
+                    f"{self.MDSW_BIN!r} returned {exc.returncode!r} processing {src!s}"
+                ) from None
             except TimeoutExpired:
-                LOG.warning("%r hung while processing %r", self.MDSW_BIN, str(path))
-            md_out = Path(out_fp.name)
-        return success, md_out
+                raise MinidumpStackwalkFailure(
+                    f"{self.MDSW_BIN!r} hung processing {src!s}"
+                ) from None
+            return Path(out_fp.name)
 
     @classmethod
     def mdsw_available(cls) -> bool:
@@ -198,26 +195,26 @@ def process_minidumps(
     if not symbols_path.is_dir():
         LOG.warning("Local packaged symbols not found: %r", str(symbols_path))
         local_symbols = False
-    md_parser = MinidumpParser(
-        symbols_path=symbols_path if local_symbols else None,
-        working_path=working_path,
-    )
+
+    # create working path
+    working_path = mkdtemp(prefix="minidump_", dir=working_path)
+
+    md_parser = MinidumpParser(symbols_path=symbols_path if local_symbols else None)
     for count, file in enumerate(path.glob("*.dmp")):
-        success, md_json = md_parser.to_json(file)
-        if success:
+        try:
+            # parse minidump with minidump-stackwalk
+            md_json = md_parser.to_json(file, Path(working_path))
             # load json data from file to dict
-            try:
-                with md_json.open("rb") as json_fp:
-                    md_data = load(json_fp)
-                md_json.unlink()
-            except JSONDecodeError:
-                LOG.warning("Failed to load json from %r", str(file))
-                success = False
-        # handle failures
-        if not success:
-            LOG.warning("Failed to process minidump %r", str(file))
-            # collect minidump-stackwalk stderr/stdout
-            cb_create_log(f"mdsw_out_{count:02}", logfp=md_json.open("rb"))
-            continue
-        # write formatted minidump output to file
-        md_parser.format_output(md_data, cb_create_log(f"minidump_{count:02}"))
+            with md_json.open("rb") as json_fp:
+                md_data = load(json_fp)
+            md_json.unlink()
+            # write formatted minidump output to log file
+            md_parser.format_output(md_data, cb_create_log(f"minidump_{count:02}"))
+        except (JSONDecodeError, KeyError, MinidumpStackwalkFailure):
+            # save a copy of the minidump
+            saved_md = copy2(file, working_path)
+            LOG.error("Minidump saved as '%s'", saved_md)
+            raise
+
+    # if successful remove the working path
+    rmtree(working_path)

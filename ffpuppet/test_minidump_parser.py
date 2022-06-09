@@ -4,11 +4,12 @@
 # You can obtain one at http://mozilla.org/MPL/2.0/.
 """ffpuppet minidump parser tests"""
 
+from json import JSONDecodeError
 from subprocess import CalledProcessError, TimeoutExpired
 
-from pytest import mark
+from pytest import mark, raises
 
-from .minidump_parser import MinidumpParser, process_minidumps
+from .minidump_parser import MinidumpParser, MinidumpStackwalkFailure, process_minidumps
 
 
 @mark.parametrize(
@@ -27,13 +28,12 @@ from .minidump_parser import MinidumpParser, process_minidumps
 def test_minidump_parser_01(mocker, tmp_path, run_return, symbols, result):
     """test MinidumpParser.to_json()"""
     mocker.patch("ffpuppet.minidump_parser.run", autospec=True, side_effect=run_return)
-    parser = MinidumpParser(
-        symbols_path=tmp_path if symbols else None,
-        working_path=str(tmp_path),
-    )
-    success, json_file = parser.to_json(tmp_path)
-    assert success == result
-    assert json_file.is_file()
+    parser = MinidumpParser(symbols_path=tmp_path if symbols else None)
+    if result:
+        assert parser.to_json(tmp_path, str(tmp_path)).is_file()
+    else:
+        with raises(MinidumpStackwalkFailure):
+            parser.to_json(tmp_path, str(tmp_path))
 
 
 def test_minidump_parser_02(tmp_path):
@@ -159,37 +159,36 @@ def test_minidump_parser_04(mocker, call_result, result):
 
 
 @mark.parametrize(
-    "mdsw, syms, load_json",
+    "mdsw, syms, bad_json",
     [
-        # loading minidump files - success and JSONDecodeError
+        # loading minidump files - success
+        (True, True, False),
+        # loading minidump files - JSONDecodeError
         (True, True, True),
         # symbols_path does not exist
-        (True, False, True),
-        # call to MinidumpParser.to_json fails
-        (True, True, False),
+        (True, False, False),
         # test minidump-stackwalk not available
         (False, False, False),
     ],
 )
-def test_process_minidumps_01(mocker, tmp_path, mdsw, syms, load_json):
+def test_process_minidumps_01(mocker, tmp_path, mdsw, syms, bad_json):
     """test process_minidumps()"""
     fake_mdp = mocker.patch("ffpuppet.minidump_parser.MinidumpParser", autospec=True)
     fake_mdp.mdsw_available.return_value = mdsw
-    missing = tmp_path / "missing"
-    md_path = tmp_path
-    # add two minidump files
-    (tmp_path / "fake01.dmp").touch()
-    (tmp_path / "fake02.dmp").touch()
-    # one success, one failure
-    (tmp_path / "mdsw_pass").write_text("{}")
-    (tmp_path / "mdsw_fail").write_text("bad,json")
-    fake_mdp.return_value.to_json.side_effect = (
-        (load_json, (tmp_path / "mdsw_pass")),
-        (load_json, (tmp_path / "mdsw_fail")),
-    )
-    process_minidumps(md_path, tmp_path if syms else missing, mocker.Mock())
+    (tmp_path / "minidump.dmp").write_text("bad,json" if bad_json else "{}")
+    fake_mdp.return_value.to_json.return_value = tmp_path / "minidump.dmp"
+    try:
+        process_minidumps(
+            tmp_path,
+            tmp_path if syms else tmp_path / "missing",
+            mocker.Mock(),
+            working_path=str(tmp_path),
+        )
+    except JSONDecodeError:
+        assert bad_json
+    else:
+        assert not bad_json
     assert fake_mdp.mdsw_available.call_count == 1
     if mdsw:
-        assert fake_mdp.return_value.to_json.call_count == 2
-        if load_json:
-            assert fake_mdp.return_value.format_output.call_count == 1
+        assert fake_mdp.return_value.to_json.call_count == 1
+        assert fake_mdp.return_value.format_output.call_count == (0 if bad_json else 1)
