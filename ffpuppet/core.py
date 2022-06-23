@@ -533,7 +533,7 @@ class FFPuppet:
                 LOG.debug("%d crash report(s) found", len(crash_reports))
                 # wait until crash report files are closed
                 report_wait = 90 if self._dbg == Debugger.NONE else 300
-                if not wait_on_files(procs, crash_reports, timeout=report_wait):
+                if not wait_on_files(crash_reports, timeout=report_wait):
                     LOG.warning("Crash reports still open after %ds", report_wait)
                     break
                 new_reports = set(self._crashreports(skip_benign=True))

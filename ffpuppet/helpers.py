@@ -446,15 +446,13 @@ def prepare_environment(
 
 
 def wait_on_files(
-    procs: Iterable[Process],
     wait_files: Iterable[Path],
     poll_rate: float = 0.5,
     timeout: float = 60,
 ) -> bool:
-    """Wait for files in wait_files to no longer be use by any process.
+    """Wait for specified files to no longer be use by any process.
 
     Args:
-        procs: Processes to scan for open files.
         wait_files: Files that must no longer be open by a process.
         poll_rate: Amount of time in seconds to wait between checks.
         timeout: Amount of time in seconds to poll.
@@ -466,14 +464,14 @@ def wait_on_files(
     assert timeout >= 0
     poll_rate = min(poll_rate, timeout)
     deadline = time() + timeout
-    while any(files_in_use(wait_files, procs)):
+    while any(files_in_use(wait_files, process_iter())):
         if deadline <= time():
             LOG.debug("wait_on_files timeout (%ds)", timeout)
             break
         sleep(poll_rate)
     else:
         return True
-    for entry in files_in_use(wait_files, procs):
+    for entry in files_in_use(wait_files, process_iter()):
         LOG.debug("%r open by %r (%d)", str(entry[0]), entry[2], entry[1])
     return False
 
