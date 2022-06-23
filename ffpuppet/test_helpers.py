@@ -367,17 +367,14 @@ def test_helpers_07(tmp_path):
     t_file = tmp_path / "file.bin"
     t_file.touch()
     # test with open file
-    procs = get_processes(os.getpid(), recursive=False)
     with NamedTemporaryFile() as wait_fp:
-        assert not wait_on_files(procs, [Path(wait_fp.name), t_file], timeout=0.1)
+        assert not wait_on_files([Path(wait_fp.name), t_file], timeout=0.1)
     # existing but closed file
-    procs = get_processes(os.getpid(), recursive=False)
-    assert wait_on_files(procs, [t_file], timeout=0.1)
+    assert wait_on_files([t_file], timeout=0.1)
     # file that does not exist
-    procs = get_processes(os.getpid(), recursive=False)
-    assert wait_on_files(procs, [Path("missing")], timeout=0.1)
+    assert wait_on_files([Path("missing")], timeout=0.1)
     # empty file list
-    assert wait_on_files([], [])
+    assert wait_on_files([])
 
 
 # this needs to be here in order to work correctly on Windows
