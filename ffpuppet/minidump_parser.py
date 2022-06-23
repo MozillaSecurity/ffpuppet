@@ -135,7 +135,7 @@ class MinidumpParser:
         else:
             cmd.extend(["--symbols-url", "https://symbols.mozilla.org/"])
         cmd.append(str(src))
-        with NamedTemporaryFile(delete=False, dir=dst, prefix="mdsw_") as out_fp:
+        with NamedTemporaryFile(delete=False, dir=dst, prefix="mdsw_out_") as out_fp:
             LOG.debug("running %r", " ".join(cmd))
             try:
                 run(cmd, check=True, stderr=out_fp, stdout=out_fp, timeout=60)
