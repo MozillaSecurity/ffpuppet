@@ -9,7 +9,6 @@ from multiprocessing import Event, Process
 from pathlib import Path
 from platform import system
 from shutil import rmtree
-from tempfile import NamedTemporaryFile
 
 from psutil import Process as PSProcess
 from pytest import raises
@@ -367,7 +366,7 @@ def test_helpers_07(tmp_path):
     t_file = tmp_path / "file.bin"
     t_file.touch()
     # test with open file
-    with NamedTemporaryFile() as wait_fp:
+    with (tmp_path / "open.bin").open("w") as wait_fp:
         assert not wait_on_files([Path(wait_fp.name), t_file], timeout=0.1)
     # existing but closed file
     assert wait_on_files([t_file], timeout=0.1)
@@ -419,7 +418,7 @@ def test_helpers_10(tmp_path):
     t_file.touch()
     procs = [PSProcess(os.getpid())]
     # test with open file
-    with NamedTemporaryFile() as wait_fp:
+    with (tmp_path / "file").open("w") as wait_fp:
         assert any(files_in_use([t_file, Path(wait_fp.name)], procs))
     # existing but closed file
     assert not any(files_in_use([t_file], procs))
@@ -427,6 +426,5 @@ def test_helpers_10(tmp_path):
 
 def test_helpers_11(tmp_path):
     """test warn_open()"""
-    (tmp_path / "file.bin").touch()
-    with NamedTemporaryFile(dir=str(tmp_path)) as _:
+    with (tmp_path / "file.bin").open("w") as _:
         warn_open(str(tmp_path))
