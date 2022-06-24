@@ -561,6 +561,8 @@ def test_ffpuppet_22(tmp_path):
                 log_fp.write("filler line\n")
         assert not ffp.is_healthy()
         assert ffp.is_running()
+        # close fake browser process before calling close to avoid hang
+        Process(ffp.get_pid()).terminate()
         ffp.close()
         assert ffp.reason == Reason.ALERT
         logs = tmp_path / "logs"
@@ -604,6 +606,8 @@ def test_ffpuppet_23(mocker, tmp_path):
         (md_path / "test2.dmp").write_text("2a\n2b")
         (md_path / "test3.dmp").write_text("3a\n3b")
         assert not ffp.is_healthy()
+        # close fake browser process before calling close to avoid hang
+        Process(ffp.get_pid()).terminate()
         ffp.close()
         logs = tmp_path / "logs"
         ffp.save_logs(str(logs))

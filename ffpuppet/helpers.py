@@ -392,6 +392,8 @@ def prepare_environment(
     base["MOZ_CRASHREPORTER"] = "1"
     base["MOZ_CRASHREPORTER_NO_DELETE_DUMP"] = "1"
     base["MOZ_CRASHREPORTER_NO_REPORT"] = "1"
+    # shutdown all processes when a crash is detected
+    base["MOZ_CRASHREPORTER_SHUTDOWN"] = "1"
     base["MOZ_DISABLE_CONTENT_SANDBOX"] = "1"
     base["MOZ_DISABLE_GMP_SANDBOX"] = "1"
     base["MOZ_DISABLE_GPU_SANDBOX"] = "1"
@@ -447,7 +449,7 @@ def prepare_environment(
 
 def wait_on_files(
     wait_files: Iterable[Path],
-    poll_rate: float = 0.5,
+    poll_rate: float = 1.0,
     timeout: float = 60,
 ) -> bool:
     """Wait for specified files to no longer be use by any process.
