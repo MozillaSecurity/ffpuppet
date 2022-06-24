@@ -529,6 +529,19 @@ class FFPuppet:
         exit_code = None
         if crash_reports:
             r_code = Reason.ALERT
+            # Wait a moment for processes to exit automatically.
+            # It is important to not terminate processes too quickly to allow crash
+            # reports to complete.
+            # This assumes a crash report is written and all processes exit
+            # when an issue is detected.
+            # Be sure MOZ_CRASHREPORTER_SHUTDOWN=1 to avoid delays.
+            procs = wait_procs(procs, timeout=10)[1]
+            if procs:
+                LOG.warning(
+                    "Slow shutdown detected. "
+                    "%d processes are running, is MOZ_CRASHREPORTER_SHUTDOWN=1 set?",
+                    len(procs),
+                )
             while True:
                 LOG.debug("%d crash report(s) found", len(crash_reports))
                 # wait until crash report files are closed
