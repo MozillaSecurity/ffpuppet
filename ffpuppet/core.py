@@ -544,10 +544,11 @@ class FFPuppet:
                 crash_reports = new_reports
         elif self.is_running():
             r_code = Reason.CLOSED
-        elif self._proc.poll() not in (0, -1, 1, -2, 245):
+        elif self._proc.poll() not in (0, -1, 1, -2, -9, 245):
             # Note: ignore 245 for now to avoid getting flooded with OOMs that don't
             # have a crash report... this should be revisited when time allows
             # https://bugzil.la/1370520
+            # Ignore -9 to avoid false positives due to system OOM killer
             exit_code = self._proc.poll()
             r_code = Reason.ALERT
             LOG.warning("poll() returned %r but no crash reports were found", exit_code)
