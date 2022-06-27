@@ -26,7 +26,7 @@ try:
 except ImportError:
     pass
 
-from psutil import AccessDenied, NoSuchProcess, wait_procs
+from psutil import AccessDenied, NoSuchProcess, Process, wait_procs
 
 try:
     from xvfbwrapper import Xvfb
@@ -268,47 +268,37 @@ class FFPuppet:
                 raise OSError(f"Valgrind >= {cls.VALGRIND_MIN_VERSION:.2f} is required")
 
     @staticmethod
-    def _terminate(pid: int, retry_delay: int = 30, start_mode: int = 0) -> None:
-        """Terminate the process. Each mode (retry pass) is more aggressive.
-        At the end of each attempt if there are active processes mode is
-        incremented and another pass is performed.
-
-        Mode:
-        - 0: uses process.terminate() on the parent process only.
-        - 1: uses process.terminate() on all processes.
-        - 2: uses process.kill() on all processes.
+    def _terminate(
+        procs: List[Process], retry_delay: int = 30, use_kill: bool = False
+    ) -> None:
+        """Call terminate() on provided processes. If terminate() fails try kill().
 
         Args:
+            procs: Processes to terminate/kill.
             retry_delay: Time in seconds to wait before next attempt.
-            start_mode: Initial mode.
+            use_kill: Initial mode.
 
         Returns:
             None
         """
-        LOG.debug(
-            "_terminate(%d, retry_delay=%0.2f, start_mode=%d)",
-            pid,
-            retry_delay,
-            start_mode,
-        )
-        procs = get_processes(pid)
-        for mode in range(start_mode, 3):
-            LOG.debug("%d running process(es)", len(procs))
-            # iterate over and terminate/kill processes
+        while True:
+            LOG.debug(
+                "calling %s on %d running process(es)",
+                "kill()" if use_kill else "terminate()",
+                len(procs),
+            )
+            # iterate over processes and call terminate()/kill()
             for proc in procs:
                 try:
-                    proc.kill() if mode > 1 else proc.terminate()
+                    proc.kill() if use_kill else proc.terminate()
                 except (AccessDenied, NoSuchProcess):  # pragma: no cover
                     pass
-                if mode == 0:
-                    # only target the parent process on the first pass
-                    break
             procs = wait_procs(procs, timeout=retry_delay)[1]
-            if not procs:
-                LOG.debug("_terminate() was successful")
+            if not procs or use_kill:
                 break
-            LOG.debug("timed out (%0.2f), mode %d", retry_delay, mode)
-        else:
+            use_kill = True
+
+        if procs:
             for proc in procs:
                 try:
                     LOG.warning(
@@ -316,7 +306,7 @@ class FFPuppet:
                     )
                 except (AccessDenied, NoSuchProcess):  # pragma: no cover
                     pass
-            raise TerminateError("Failed to terminate browser")
+            raise TerminateError("Failed to terminate processes")
 
     def add_abort_token(self, token: str) -> None:
         """Add a token that when present in the browser log will have the
@@ -535,7 +525,10 @@ class FFPuppet:
             # This assumes a crash report is written and all processes exit
             # when an issue is detected.
             # Be sure MOZ_CRASHREPORTER_SHUTDOWN=1 to avoid delays.
-            procs = wait_procs(procs, timeout=10)[1]
+            procs = wait_procs(
+                procs,
+                timeout=10 if self._dbg == Debugger.NONE else 60,
+            )[1]
             if procs:
                 LOG.warning(
                     "Slow shutdown detected. "
@@ -555,8 +548,11 @@ class FFPuppet:
                     break
                 LOG.debug("more reports have appeared")
                 crash_reports = new_reports
+            # get active procs after crash reports are closed
+            procs = wait_procs(procs, timeout=0)[1]
         elif self.is_running():
             r_code = Reason.CLOSED
+            assert procs
         elif self._proc.poll() not in (0, -1, 1, -2, -9, 245):
             # Note: ignore 245 for now to avoid getting flooded with OOMs that don't
             # have a crash report... this should be revisited when time allows
@@ -568,11 +564,19 @@ class FFPuppet:
         else:
             r_code = Reason.EXITED
         # close processes
-        if self.is_running():
+        if procs:
             LOG.debug("browser needs to be terminated")
-            # when running under a debugger be less aggressive
             assert pid is not None
-            self._terminate(pid, start_mode=1 if self._dbg == Debugger.NONE else 0)
+            # when running under a debugger close the debugger first
+            if self._dbg != Debugger.NONE and self.is_running():
+                LOG.debug("attempting to close debugger")
+                try:
+                    procs[0].terminate()
+                    # only wait if terminate() call does not fail
+                    procs = wait_procs(procs, timeout=10)[1]
+                except (AccessDenied, NoSuchProcess):  # pragma: no cover
+                    pass
+            self._terminate(procs)
         # wait for any remaining processes to close
         if wait_procs(procs, timeout=1 if force_close else 30)[1]:
             LOG.warning("Some browser processes are still running!")
