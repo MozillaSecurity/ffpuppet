@@ -452,7 +452,7 @@ def wait_on_files(
     poll_rate: float = 1.0,
     timeout: float = 60,
 ) -> bool:
-    """Wait for specified files to no longer be use by any process.
+    """Wait for specified files to no longer be in use by any process.
 
     Args:
         wait_files: Files that must no longer be open by a process.
