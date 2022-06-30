@@ -464,18 +464,23 @@ def wait_on_files(
     """
     assert poll_rate >= 0
     assert timeout >= 0
+    all_closed = False
     poll_rate = min(poll_rate, timeout)
     deadline = time() + timeout
-    while any(files_in_use(wait_files, process_iter())):
+    while True:
+        open_iter = files_in_use(
+            wait_files, process_iter(["pid", "name", "open_files"])
+        )
         if deadline <= time():
-            LOG.debug("wait_on_files timeout (%ds)", timeout)
+            LOG.debug("wait_on_files() timeout (%ds)", timeout)
+            for entry in open_iter:
+                LOG.debug("%r open by %r (%d)", str(entry[0]), entry[2], entry[1])
+            break
+        if not any(open_iter):
+            all_closed = True
             break
         sleep(poll_rate)
-    else:
-        return True
-    for entry in files_in_use(wait_files, process_iter()):
-        LOG.debug("%r open by %r (%d)", str(entry[0]), entry[2], entry[1])
-    return False
+    return all_closed
 
 
 def warn_open(path: str) -> None:
@@ -489,5 +494,7 @@ def warn_open(path: str) -> None:
     Returns:
         None
     """
-    for entry in files_in_use(list(Path(path).iterdir()), process_iter()):
+    for entry in files_in_use(
+        list(Path(path).iterdir()), process_iter(["pid", "name", "open_files"])
+    ):
         LOG.warning("%r open by %r (%d)", str(entry[0]), entry[2], entry[1])

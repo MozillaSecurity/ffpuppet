@@ -361,18 +361,24 @@ def test_helpers_06():
     assert "MOZ_CRASHREPORTER" not in env
 
 
-def test_helpers_07(tmp_path):
+def test_helpers_07(mocker, tmp_path):
     """test wait_on_files()"""
+    mocker.patch("ffpuppet.helpers.sleep", autospec=True)
+    fake_time = mocker.patch("ffpuppet.helpers.time", autospec=True)
     t_file = tmp_path / "file.bin"
     t_file.touch()
-    # test with open file
+    # test with open file (timeout)
+    fake_time.side_effect = (1, 2)
     with (tmp_path / "open.bin").open("w") as wait_fp:
         assert not wait_on_files([Path(wait_fp.name), t_file], timeout=0.1)
     # existing but closed file
-    assert wait_on_files([t_file], timeout=0.1)
+    fake_time.side_effect = (1, 1)
+    assert wait_on_files([t_file])
     # file that does not exist
-    assert wait_on_files([Path("missing")], timeout=0.1)
+    fake_time.side_effect = (1, 1)
+    assert wait_on_files([Path("missing")])
     # empty file list
+    fake_time.side_effect = (1, 1)
     assert wait_on_files([])
 
 
