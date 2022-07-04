@@ -515,40 +515,30 @@ class FFPuppet:
         procs = get_processes(pid) if pid is not None else list()
         LOG.debug("browser pid: %r, %d proc(s)", pid, len(procs))
         # set reason code
-        crash_reports = set(self._crashreports(skip_benign=True))
         exit_code = None
-        if crash_reports:
+        if any(self._crashreports(skip_benign=True)):
             r_code = Reason.ALERT
             # Wait a moment for processes to exit automatically.
-            # It is important to not terminate processes too quickly to allow crash
-            # reports to complete.
+            # This will allow crash reports to be fully written to disk.
             # This assumes a crash report is written and all processes exit
             # when an issue is detected.
             # Be sure MOZ_CRASHREPORTER_SHUTDOWN=1 to avoid delays.
             procs = wait_procs(
                 procs,
-                timeout=10 if self._dbg == Debugger.NONE else 60,
+                timeout=30 if self._dbg == Debugger.NONE else 60,
             )[1]
             if procs:
                 LOG.warning(
-                    "Slow shutdown detected. "
-                    "%d processes are running, is MOZ_CRASHREPORTER_SHUTDOWN=1 set?",
+                    "Slow shutdown detected, %d process(es) still running",
                     len(procs),
                 )
-            while True:
-                LOG.debug("%d crash report(s) found", len(crash_reports))
-                # wait until crash report files are closed
-                report_wait = 90 if self._dbg == Debugger.NONE else 300
-                if not wait_on_files(crash_reports, timeout=report_wait):
-                    LOG.warning("Crash reports still open after %ds", report_wait)
-                    break
-                new_reports = set(self._crashreports(skip_benign=True))
-                # verify no new reports have appeared
-                if not new_reports - crash_reports:
-                    break
-                LOG.debug("more reports have appeared")
-                crash_reports = new_reports
-            # get active procs after crash reports are closed
+            crash_reports = set(self._crashreports(skip_benign=True))
+            LOG.debug("%d crash report(s) found", len(crash_reports))
+            # wait until crash report files are closed
+            report_wait = 60 if self._dbg == Debugger.NONE else 300
+            if not wait_on_files(crash_reports, timeout=report_wait):
+                LOG.warning("Crash reports still open after %ds", report_wait)
+            # get active processes after waiting for crash reports to close
             procs = wait_procs(procs, timeout=0)[1]
         elif self.is_running():
             r_code = Reason.CLOSED
@@ -560,13 +550,16 @@ class FFPuppet:
             # Ignore -9 to avoid false positives due to system OOM killer
             exit_code = self._proc.poll()
             r_code = Reason.ALERT
-            LOG.warning("poll() returned %r but no crash reports were found", exit_code)
+            LOG.warning(
+                "Browser exit code: %r (%X), no crash reports found",
+                exit_code,
+                exit_code,
+            )
         else:
             r_code = Reason.EXITED
+
         # close processes
         if procs:
-            LOG.debug("browser needs to be terminated")
-            assert pid is not None
             # when running under a debugger close the debugger first
             if self._dbg != Debugger.NONE and self.is_running():
                 LOG.debug("attempting to close debugger")
@@ -577,10 +570,8 @@ class FFPuppet:
                 except (AccessDenied, NoSuchProcess):  # pragma: no cover
                     pass
             self._terminate(procs)
-        # wait for any remaining processes to close
-        if wait_procs(procs, timeout=1 if force_close else 30)[1]:
-            LOG.warning("Some browser processes are still running!")
-        # collect crash logs
+
+        # collect crash reports and logs
         if not force_close:
             if self._logs.closed:  # pragma: no cover
                 # This should not happen while everything is working as expected.
@@ -622,6 +613,7 @@ class FFPuppet:
                     if exit_code is not None:
                         stderr_fp.write(f"[ffpuppet] Exit code: {exit_code}\n".encode())
                     stderr_fp.write(f"[ffpuppet] Reason code: {r_code.name}\n".encode())
+
         # reset remaining to closed state
         try:
             self._proc = None
