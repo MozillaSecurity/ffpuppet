@@ -363,23 +363,28 @@ def test_helpers_06():
 
 def test_helpers_07(mocker, tmp_path):
     """test wait_on_files()"""
-    mocker.patch("ffpuppet.helpers.sleep", autospec=True)
+    fake_sleep = mocker.patch("ffpuppet.helpers.sleep", autospec=True)
     fake_time = mocker.patch("ffpuppet.helpers.time", autospec=True)
     t_file = tmp_path / "file.bin"
     t_file.touch()
     # test with open file (timeout)
-    fake_time.side_effect = (1, 2)
+    fake_time.side_effect = (1, 1, 2)
     with (tmp_path / "open.bin").open("w") as wait_fp:
         assert not wait_on_files([Path(wait_fp.name), t_file], timeout=0.1)
+    assert fake_sleep.call_count == 1
+    fake_sleep.reset_mock()
     # existing but closed file
     fake_time.side_effect = (1, 1)
     assert wait_on_files([t_file])
+    assert fake_sleep.call_count == 0
     # file that does not exist
     fake_time.side_effect = (1, 1)
     assert wait_on_files([Path("missing")])
+    assert fake_sleep.call_count == 0
     # empty file list
     fake_time.side_effect = (1, 1)
     assert wait_on_files([])
+    assert fake_sleep.call_count == 0
 
 
 # this needs to be here in order to work correctly on Windows
