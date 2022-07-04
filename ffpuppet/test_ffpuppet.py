@@ -933,7 +933,7 @@ def test_ffpuppet_32(mocker, tmp_path):
     fake_wait_files = mocker.patch("ffpuppet.core.wait_on_files", autospec=True)
     fake_wait_procs = mocker.patch("ffpuppet.core.wait_procs", autospec=True)
     # process exited - no crash
-    fake_wait_procs.side_effect = (([], []), ([], []))
+    fake_wait_procs.side_effect = (([], []),)
     with StubbedProc() as ffp:
         ffp.launch()
         ffp._proc.poll.return_value = 0
@@ -942,7 +942,7 @@ def test_ffpuppet_32(mocker, tmp_path):
         assert ffp._logs.closed
         assert ffp.reason == Reason.EXITED
     # process exited - exit code - crash
-    fake_wait_procs.side_effect = (([], []), ([], []))
+    fake_wait_procs.side_effect = (([], []),)
     with StubbedProc() as ffp:
         ffp.launch()
         ffp._proc.poll.return_value = -11
@@ -950,8 +950,8 @@ def test_ffpuppet_32(mocker, tmp_path):
         assert ffp._proc is None
         assert ffp._logs.closed
         assert ffp.reason == Reason.ALERT
-    # process running - no crash reports (fail to terminate test for coverage)
-    fake_wait_procs.side_effect = (([], [mocker.Mock()]), ([], [mocker.Mock()]))
+    # process running - no crash reports
+    fake_wait_procs.side_effect = (([], [mocker.Mock()]),)
     with StubbedProc() as ffp:
         ffp.launch()
         ffp._proc.poll.return_value = None
@@ -960,7 +960,7 @@ def test_ffpuppet_32(mocker, tmp_path):
         assert ffp._logs.closed
         assert ffp.reason == Reason.CLOSED
     # process running - with crash reports, hang waiting to close
-    fake_wait_procs.side_effect = (([], [mocker.Mock()]), ([], []), ([], []))
+    fake_wait_procs.side_effect = (([], [mocker.Mock()]), ([], []))
     (tmp_path / "fake_report1").touch()
     with StubbedProc() as ffp:
         ffp.launch()
@@ -972,7 +972,7 @@ def test_ffpuppet_32(mocker, tmp_path):
         assert ffp._logs.closed
         assert ffp.reason == Reason.ALERT
     # process running - with crash reports, multiple logs
-    fake_wait_procs.side_effect = (([], []), ([], []), ([], []))
+    fake_wait_procs.side_effect = (([], []), ([], []))
     (tmp_path / "fake_report2").touch()
     with StubbedProc() as ffp:
         ffp.launch()
@@ -980,8 +980,6 @@ def test_ffpuppet_32(mocker, tmp_path):
         fake_reports.return_value = None
         fake_reports.side_effect = (
             (tmp_path / "fake_report1",),
-            (tmp_path / "fake_report1", tmp_path / "fake_report2"),
-            (tmp_path / "fake_report1", tmp_path / "fake_report2"),
             (tmp_path / "fake_report1", tmp_path / "fake_report2"),
             (tmp_path / "fake_report1", tmp_path / "fake_report2"),
         )
