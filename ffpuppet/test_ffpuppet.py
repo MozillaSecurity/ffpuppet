@@ -1004,3 +1004,11 @@ def test_ffpuppet_33():
         assert san_log in ffp._logs.watching
         ffp.close()
         assert ffp.reason == Reason.CLOSED
+
+
+def test_ffpuppet_34(mocker):
+    """test secondary process lookup scan in close()"""
+    fake_get_proc = mocker.patch("ffpuppet.core.get_processes", return_value=[])
+    with FFPuppet() as ffp:
+        ffp.launch(TESTFF_BIN)
+    assert fake_get_proc.call_count == 1
