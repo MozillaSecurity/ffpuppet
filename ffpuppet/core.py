@@ -5,7 +5,7 @@
 
 from enum import Enum, unique
 from logging import getLogger
-from os import X_OK, access, getenv
+from os import X_OK, access, getenv, getpid
 from os.path import abspath, dirname, isfile
 from os.path import join as pathjoin
 from os.path import realpath
@@ -26,7 +26,7 @@ try:
 except ImportError:
     pass
 
-from psutil import AccessDenied, NoSuchProcess, Process, wait_procs
+from psutil import AccessDenied, NoSuchProcess, Process, process_iter, wait_procs
 
 try:
     from xvfbwrapper import Xvfb
@@ -39,6 +39,7 @@ from .exceptions import InvalidPrefs, LaunchError, TerminateError
 from .helpers import (
     append_prefs,
     create_profile,
+    files_in_use,
     get_processes,
     onerror,
     prepare_environment,
@@ -514,6 +515,26 @@ class FFPuppet:
         pid = self.get_pid()
         procs = get_processes(pid) if pid is not None else list()
         LOG.debug("browser pid: %r, %d proc(s)", pid, len(procs))
+
+        # If the parent process closes while other processes are still open
+        # get_processes() will return an empty list, perform a secondary scan if needed
+        if not procs and self._logs.get_fp("stderr"):
+            stderr_fp = self._logs.get_fp("stderr")
+            assert stderr_fp is not None
+            # create a list of processes that are using the stderr file
+            # this *should* only include the browser and the current Python process
+            procs = []
+            for _, other_pid, _ in files_in_use(
+                [Path(stderr_fp.name)], process_iter(["pid", "name", "open_files"])
+            ):
+                # don't include the current Python process in the results
+                if other_pid != getpid():
+                    try:
+                        procs.append(Process(other_pid))
+                    except (AccessDenied, NoSuchProcess):  # pragma: no cover
+                        pass
+            LOG.debug("secondary scan found %d process(es)", len(procs))
+
         # set reason code
         exit_code = None
         if any(self._crashreports(skip_benign=True)):
