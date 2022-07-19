@@ -345,6 +345,13 @@ def test_ffpuppet_13(mocker):
     )
     # success
     fake_system.return_value = "Linux"
+    with FFPuppet(headless="xvfb"):
+        pass
+    assert fake_xvfb.call_count == 1
+    assert fake_xvfb.return_value.start.call_count == 1
+    fake_xvfb.reset_mock()
+    # success - legacy
+    fake_system.return_value = "Linux"
     with FFPuppet(use_xvfb=True):
         pass
     assert fake_xvfb.call_count == 1
@@ -353,12 +360,7 @@ def test_ffpuppet_13(mocker):
     # not installed
     fake_xvfb.side_effect = NameError
     with raises(OSError, match="Please install xvfbwrapper"):
-        FFPuppet(use_xvfb=True)
-    assert fake_xvfb.start.call_count == 0
-    # unsupported os
-    fake_system.return_value = "Windows"
-    with raises(OSError, match="Xvfb is only supported on Linux"):
-        FFPuppet(use_xvfb=True)
+        FFPuppet(headless="xvfb")
     assert fake_xvfb.start.call_count == 0
 
 
@@ -767,6 +769,14 @@ def test_ffpuppet_28(tmp_path):
         assert len(cmd) == 3
         assert cmd[0] == "bin_path"
         assert cmd[-1] == "test"
+        assert "-headless" not in cmd
+        # headless
+        ffp._headless = "default"
+        cmd = ffp.build_launch_cmd("bin_path", ["test"])
+        assert len(cmd) == 4
+        assert cmd[0] == "bin_path"
+        assert cmd[-1] == "test"
+        assert "-headless" in cmd
         # GDB
         ffp._dbg = Debugger.GDB
         cmd = ffp.build_launch_cmd("bin_path")

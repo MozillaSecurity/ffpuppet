@@ -102,6 +102,17 @@ def parse_args(argv: Optional[List[str]] = None) -> Namespace:
         help="Install extensions. Specify the path to the xpi or the directory "
         "containing the unpacked extension.",
     )
+    headless_choices = ["default"]
+    if system().startswith("Linux"):
+        headless_choices.append("xvfb")
+    cfg_group.add_argument(
+        "--headless",
+        choices=headless_choices,
+        const="default",
+        default=None,
+        nargs="?",
+        help="Headless mode. 'default' uses browser's built-in headless mode.",
+    )
     cfg_group.add_argument(
         "-p", "--prefs", help="Custom prefs.js file to use (default: profile default)"
     )
@@ -115,7 +126,11 @@ def parse_args(argv: Optional[List[str]] = None) -> Namespace:
         "-u", "--url", help="Server URL or path to local file to load."
     )
     if system().startswith("Linux"):
-        cfg_group.add_argument("--xvfb", action="store_true", help="Use Xvfb.")
+        cfg_group.add_argument(
+            "--xvfb",
+            action="store_true",
+            help="DEPRECATED! Please use '--headless xvfb'",
+        )
     else:
         cfg_group.set_defaults(xvfb=False)
 
@@ -224,6 +239,9 @@ def parse_args(argv: Optional[List[str]] = None) -> Namespace:
     args.memory *= 1_048_576
     if args.prefs is not None and not isfile(args.prefs):
         parser.error(f"Invalid prefs.js file {args.prefs!r}")
+    if args.xvfb:
+        LOG.warning("'--xvfb' is DEPRECATED. Please use '--headless xvfb'")
+        args.headless = "xvfb"
 
     return args
 
@@ -241,8 +259,8 @@ def main(argv: Optional[List[str]] = None) -> None:  # pylint: disable=missing-d
 
     ffp = FFPuppet(
         debugger=args.debugger,
+        headless=args.headless,
         use_profile=args.profile,
-        use_xvfb=args.xvfb,
     )
     for a_token in args.abort_token:
         ffp.add_abort_token(a_token)

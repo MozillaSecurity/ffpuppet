@@ -85,8 +85,9 @@ class FFPuppet:
 
     Attributes:
         debugger: Debugger to use.
+        headless: Headless mode to use.
         use_profile: Path to existing user profile.
-        use_xvfb: Use Xvfb.
+        use_xvfb: Use Xvfb (DEPRECATED).
         working_path: Path to use as base directory for temporary files.
     """
 
@@ -98,6 +99,7 @@ class FFPuppet:
         "_bin_path",
         "_checks",
         "_dbg",
+        "_headless",
         "_launches",
         "_logs",
         "_proc",
@@ -111,6 +113,7 @@ class FFPuppet:
     def __init__(
         self,
         debugger: Debugger = Debugger.NONE,
+        headless: Optional[str] = None,
         use_profile: Optional[str] = None,
         use_xvfb: bool = False,
         working_path: Optional[str] = None,
@@ -123,6 +126,7 @@ class FFPuppet:
         ] = list()
         self._dbg = debugger
         self._dbg_sanity_check(self._dbg)
+        self._headless = headless
         self._launches = 0  # number of successful browser launches
         self._logs = PuppetLogger(base_path=working_path)
         self._proc: Optional["Popen[bytes]"] = None
@@ -133,15 +137,19 @@ class FFPuppet:
         self.reason: Optional[Reason] = Reason.CLOSED
 
         if use_xvfb:
-            if not system().startswith("Linux"):
-                self._logs.clean_up(ignore_errors=True)
-                raise OSError("Xvfb is only supported on Linux")
+            self._headless = "xvfb"
+
+        if self._headless == "xvfb":
             try:
                 self._xvfb = Xvfb(width=1280, height=1024)
             except NameError:
                 self._logs.clean_up(ignore_errors=True)
-                raise OSError("Please install xvfbwrapper") from None
+                raise OSError(
+                    "Please install xvfbwrapper (Only supported on Linux)"
+                ) from None
             self._xvfb.start()
+        else:
+            assert self._headless in (None, "default")
 
     def __enter__(self) -> "FFPuppet":
         return self
@@ -351,6 +359,8 @@ class FFPuppet:
         if bin_path.lower().endswith(".py"):
             cmd.append(executable)
         cmd += [bin_path, "-no-remote"]
+        if self._headless == "default":
+            cmd.append("-headless")
         if self.profile is not None:
             cmd += ["-profile", self.profile]
 
