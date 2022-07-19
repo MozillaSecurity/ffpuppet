@@ -16,7 +16,7 @@ def main() -> int:  # pylint: disable=missing-docstring
     profile = url = None
     while len(sys.argv) > 1:
         arg = sys.argv.pop(1)
-        if arg in ("-no-remote",):
+        if arg in ("-headless", "-no-remote"):
             pass
         elif os_name == "Windows" and arg in ("-no-deelevate", "-wait-for-browser"):
             pass
