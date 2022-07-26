@@ -107,7 +107,7 @@ def _configure_sanitizers(
         # requires background thread so only works on Linux for now...
         # https://github.com/llvm/llvm-project/blob/main/compiler-rt/lib/
         # sanitizer_common/sanitizer_common_libcdep.cpp#L116
-        ("soft_rss_limit_mb", "10000"),
+        ("soft_rss_limit_mb", "12288"),
         ("symbolize", "true"),
     ]
     # set llvm-symbolizer path
