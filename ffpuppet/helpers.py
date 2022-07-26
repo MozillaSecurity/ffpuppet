@@ -104,6 +104,8 @@ def _configure_sanitizers(
         ("handle_sigbus", "true"),  # set to be safe
         ("handle_sigfpe", "true"),  # set to be safe
         ("handle_sigill", "true"),  # set to be safe
+        # WARNING: setting max_allocation_size_mb too low can result in missing crashes
+        ("max_allocation_size_mb", "12288"),
         # requires background thread so only works on Linux for now...
         # https://github.com/llvm/llvm-project/blob/main/compiler-rt/lib/
         # sanitizer_common/sanitizer_common_libcdep.cpp#L116
