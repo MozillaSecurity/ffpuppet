@@ -524,8 +524,7 @@ class FFPuppet:
         assert self._proc is not None
         pid = self.get_pid()
         procs = get_processes(pid) if pid is not None else list()
-        LOG.debug("browser pid: %r, %d proc(s)", pid, len(procs))
-
+        LOG.debug("browser pid: %r, %d process(es)", pid, len(procs))
         # If the parent process closes while other processes are still open
         # get_processes() will return an empty list, perform a secondary scan if needed
         if not procs and self._logs.get_fp("stderr"):
@@ -543,7 +542,7 @@ class FFPuppet:
                         procs.append(Process(other_pid))
                     except (AccessDenied, NoSuchProcess):  # pragma: no cover
                         pass
-            LOG.debug("secondary scan found %d process(es)", len(procs))
+            LOG.debug("secondary scan found %d browser process(es)", len(procs))
 
         # set reason code
         exit_code = None
@@ -556,7 +555,7 @@ class FFPuppet:
             # Be sure MOZ_CRASHREPORTER_SHUTDOWN=1 to avoid delays.
             procs = wait_procs(
                 procs,
-                timeout=30 if self._dbg == Debugger.NONE else 60,
+                timeout=15 if self._dbg == Debugger.NONE else 30,
             )[1]
             if procs:
                 LOG.warning(
