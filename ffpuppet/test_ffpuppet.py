@@ -338,6 +338,9 @@ def test_ffpuppet_12():
 
 def test_ffpuppet_13(mocker):
     """test launching under Xvfb"""
+    mocker.patch("ffpuppet.core.Popen", autospec=True)
+    fake_bts = mocker.patch("ffpuppet.core.Bootstrapper", autospec=True)
+    fake_bts.return_value.location = "http://test:123"
     fake_system = mocker.patch("ffpuppet.core.system", autospec=True)
     is_linux = system() == "Linux"
     fake_xvfb = mocker.patch(
@@ -345,8 +348,8 @@ def test_ffpuppet_13(mocker):
     )
     # success
     fake_system.return_value = "Linux"
-    with FFPuppet(headless="xvfb"):
-        pass
+    with FFPuppet(headless="xvfb") as ffp:
+        ffp.launch(TESTFF_BIN)
     assert fake_xvfb.call_count == 1
     assert fake_xvfb.return_value.start.call_count == 1
     fake_xvfb.reset_mock()

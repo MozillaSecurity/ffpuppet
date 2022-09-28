@@ -836,6 +836,11 @@ class FFPuppet:
                 env_mod["G_DEBUG"] = "gc-friendly"
                 env_mod["MOZ_CRASHREPORTER_DISABLE"] = "1"
 
+            if self._headless == "xvfb":
+                if env_mod is None:
+                    env_mod = dict()
+                env_mod["MOZ_ENABLE_WAYLAND"] = "0"
+
             # open logs
             self._logs.add_log("stdout")
             stderr = self._logs.add_log("stderr")
