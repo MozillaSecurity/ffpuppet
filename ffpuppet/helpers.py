@@ -104,12 +104,6 @@ def _configure_sanitizers(
         ("handle_sigbus", "true"),  # set to be safe
         ("handle_sigfpe", "true"),  # set to be safe
         ("handle_sigill", "true"),  # set to be safe
-        # WARNING: setting max_allocation_size_mb too low can result in missing crashes
-        ("max_allocation_size_mb", "12288"),
-        # requires background thread so only works on Linux for now...
-        # https://github.com/llvm/llvm-project/blob/main/compiler-rt/lib/
-        # sanitizer_common/sanitizer_common_libcdep.cpp#L116
-        ("soft_rss_limit_mb", "12288"),
         ("symbolize", "true"),
     ]
     # set llvm-symbolizer path
@@ -148,7 +142,13 @@ def _configure_sanitizers(
             "ASAN_OPTIONS=log_path is used internally and cannot be set externally"
         )
     asan_config.add("log_path", f"'{log_path}'", overwrite=True)
+    # WARNING: setting max_allocation_size_mb too low can result in missing crashes
+    asan_config.add("max_allocation_size_mb", "12288")
     asan_config.add("sleep_before_dying", "0")
+    # soft_rss_limit_mb requires background thread so only works on Linux for now...
+    # see https://github.com/llvm/llvm-project/blob/main/compiler-rt/lib/
+    # sanitizer_common/sanitizer_common_libcdep.cpp#L116
+    asan_config.add("soft_rss_limit_mb", "12288")
     asan_config.add("strict_init_order", "true")
     # temporarily revert to default (false) until https://bugzil.la/1767068 is fixed
     # asan_config.add("strict_string_checks", "true")
@@ -173,6 +173,12 @@ def _configure_sanitizers(
             "TSAN_OPTIONS=log_path is used internally and cannot be set externally"
         )
     tsan_config.add("log_path", f"'{log_path}'", overwrite=True)
+    # WARNING: setting max_allocation_size_mb too low can result in missing crashes
+    tsan_config.add("max_allocation_size_mb", "12288")
+    # soft_rss_limit_mb requires background thread so only works on Linux for now...
+    # see https://github.com/llvm/llvm-project/blob/main/compiler-rt/lib/
+    # sanitizer_common/sanitizer_common_libcdep.cpp#L116
+    tsan_config.add("soft_rss_limit_mb", "12288")
     env["TSAN_OPTIONS"] = tsan_config.options
 
     # setup Undefined Behavior Sanitizer options ONLY if not set manually in environment
