@@ -6,7 +6,7 @@
 from logging import getLogger
 from os.path import exists
 from re import compile as re_compile
-from typing import Dict, Optional
+from typing import Dict, Iterator, Optional, Tuple
 
 LOG = getLogger(__name__)
 
@@ -26,6 +26,15 @@ class SanitizerOptions:  # pylint: disable=missing-docstring
 
     def __contains__(self, item: str) -> bool:
         return item in self._options
+
+    def __iter__(self) -> Iterator[Tuple[str, str]]:
+        yield from self._options.items()
+
+    def __len__(self) -> int:
+        return len(self._options)
+
+    def __str__(self) -> str:
+        return ":".join("=".join(kv) for kv in self)
 
     def add(self, flag: str, value: str, overwrite: bool = False) -> None:
         """Add sanitizer flag.
@@ -114,7 +123,8 @@ class SanitizerOptions:  # pylint: disable=missing-docstring
         Returns:
             Colon separated list of options.
         """
-        return ":".join("=".join(kv) for kv in self._options.items())
+        # TODO: Remove after next release
+        return str(self)
 
     def pop(self, flag: str) -> Optional[str]:
         """Pop sanitizer flag.

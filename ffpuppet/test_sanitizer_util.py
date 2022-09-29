@@ -40,11 +40,21 @@ def test_sanitizer_options_01(init, add, result, overwrite):
     opts = SanitizerOptions(init)
     for key, value in add.items():
         opts.add(key, value, overwrite=overwrite)
-    split_opts = SanitizerOptions.re_delim.split(opts.options)
+    # test __str__
+    assert str(opts) == str(opts.options)
+    split_opts = SanitizerOptions.re_delim.split(str(opts))
     assert len(split_opts) == len(result)
-    if opts.options:
+    if opts:
+        # test __len___
+        assert len(opts) == len(result)
         for opt in split_opts:
             assert opt in result
+        # test __iter__
+        for opt, value in opts:
+            assert "=".join((opt, value)) in result
+        # test __contains___
+        for opt in result:
+            assert opt.split("=")[0] in opts
     else:
         assert not result[-1]
 
