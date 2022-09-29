@@ -152,7 +152,7 @@ def _configure_sanitizers(
     asan_config.add("strict_init_order", "true")
     # temporarily revert to default (false) until https://bugzil.la/1767068 is fixed
     # asan_config.add("strict_string_checks", "true")
-    env["ASAN_OPTIONS"] = asan_config.options
+    env["ASAN_OPTIONS"] = str(asan_config)
 
     # setup Leak Sanitizer options ONLY if not set manually in environment
     # https://github.com/google/sanitizers/wiki/AddressSanitizerLeakSanitizer
@@ -162,7 +162,7 @@ def _configure_sanitizers(
     lsan_config.add("print_suppressions", "false")
     # helpful with rr/Pernosco sessions
     lsan_config.add("report_objects", "1")
-    env["LSAN_OPTIONS"] = lsan_config.options
+    env["LSAN_OPTIONS"] = str(lsan_config)
 
     # setup Thread Sanitizer options ONLY if not set manually in environment
     tsan_config = SanitizerOptions(env.get("TSAN_OPTIONS"))
@@ -179,7 +179,7 @@ def _configure_sanitizers(
     # see https://github.com/llvm/llvm-project/blob/main/compiler-rt/lib/
     # sanitizer_common/sanitizer_common_libcdep.cpp#L116
     tsan_config.add("soft_rss_limit_mb", "12288")
-    env["TSAN_OPTIONS"] = tsan_config.options
+    env["TSAN_OPTIONS"] = str(tsan_config)
 
     # setup Undefined Behavior Sanitizer options ONLY if not set manually in environment
     ubsan_config = SanitizerOptions(env.get("UBSAN_OPTIONS"))
@@ -193,7 +193,7 @@ def _configure_sanitizers(
     ubsan_config.add("log_path", f"'{log_path}'", overwrite=True)
     ubsan_config.add("print_stacktrace", "1")
     ubsan_config.add("report_error_type", "1")
-    env["UBSAN_OPTIONS"] = ubsan_config.options
+    env["UBSAN_OPTIONS"] = str(ubsan_config)
 
     return env
 
