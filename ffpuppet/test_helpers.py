@@ -190,7 +190,7 @@ def test_helpers_04(tmp_path):
     """test _configure_sanitizers()"""
 
     def parse(opt_str):
-        opts = dict()
+        opts = {}
         for entry in SanitizerOptions.re_delim.split(opt_str):
             try:
                 key, value = entry.split("=", maxsplit=1)

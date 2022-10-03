@@ -334,7 +334,7 @@ def get_processes(pid: int, recursive: bool = True) -> List[Process]:
     try:
         procs = [Process(pid)]
     except (AccessDenied, NoSuchProcess):
-        return list()
+        return []
     if not recursive:
         return procs
     try:
@@ -388,7 +388,7 @@ def prepare_environment(
     Returns:
         Environment to use when launching browser.
     """
-    base: Dict[str, Optional[str]] = dict()
+    base: Dict[str, Optional[str]] = {}
     env: Dict[str, str] = dict(environ)
 
     # https://developer.gimp.org/api/2.0/glib/glib-running.html#G_SLICE

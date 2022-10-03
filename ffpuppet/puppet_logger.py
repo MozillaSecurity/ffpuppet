@@ -36,10 +36,10 @@ class PuppetLogger:  # pylint: disable=missing-docstring
 
     def __init__(self, base_path: Optional[str] = None) -> None:
         self._base = base_path
-        self._logs: Dict[str, IO[bytes]] = dict()
+        self._logs: Dict[str, IO[bytes]] = {}
         self._rr_packed = False
         self.closed = True
-        self.watching: Dict[str, int] = dict()
+        self.watching: Dict[str, int] = {}
         self.working_path: Optional[str] = None
         self.reset()
 
@@ -281,7 +281,7 @@ class PuppetLogger:  # pylint: disable=missing-docstring
         makedirs(dest, exist_ok=True)
         dest = abspath(dest)
 
-        meta_map = dict()
+        meta_map = {}
         for log_id, log_fp in self._logs.items():
             out_name = f"log_{log_id}.txt"
             if meta:

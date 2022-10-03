@@ -13,13 +13,13 @@ from .sanitizer_util import SanitizerOptions
     "init, add, result, overwrite",
     [
         # do nothing
-        ("", dict(), [""], False),
+        ("", {}, [""], False),
         # add single option
         ("", {"a": "1"}, ["a=1"], False),
         # add multiple options
         ("", {"b": "2", "a": "1"}, ["a=1", "b=2"], False),
         # existing
-        ("a=1", dict(), ["a=1"], False),
+        ("a=1", {}, ["a=1"], False),
         # add to existing
         ("a=1", {"b": "2"}, ["a=1", "b=2"], False),
         # no overwrite existing
@@ -29,7 +29,7 @@ from .sanitizer_util import SanitizerOptions
         # parse quoted
         (
             "a='C:\\test\\':b=\"/dev/null\"",
-            dict(),
+            {},
             ["a='C:\\test\\'", 'b="/dev/null"'],
             False,
         ),
