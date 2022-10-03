@@ -318,7 +318,7 @@ def files_in_use(
                 pass
 
 
-def get_processes(pid: int, recursive: bool = True) -> List[Process]:
+def get_processes(pid: int, recursive: bool = True) -> Iterator[Process]:
     """From a given PID create a psutil.Process object and lookup all of its
     children.
 
@@ -327,21 +327,17 @@ def get_processes(pid: int, recursive: bool = True) -> List[Process]:
         recursive: Include the children (and so on) of the Process
                           that was created.
 
-    Returns:
-        A list of psutil.Process objects. The first object will always
-        be the Process that corresponds to PID.
+    Yields:
+        psutil.Process objects. The first object will always be the Process that
+        corresponds to pid.
     """
     try:
-        procs = [Process(pid)]
+        proc = Process(pid)
+        yield proc
+        if recursive and proc:
+            yield from proc.children(recursive=True)
     except (AccessDenied, NoSuchProcess):
-        return []
-    if not recursive:
-        return procs
-    try:
-        procs += procs[0].children(recursive=True)
-    except (AccessDenied, NoSuchProcess):  # pragma: no cover
         pass
-    return procs
 
 
 def onerror(

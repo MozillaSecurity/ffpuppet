@@ -396,15 +396,15 @@ def _dummy_process(is_alive, is_done):
 
 def test_helpers_08():
     """test get_processes()"""
-    assert len(get_processes(os.getpid(), recursive=False)) == 1
-    assert not get_processes(0xFFFFFF)
+    assert len(list(get_processes(os.getpid(), recursive=False))) == 1
+    assert not any(get_processes(0xFFFFFF))
     is_alive = Event()
     is_done = Event()
     proc = Process(target=_dummy_process, args=(is_alive, is_done))
     proc.start()
     try:
         is_alive.wait(30)
-        assert len(get_processes(os.getpid())) > 1
+        assert len(list(get_processes(os.getpid()))) > 1
     finally:
         is_done.set()
     proc.join()

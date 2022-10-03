@@ -521,10 +521,10 @@ class FFPuppet:
 
         assert self._proc is not None
         pid = self.get_pid()
-        procs = get_processes(pid) if pid is not None else []
+        procs = list(get_processes(pid)) if pid is not None else []
         LOG.debug("browser pid: %r, %d process(es)", pid, len(procs))
         # If the parent process closes while other processes are still open
-        # get_processes() will return an empty list, perform a secondary scan if needed
+        # procs will be empty, perform a secondary scan if needed
         if not procs and self._logs.get_fp("stderr"):
             stderr_fp = self._logs.get_fp("stderr")
             assert stderr_fp is not None
@@ -956,7 +956,7 @@ class FFPuppet:
         """
         assert timeout is None or timeout >= 0
         pid = self.get_pid()
-        if pid is None or not wait_procs(get_processes(pid), timeout=timeout)[1]:
+        if pid is None or not wait_procs(list(get_processes(pid)), timeout=timeout)[1]:
             return True
         LOG.debug("wait(timeout=%0.2f) timed out", timeout)
         return False
