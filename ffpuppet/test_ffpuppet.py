@@ -403,7 +403,7 @@ def test_ffpuppet_15(mocker, tmp_path):
     mocker.patch(
         "ffpuppet.core.get_processes",
         autospec=True,
-        return_value=[mocker.Mock(spec=Process)],
+        return_value=(mocker.Mock(spec=Process),),
     )
     mocker.patch("ffpuppet.core.system", autospec=True, return_value="Linux")
     fake_bts = mocker.patch("ffpuppet.core.Bootstrapper", autospec=True)
@@ -441,7 +441,7 @@ def test_ffpuppet_17(mocker, tmp_path):
     mocker.patch(
         "ffpuppet.core.get_processes",
         autospec=True,
-        return_value=[mocker.Mock(spec=Process)],
+        return_value=(mocker.Mock(spec=Process),),
     )
     mocker.patch("ffpuppet.core.system", autospec=True, return_value="Linux")
     fake_bts = mocker.patch("ffpuppet.core.Bootstrapper", autospec=True)
@@ -635,7 +635,7 @@ def test_ffpuppet_24(mocker, tmp_path):
     mocker.patch(
         "ffpuppet.core.get_processes",
         autospec=True,
-        return_value=[mocker.Mock(spec=Process)],
+        return_value=(mocker.Mock(spec=Process),),
     )
     mocker.patch("ffpuppet.core.system", autospec=True, return_value="Linux")
     fake_bts = mocker.patch("ffpuppet.core.Bootstrapper", autospec=True)
@@ -893,7 +893,6 @@ def test_ffpuppet_31(mocker):
         mocker.Mock(spec_set=Process, pid=123),
         mocker.Mock(spec_set=Process, pid=124),
     ]
-    mocker.patch("ffpuppet.core.get_processes", autospec=True)
     fake_wait_procs = mocker.patch("ffpuppet.core.wait_procs", autospec=True)
     # successful call to terminate
     fake_wait_procs.side_effect = (([], []),)
@@ -940,7 +939,7 @@ def test_ffpuppet_32(mocker, tmp_path):
     mocker.patch(
         "ffpuppet.core.get_processes",
         autospec=True,
-        return_value=[mocker.Mock(spec_set=Process)],
+        return_value=(mocker.Mock(spec=Process),),
     )
     fake_reports = mocker.patch("ffpuppet.core.FFPuppet._crashreports", autospec=True)
     fake_reports.return_value = ()
@@ -1022,7 +1021,7 @@ def test_ffpuppet_33():
 
 def test_ffpuppet_34(mocker):
     """test secondary process lookup scan in close()"""
-    fake_get_proc = mocker.patch("ffpuppet.core.get_processes", return_value=[])
+    fake_get_proc = mocker.patch("ffpuppet.core.get_processes", return_value=())
     with FFPuppet() as ffp:
         ffp.launch(TESTFF_BIN)
     assert fake_get_proc.call_count == 1
