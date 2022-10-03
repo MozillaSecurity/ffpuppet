@@ -55,7 +55,7 @@ class MinidumpParser:
         assert limit > 0
         # generate register information lines
         frames = md_data["crashing_thread"]["frames"]
-        reg_lines: List[str] = list()
+        reg_lines: List[str] = []
         for reg, value in frames[0]["registers"].items():
             # display three registers per line
             sep = "\t" if (len(reg_lines) + 1) % 3 else "\n"

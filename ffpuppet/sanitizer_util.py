@@ -20,7 +20,7 @@ class SanitizerOptions:  # pylint: disable=missing-docstring
     __slots__ = ("_options",)
 
     def __init__(self, options: Optional[str] = None) -> None:
-        self._options: Dict[str, str] = dict()
+        self._options: Dict[str, str] = {}
         if options is not None:
             self.load_options(options)
 

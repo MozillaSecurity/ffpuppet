@@ -492,7 +492,7 @@ def test_ffpuppet_19():
 
 def test_ffpuppet_20():
     """test running multiple instances in parallel"""
-    ffps = list()
+    ffps = []
     try:
         with HTTPTestServer() as srv:
             # use test pool size of 10
@@ -537,7 +537,7 @@ def test_ffpuppet_21(tmp_path):
 
 def test_ffpuppet_22(tmp_path):
     """test collecting and cleaning up ASan logs"""
-    test_logs = list()
+    test_logs = []
     with FFPuppet() as ffp:
         ffp.launch(TESTFF_BIN)
         assert ffp._logs.working_path is not None
@@ -933,7 +933,8 @@ def test_ffpuppet_32(mocker, tmp_path):
             profile.mkdir(exist_ok=True)
             self.profile = str(profile)
 
-        def _terminate(self, _procs, _retry_delay=0, _use_kill=False):
+        @staticmethod
+        def _terminate(_procs, _retry_delay=0, _use_kill=False):
             pass
 
     mocker.patch(

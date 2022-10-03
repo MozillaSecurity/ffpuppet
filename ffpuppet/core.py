@@ -121,9 +121,7 @@ class FFPuppet:
         # tokens used to notify log scanner to kill the browser process
         self._abort_tokens: Set[Pattern[str]] = set()
         self._bin_path: Optional[str] = None
-        self._checks: List[
-            Union[CheckLogContents, CheckLogSize, CheckMemoryUsage]
-        ] = list()
+        self._checks: List[Union[CheckLogContents, CheckLogSize, CheckMemoryUsage]] = []
         self._dbg = debugger
         self._dbg_sanity_check(self._dbg)
         self._headless = headless
@@ -355,7 +353,7 @@ class FFPuppet:
         """
         # if a python script is passed use 'sys.executable' as the binary
         # this is used by the test framework
-        cmd = list()
+        cmd = []
         if bin_path.lower().endswith(".py"):
             cmd.append(executable)
         cmd += [bin_path, "-no-remote"]
@@ -523,7 +521,7 @@ class FFPuppet:
 
         assert self._proc is not None
         pid = self.get_pid()
-        procs = get_processes(pid) if pid is not None else list()
+        procs = get_processes(pid) if pid is not None else []
         LOG.debug("browser pid: %r, %d process(es)", pid, len(procs))
         # If the parent process closes while other processes are still open
         # get_processes() will return an empty list, perform a secondary scan if needed
@@ -648,7 +646,7 @@ class FFPuppet:
         try:
             self._proc = None
             self._logs.close()
-            self._checks = list()
+            self._checks = []
             # remove temporary profile directory if necessary
             try:
                 assert self.profile is not None
@@ -825,20 +823,15 @@ class FFPuppet:
                 launch_args.append("-wait-for-browser")
             cmd = self.build_launch_cmd(bin_path, additional_args=launch_args)
 
+            env_mod = env_mod or {}
             if self._dbg in (Debugger.PERNOSCO, Debugger.RR):
-                if env_mod is None:
-                    env_mod = dict()
                 env_mod["_RR_TRACE_DIR"] = self._logs.add_path(self._logs.PATH_RR)
             elif self._dbg == Debugger.VALGRIND:
-                if env_mod is None:
-                    env_mod = dict()
                 # https://developer.gimp.org/api/2.0/glib/glib-running.html#G_DEBUG
                 env_mod["G_DEBUG"] = "gc-friendly"
                 env_mod["MOZ_CRASHREPORTER_DISABLE"] = "1"
 
             if self._headless == "xvfb":
-                if env_mod is None:
-                    env_mod = dict()
                 env_mod["MOZ_ENABLE_WAYLAND"] = "0"
 
             # open logs

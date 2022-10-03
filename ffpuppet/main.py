@@ -49,7 +49,7 @@ def dump_to_console(log_dir: str, log_quota: int = 0x8000) -> str:
             logs.remove(found)
             logs.append(found)
     # merge logs
-    lines = list()
+    lines = []
     for log in logs:
         fsize = log.stat().st_size
         lines.append("\n===\n")
@@ -139,7 +139,7 @@ def parse_args(argv: Optional[List[str]] = None) -> Namespace:
         "-a",
         "--abort-token",
         action="append",
-        default=list(),
+        default=[],
         help="Scan the browser logs for the given value and close browser if detected. "
         "For example '-a ###!!! ASSERTION:' would be used to detect soft assertions.",
     )

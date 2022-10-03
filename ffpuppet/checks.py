@@ -72,7 +72,7 @@ class CheckLogContents(Check):
         assert log_files, "log_files is empty"
         assert search_tokens, "search_tokens is empty"
         super().__init__()
-        self.logs: List[_LogContentsCheckState] = list()
+        self.logs: List[_LogContentsCheckState] = []
         for log_file in log_files:
             self.logs.append(_LogContentsCheckState(log_file))
         self.tokens = search_tokens
@@ -172,7 +172,7 @@ class CheckMemoryUsage(Check):
             True if the total usage is greater than or equal to
             self.limit otherwise False.
         """
-        proc_info = list()
+        proc_info = []
         total_usage = 0
         for proc in get_processes(self.pid):
             try:
