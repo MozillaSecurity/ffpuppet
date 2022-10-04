@@ -452,7 +452,9 @@ def prepare_environment(
         env.pop("MOZ_CRASHREPORTER_NO_REPORT", None)
         env.pop("MOZ_CRASHREPORTER_SHUTDOWN", None)
 
-    return _configure_sanitizers(env, target_dir, sanitizer_log)
+    env = _configure_sanitizers(env, target_dir, sanitizer_log)
+    # filter environment to avoid leaking sensitive information
+    return {k: v for k, v in env.items() if "_SECRET" not in k}
 
 
 def wait_on_files(
