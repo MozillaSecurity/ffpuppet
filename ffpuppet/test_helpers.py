@@ -319,8 +319,17 @@ def test_helpers_05():
     assert "MOZ_CRASHREPORTER" in env
 
 
-def test_helpers_06():
+def test_helpers_06(mocker):
     """test prepare_environment() using some predefined environment variables"""
+    mocker.patch.dict(
+        "ffpuppet.helpers.environ",
+        {
+            "MOZ_SKIA_DISABLE_ASSERTS": "0",
+            "TEST_EXISTING_OVERWRITE": "0",
+            "TEST_EXISTING_REMOVE": "1",
+            "TEST_SECRET_TO_REMOVE": "1",
+        },
+    )
     pre = {
         "LSAN_OPTIONS": "lopt=newopt",
         "MOZ_GDB_SLEEP": "2",  # update default
@@ -331,30 +340,21 @@ def test_helpers_06():
         "TEST_EXISTING_OVERWRITE": "1",
         "TEST_EXISTING_REMOVE": None,
     }
-    try:
-        os.environ["MOZ_SKIA_DISABLE_ASSERTS"] = "0"
-        os.environ["TEST_EXISTING_OVERWRITE"] = "0"
-        os.environ["TEST_EXISTING_REMOVE"] = "1"
-        env = prepare_environment("", "blah", pre)
-    finally:
-        os.environ.pop("MOZ_SKIA_DISABLE_ASSERTS")
-        os.environ.pop("TEST_EXISTING_OVERWRITE")
-        os.environ.pop("TEST_EXISTING_REMOVE")
+    env = prepare_environment("", "blah", pre)
     assert "ASAN_OPTIONS" in env
     assert "LSAN_OPTIONS" in env
     assert "lopt=newopt" in env["LSAN_OPTIONS"].split(":")
     assert "max_leaks=1" in env["LSAN_OPTIONS"].split(":")
     assert "UBSAN_OPTIONS" in env
-    assert "TEST_VAR" in env
     assert env["TEST_VAR"] == "123"
     assert "MOZ_CRASHREPORTER" in env
-    assert "MOZ_GDB_SLEEP" in env
     assert env["MOZ_GDB_SLEEP"] == "2"
     assert "RUST_BACKTRACE" not in env
     assert "TEST_FAKE" not in env
     assert "TEST_EXISTING_REMOVE" not in env
     assert env["MOZ_SKIA_DISABLE_ASSERTS"] == "0"
     assert env["TEST_EXISTING_OVERWRITE"] == "1"
+    assert "TEST_SECRET_TO_REMOVE" not in env
     # MOZ_CRASHREPORTER should not be added if MOZ_CRASHREPORTER_DISABLE is set
     pre = {"MOZ_CRASHREPORTER_DISABLE": "1"}
     env = prepare_environment("", "blah", pre)
