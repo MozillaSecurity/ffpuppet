@@ -136,6 +136,10 @@ def _configure_sanitizers(
     # asan_config.add("detect_stack_use_after_scope", "true")
     asan_config.add("detect_invalid_pointer_pairs", "1")
     asan_config.add("detect_leaks", "false")
+    # hard_rss_limit_mb requires background thread so only works on Linux for now...
+    # see https://github.com/llvm/llvm-project/blob/main/compiler-rt/lib/
+    # sanitizer_common/sanitizer_common_libcdep.cpp#L116
+    asan_config.add("hard_rss_limit_mb", "12288")
     # log_path is required for FFPuppet logging to function properly
     if "log_path" in asan_config:
         LOG.warning(
@@ -144,11 +148,9 @@ def _configure_sanitizers(
     asan_config.add("log_path", f"'{log_path}'", overwrite=True)
     # WARNING: setting max_allocation_size_mb too low can result in missing crashes
     asan_config.add("max_allocation_size_mb", "12288")
+    # This is an experimental feature added in Bug 1792757
+    asan_config.add("rss_limit_heap_profile", "true")
     asan_config.add("sleep_before_dying", "0")
-    # soft_rss_limit_mb requires background thread so only works on Linux for now...
-    # see https://github.com/llvm/llvm-project/blob/main/compiler-rt/lib/
-    # sanitizer_common/sanitizer_common_libcdep.cpp#L116
-    asan_config.add("soft_rss_limit_mb", "12288")
     asan_config.add("strict_init_order", "true")
     # temporarily revert to default (false) until https://bugzil.la/1767068 is fixed
     # asan_config.add("strict_string_checks", "true")
@@ -168,6 +170,10 @@ def _configure_sanitizers(
     tsan_config = SanitizerOptions(env.get("TSAN_OPTIONS"))
     assert tsan_config.check_path("suppressions"), "missing suppressions file"
     tsan_config.add("halt_on_error", "1")
+    # hard_rss_limit_mb requires background thread so only works on Linux for now...
+    # see https://github.com/llvm/llvm-project/blob/main/compiler-rt/lib/
+    # sanitizer_common/sanitizer_common_libcdep.cpp#L116
+    tsan_config.add("hard_rss_limit_mb", "12288")
     if "log_path" in tsan_config:
         LOG.warning(
             "TSAN_OPTIONS=log_path is used internally and cannot be set externally"
@@ -175,10 +181,8 @@ def _configure_sanitizers(
     tsan_config.add("log_path", f"'{log_path}'", overwrite=True)
     # WARNING: setting max_allocation_size_mb too low can result in missing crashes
     tsan_config.add("max_allocation_size_mb", "12288")
-    # soft_rss_limit_mb requires background thread so only works on Linux for now...
-    # see https://github.com/llvm/llvm-project/blob/main/compiler-rt/lib/
-    # sanitizer_common/sanitizer_common_libcdep.cpp#L116
-    tsan_config.add("soft_rss_limit_mb", "12288")
+    # This is an experimental feature added in Bug 1792757
+    tsan_config.add("rss_limit_heap_profile", "true")
     env["TSAN_OPTIONS"] = str(tsan_config)
 
     # setup Undefined Behavior Sanitizer options ONLY if not set manually in environment
