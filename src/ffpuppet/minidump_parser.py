@@ -200,7 +200,9 @@ def process_minidumps(
     working_path = mkdtemp(prefix="minidump_", dir=working_path)
 
     md_parser = MinidumpParser(symbols_path=symbols_path if local_symbols else None)
-    for count, file in enumerate(path.glob("*.dmp")):
+    # order by last modified date hopefully the oldest log is the cause of the issue
+    dmp_files = sorted(path.glob("*.dmp"), key=lambda x: x.stat().st_mtime)
+    for count, file in enumerate(dmp_files):
         try:
             # parse minidump with minidump-stackwalk
             md_json = md_parser.to_json(file, Path(working_path))
