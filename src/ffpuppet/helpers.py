@@ -111,10 +111,10 @@ def _configure_sanitizers(
     llvm_sym = env.get("ASAN_SYMBOLIZER_PATH")
     if not llvm_sym:
         # use packaged llvm-symbolizer
-        if system().startswith("Windows"):
-            llvm_sym = pathjoin(target_dir, "llvm-symbolizer.exe")
-        else:
-            llvm_sym = pathjoin(target_dir, "llvm-symbolizer")
+        llvm_sym = pathjoin(
+            target_dir,
+            "llvm-symbolizer.exe" if system() == "Windows" else "llvm-symbolizer",
+        )
     if isfile(llvm_sym):
         # add *SAN_OPTIONS=external_symbolizer_path
         common_flags.append(("external_symbolizer_path", f"'{llvm_sym}'"))

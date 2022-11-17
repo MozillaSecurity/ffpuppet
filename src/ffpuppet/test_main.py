@@ -7,32 +7,36 @@
 from pytest import mark, raises
 
 from .core import Reason
+from .exceptions import BrowserExecutionError
 from .main import dump_to_console, main, parse_args
 
 
 @mark.parametrize(
-    "reason, user_exit, extra_args",
+    "reason, launch, is_healthy, extra_args",
     [
         # browser exit
-        (Reason.EXITED, False, ["-d", "--save-all"]),
+        (Reason.EXITED, None, (False,), ["-d", "--save-all"]),
         # browser exit - more flags
-        (Reason.EXITED, False, ["-a", "token", "--log-level", "DEBUG"]),
+        (Reason.EXITED, None, (False,), ["-a", "token", "--log-level", "DEBUG"]),
+        # cannot launch browser binary
+        (Reason.CLOSED, (BrowserExecutionError(),), None, []),
         # browser crash
-        (Reason.ALERT, False, []),
+        (Reason.ALERT, None, (False,), []),
         # user exit
-        (Reason.CLOSED, True, []),
+        (Reason.CLOSED, None, (True, KeyboardInterrupt()), []),
         # exception
-        (None, False, []),
+        (None, None, (False,), []),
     ],
 )
-def test_main_01(mocker, tmp_path, reason, user_exit, extra_args):
+def test_main_01(mocker, tmp_path, reason, launch, is_healthy, extra_args):
     """test main()"""
+    mocker.patch("ffpuppet.main.sleep", autospec=True)
     fake_ffp = mocker.patch("ffpuppet.main.FFPuppet", autospec=True)
     fake_ffp.return_value.get_pid.return_value = 12345
-    fake_ffp.return_value.is_healthy.return_value = user_exit
+    fake_ffp.return_value.is_healthy.side_effect = is_healthy
+    fake_ffp.return_value.launch.side_effect = launch
     fake_ffp.return_value.profile = str(tmp_path)
     fake_ffp.return_value.reason = reason
-    mocker.patch("ffpuppet.main.sleep", autospec=True, side_effect=KeyboardInterrupt)
     out_logs = tmp_path / "logs"
     out_logs.mkdir()
     prefs = tmp_path / "prefs.js"
@@ -45,8 +49,6 @@ def test_main_01(mocker, tmp_path, reason, user_exit, extra_args):
         assert fake_ffp.return_value.add_abort_token.call_count == 1
     else:
         assert fake_ffp.return_value.add_abort_token.call_count == 0
-    assert fake_ffp.return_value.get_pid.call_count == 1
-    assert fake_ffp.return_value.is_healthy.call_count == 1
     assert fake_ffp.return_value.close.call_count == 1
     if "--save-all" in extra_args or Reason.ALERT:
         assert fake_ffp.return_value.save_logs.call_count == 1
