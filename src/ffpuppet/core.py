@@ -783,6 +783,22 @@ class FFPuppet:
             elif re_match(r"http(s)?://", location, IGNORECASE) is None:
                 raise OSError(f"Cannot find {location!r}")
 
+        # clean up existing log files
+        self._logs.reset()
+        assert self._logs.working_path is not None
+        sanitizer_logs = pathjoin(self._logs.working_path, self._logs.PREFIX_SAN)
+
+        # process environment
+        env_mod = env_mod or {}
+        if self._dbg in (Debugger.PERNOSCO, Debugger.RR):
+            env_mod["_RR_TRACE_DIR"] = self._logs.add_path(self._logs.PATH_RR)
+        elif self._dbg == Debugger.VALGRIND:
+            # https://developer.gimp.org/api/2.0/glib/glib-running.html#G_DEBUG
+            env_mod["G_DEBUG"] = "gc-friendly"
+            env_mod["MOZ_CRASHREPORTER_DISABLE"] = "1"
+        if self._headless == "xvfb":
+            env_mod["MOZ_ENABLE_WAYLAND"] = "0"
+
         # create and modify a profile
         self.profile = create_profile(
             extension=extension,
@@ -792,11 +808,6 @@ class FFPuppet:
         )
         LOG.debug("using profile %r", self.profile)
 
-        launch_timeout = max(launch_timeout, self.LAUNCH_TIMEOUT_MIN)
-        LOG.debug("launch timeout: %d", launch_timeout)
-        # clean up existing log files
-        self._logs.reset()
-        self.reason = None
         # performing the bootstrap helps guarantee that the browser
         # will be loaded and ready to accept input when launch() returns
         bootstrapper = Bootstrapper()
@@ -823,26 +834,16 @@ class FFPuppet:
                 launch_args.append("-wait-for-browser")
             cmd = self.build_launch_cmd(bin_path, additional_args=launch_args)
 
-            env_mod = env_mod or {}
-            if self._dbg in (Debugger.PERNOSCO, Debugger.RR):
-                env_mod["_RR_TRACE_DIR"] = self._logs.add_path(self._logs.PATH_RR)
-            elif self._dbg == Debugger.VALGRIND:
-                # https://developer.gimp.org/api/2.0/glib/glib-running.html#G_DEBUG
-                env_mod["G_DEBUG"] = "gc-friendly"
-                env_mod["MOZ_CRASHREPORTER_DISABLE"] = "1"
-
-            if self._headless == "xvfb":
-                env_mod["MOZ_ENABLE_WAYLAND"] = "0"
-
             # open logs
             self._logs.add_log("stdout")
             stderr = self._logs.add_log("stderr")
             stderr.write(f"[ffpuppet] Launch command: {' '.join(cmd)}\n\n".encode())
             stderr.flush()
-            assert self._logs.working_path is not None
-            sanitizer_logs = pathjoin(self._logs.working_path, self._logs.PREFIX_SAN)
             # launch the browser
+            launch_timeout = max(launch_timeout, self.LAUNCH_TIMEOUT_MIN)
+            LOG.debug("launch timeout: %d", launch_timeout)
             LOG.debug("launch command: %r", " ".join(cmd))
+            self.reason = None
             # pylint: disable=consider-using-with
             self._proc = Popen(
                 cmd,
@@ -858,9 +859,17 @@ class FFPuppet:
             LOG.debug("launched process %r", self.get_pid())
             bootstrapper.wait(self.is_healthy, timeout=launch_timeout, url=location)
         finally:
+            if self._proc is None:
+                # only clean up here if a launch was not attempted or Popen failed
+                LOG.debug("process not launched")
+                rmtree(self.profile, ignore_errors=True)
+                self.profile = None
+                self.reason = Reason.CLOSED
             bootstrapper.close()
-            if prefs_js is not None and isfile(
-                pathjoin(self.profile, "Invalidprefs.js")
+            if (
+                prefs_js
+                and self.profile
+                and isfile(pathjoin(self.profile, "Invalidprefs.js"))
             ):
                 raise InvalidPrefs(f"{prefs_js!r} is invalid")
 

@@ -108,23 +108,23 @@ def test_ffpuppet_01():
         assert ffp.wait(timeout=10)
 
 
-def test_ffpuppet_02(mocker):
+@mark.parametrize(
+    "exc_type",
+    [
+        # startup crash
+        BrowserTerminatedError,
+        # startup hang
+        BrowserTimeoutError,
+    ],
+)
+def test_ffpuppet_02(mocker, exc_type):
     """test launch failures"""
     mocker.patch("ffpuppet.core.Popen", autospec=True)
     fake_bts = mocker.patch("ffpuppet.core.Bootstrapper", autospec=True)
-    bts = mocker.Mock(spec_set=Bootstrapper, location="")
-    fake_bts.return_value = bts
-    # startup crash
+    fake_bts.return_value.location = ""
+    fake_bts.return_value.wait.side_effect = exc_type("test")
     with FFPuppet() as ffp:
-        bts.wait.side_effect = BrowserTerminatedError("test")
-        with raises(BrowserTerminatedError, match="test"):
-            ffp.launch(TESTFF_BIN)
-        assert not ffp.is_running()
-        assert ffp.launches == 0
-    # startup hang
-    with FFPuppet() as ffp:
-        bts.wait.side_effect = BrowserTimeoutError("test")
-        with raises(BrowserTimeoutError, match="test"):
+        with raises(exc_type, match="test"):
             ffp.launch(TESTFF_BIN)
         assert not ffp.is_healthy()
         assert ffp.launches == 0
@@ -1025,3 +1025,15 @@ def test_ffpuppet_34(mocker):
     with FFPuppet() as ffp:
         ffp.launch(TESTFF_BIN)
     assert fake_get_proc.call_count == 1
+
+
+def test_ffpuppet_35(mocker):
+    """test Popen failure during launch"""
+    mocker.patch("ffpuppet.core.Popen", autospec=True, side_effect=FileNotFoundError())
+    fake_bts = mocker.patch("ffpuppet.core.Bootstrapper", autospec=True)
+    fake_bts.return_value.location = ""
+    with FFPuppet() as ffp:
+        with raises(FileNotFoundError):
+            ffp.launch(TESTFF_BIN)
+        assert not ffp.is_healthy()
+        assert ffp.launches == 0
