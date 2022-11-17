@@ -15,6 +15,7 @@ from time import sleep, strftime
 from typing import List, Optional
 
 from .core import Debugger, FFPuppet, Reason
+from .exceptions import BrowserExecutionError
 from .helpers import check_prefs
 
 LOG = getLogger(__name__)
@@ -283,6 +284,8 @@ def main(argv: Optional[List[str]] = None) -> None:  # pylint: disable=missing-d
         LOG.info("Running Firefox (pid: %d)...", ffp.get_pid())
         while ffp.is_healthy():
             sleep(args.poll_interval)
+    except BrowserExecutionError:
+        LOG.error("Cannot execute binary. Perhaps required libraries are missing?")
     except KeyboardInterrupt:
         user_exit = True
         LOG.info("Ctrl+C detected.")

@@ -22,6 +22,7 @@ from pytest import mark, raises
 from .bootstrapper import Bootstrapper
 from .core import Debugger, FFPuppet, Reason
 from .exceptions import (
+    BrowserExecutionError,
     BrowserTerminatedError,
     BrowserTimeoutError,
     LaunchError,
@@ -1027,13 +1028,27 @@ def test_ffpuppet_34(mocker):
     assert fake_get_proc.call_count == 1
 
 
-def test_ffpuppet_35(mocker):
+@mark.parametrize(
+    "bin_exists, expect_exc",
+    [
+        # failed to execute binary
+        (True, BrowserExecutionError),
+        # missing binary
+        (False, FileNotFoundError),
+    ],
+)
+def test_ffpuppet_35(mocker, tmp_path, bin_exists, expect_exc):
     """test Popen failure during launch"""
-    mocker.patch("ffpuppet.core.Popen", autospec=True, side_effect=FileNotFoundError())
+    bin_fake = tmp_path / "fake_bin"
+    if bin_exists:
+        bin_fake.touch()
+    exc = FileNotFoundError()
+    exc.filename = str(bin_fake)
+    mocker.patch("ffpuppet.core.Popen", autospec=True, side_effect=exc)
     fake_bts = mocker.patch("ffpuppet.core.Bootstrapper", autospec=True)
     fake_bts.return_value.location = ""
     with FFPuppet() as ffp:
-        with raises(FileNotFoundError):
+        with raises(expect_exc):
             ffp.launch(TESTFF_BIN)
         assert not ffp.is_healthy()
         assert ffp.launches == 0

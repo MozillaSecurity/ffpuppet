@@ -35,7 +35,7 @@ except ImportError:
 
 from .bootstrapper import Bootstrapper
 from .checks import CheckLogContents, CheckLogSize, CheckMemoryUsage
-from .exceptions import InvalidPrefs, LaunchError, TerminateError
+from .exceptions import BrowserExecutionError, InvalidPrefs, LaunchError, TerminateError
 from .helpers import (
     append_prefs,
     create_profile,
@@ -858,6 +858,12 @@ class FFPuppet:
             )
             LOG.debug("launched process %r", self.get_pid())
             bootstrapper.wait(self.is_healthy, timeout=launch_timeout, url=location)
+        except FileNotFoundError as exc:
+            if Path(exc.filename).exists():
+                # this is known to happen when attempting to launch 32-bit binaries
+                # on a 64-bit environment without proper libraries installed
+                raise BrowserExecutionError("Cannot execute binary") from None
+            raise
         finally:
             if self._proc is None:
                 # only clean up here if a launch was not attempted or Popen failed

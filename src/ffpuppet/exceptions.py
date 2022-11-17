@@ -11,6 +11,12 @@ class LaunchError(Exception):
     """
 
 
+class BrowserExecutionError(LaunchError):
+    """
+    Raised when the browser binary cannot be executed.
+    """
+
+
 class BrowserTerminatedError(LaunchError):
     """
     Raised when the browser process goes away during launch.

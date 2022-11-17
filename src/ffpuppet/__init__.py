@@ -4,13 +4,19 @@
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
 from .core import Debugger, FFPuppet, Reason
-from .exceptions import BrowserTerminatedError, BrowserTimeoutError, LaunchError
+from .exceptions import (
+    BrowserExecutionError,
+    BrowserTerminatedError,
+    BrowserTimeoutError,
+    LaunchError,
+)
 from .sanitizer_util import SanitizerOptions
 
 __all__ = (
     "Debugger",
     "FFPuppet",
     "Reason",
+    "BrowserExecutionError",
     "BrowserTimeoutError",
     "BrowserTerminatedError",
     "LaunchError",
