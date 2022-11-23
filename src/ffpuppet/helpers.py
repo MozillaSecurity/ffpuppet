@@ -146,8 +146,6 @@ def _configure_sanitizers(
             "ASAN_OPTIONS=log_path is used internally and cannot be set externally"
         )
     asan_config.add("log_path", f"'{log_path}'", overwrite=True)
-    # WARNING: setting max_allocation_size_mb too low can result in missing crashes
-    asan_config.add("max_allocation_size_mb", "12288")
     # This is an experimental feature added in Bug 1792757
     asan_config.add("rss_limit_heap_profile", "true")
     asan_config.add("sleep_before_dying", "0")
@@ -179,8 +177,6 @@ def _configure_sanitizers(
             "TSAN_OPTIONS=log_path is used internally and cannot be set externally"
         )
     tsan_config.add("log_path", f"'{log_path}'", overwrite=True)
-    # WARNING: setting max_allocation_size_mb too low can result in missing crashes
-    tsan_config.add("max_allocation_size_mb", "12288")
     # This is an experimental feature added in Bug 1792757
     tsan_config.add("rss_limit_heap_profile", "true")
     env["TSAN_OPTIONS"] = str(tsan_config)
