@@ -5,7 +5,8 @@
 """ffpuppet bootstrapper tests"""
 # pylint: disable=protected-access
 
-from socket import AF_INET, SOCK_STREAM, error, socket, timeout
+from itertools import repeat
+from socket import AF_INET, SOCK_STREAM, socket, timeout
 from threading import Thread
 
 from pytest import mark, raises
@@ -172,12 +173,24 @@ def test_bootstrapper_07():
             browser_thread.join()
 
 
-def test_bootstrapper_08(mocker):
-    """test Bootstrapper() hit PORT_RETRIES"""
+@mark.parametrize(
+    "bind, attempts, raised",
+    [
+        # failed to bind (PermissionError)
+        ((PermissionError(10013, "foo"),), 1, LaunchError),
+        # failed to bind (PermissionError) - multiple attempts
+        (repeat(PermissionError(10013, "foo"), 4), 4, LaunchError),
+        # failed to bind (OSError)
+        ((OSError(0, "foo"),), 1, OSError),
+    ],
+)
+def test_bootstrapper_08(mocker, bind, attempts, raised):
+    """test Bootstrapper() - failures"""
     fake_sock = mocker.Mock(spec_set=socket)
-    fake_sock.bind.side_effect = error(10013, "TEST")
+    fake_sock.bind.side_effect = bind
     mocker.patch("ffpuppet.bootstrapper.socket.socket", return_value=fake_sock)
-    with raises(LaunchError, match="Could not find available port"):
-        with Bootstrapper():
+    with raises(raised):
+        with Bootstrapper(attempts=attempts):
             pass
-    assert fake_sock.bind.call_count == Bootstrapper.PORT_RETRIES
+    assert fake_sock.bind.call_count == attempts
+    assert fake_sock.close.call_count == 1

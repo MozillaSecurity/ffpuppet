@@ -5,8 +5,7 @@
 import socket
 from errno import EADDRINUSE
 from logging import getLogger
-from platform import system
-from random import randint
+from random import sample
 from time import time
 from typing import Any, Callable, Optional
 
@@ -22,31 +21,33 @@ class Bootstrapper:  # pylint: disable=missing-docstring
     BUF_SIZE = 4096  # receive buffer size
     POLL_WAIT: float = 1  # duration of initial blocking socket operations
     PORT_MAX = 0xFFFF  # bootstrap range
-    PORT_MIN = 0x2000  # bootstrap range
+    PORT_MIN = 0x3000  # bootstrap range
     PORT_RETRIES = 100  # number of attempts to find an available port
 
     __slots__ = ("_socket",)
 
-    def __init__(self) -> None:
+    def __init__(self, attempts: int = PORT_RETRIES) -> None:
+        assert attempts > 0
+        assert self.PORT_MAX > self.PORT_MIN
+        assert self.PORT_MAX - self.PORT_MIN >= attempts
         self._socket: Optional[socket.socket] = socket.socket(
             socket.AF_INET, socket.SOCK_STREAM
         )
-        if system().startswith("Windows"):
-            self._socket.setsockopt(
-                socket.SOL_SOCKET,
-                socket.SO_EXCLUSIVEADDRUSE,  # pylint: disable=no-member
-                1,
-            )
+        self._socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         self._socket.settimeout(self.POLL_WAIT)
-        for _ in range(self.PORT_RETRIES):
+        # attempt to bind to random ports
+        for port in sample(range(self.PORT_MIN, self.PORT_MAX), k=attempts):
             try:
-                self._socket.bind(("127.0.0.1", randint(self.PORT_MIN, self.PORT_MAX)))
+                self._socket.bind(("127.0.0.1", port))
                 self._socket.listen(5)
-            except OSError as soc_e:
-                if soc_e.errno in (EADDRINUSE, 10013):
+            except (OSError, PermissionError) as exc:
+                if exc.errno in (EADDRINUSE, 10013):
                     # Address already in use
+                    LOG.debug("%s: %s", type(exc).__name__, exc)
                     continue
-                raise  # pragma: no cover
+                LOG.error("Failed to bind/listen (port: %d)", port)
+                self._socket.close()
+                raise
             break
         else:
             self._socket.close()
@@ -183,8 +184,8 @@ class Bootstrapper:  # pylint: disable=missing-docstring
             if resp_timeout:
                 raise BrowserTimeoutError("Timeout sending response")
             LOG.debug("bootstrap complete (%0.2fs)", time() - start_time)
-        except OSError as soc_e:  # pragma: no cover
-            raise LaunchError(f"Error attempting to launch browser: {soc_e}") from soc_e
+        except OSError as exc:  # pragma: no cover
+            raise LaunchError(f"Error attempting to launch browser: {exc}") from exc
         finally:
             if conn is not None:
                 conn.close()
