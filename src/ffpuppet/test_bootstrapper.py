@@ -6,7 +6,7 @@
 # pylint: disable=protected-access
 
 from itertools import repeat
-from socket import AF_INET, SOCK_STREAM, socket, timeout
+from socket import socket, timeout
 from threading import Thread
 
 from pytest import mark, raises
@@ -22,13 +22,14 @@ def test_bootstrapper_01():
         assert bts.location.startswith("http://127.0.0.1:")
         assert int(bts.location.split(":")[-1]) > 1024
         assert bts.port > 1024
+        assert bts.port not in Bootstrapper.BLOCKED_PORTS
         bts.close()
         assert bts._socket is None
 
 
 def test_bootstrapper_02(mocker):
     """test Bootstrapper.wait() failure waiting for initial connection"""
-    fake_sock = mocker.Mock(spec_set=socket)
+    fake_sock = mocker.MagicMock(spec_set=socket)
     fake_sock.accept.side_effect = timeout
     mocker.patch("ffpuppet.bootstrapper.socket.socket", return_value=fake_sock)
     with Bootstrapper() as bts:
@@ -51,7 +52,7 @@ def test_bootstrapper_02(mocker):
 
 def test_bootstrapper_03(mocker):
     """test Bootstrapper.wait() failure waiting for request"""
-    fake_sock = mocker.Mock(spec_set=socket)
+    fake_sock = mocker.MagicMock(spec_set=socket)
     fake_conn = mocker.Mock(spec_set=socket)
     fake_conn.recv.side_effect = timeout
     fake_sock.accept.return_value = (fake_conn, None)
@@ -74,7 +75,7 @@ def test_bootstrapper_03(mocker):
 
 def test_bootstrapper_04(mocker):
     """test Bootstrapper.wait() failure sending response"""
-    fake_sock = mocker.Mock(spec_set=socket)
+    fake_sock = mocker.MagicMock(spec_set=socket)
     fake_conn = mocker.Mock(spec_set=socket)
     fake_conn.recv.return_value = "A"
     fake_conn.sendall.side_effect = timeout
@@ -98,7 +99,7 @@ def test_bootstrapper_04(mocker):
 
 def test_bootstrapper_05(mocker):
     """test Bootstrapper.wait() target crashed"""
-    fake_sock = mocker.Mock(spec_set=socket)
+    fake_sock = mocker.MagicMock(spec_set=socket)
     fake_conn = mocker.Mock(spec_set=socket)
     fake_conn.recv.return_value = "foo"
     fake_sock.accept.return_value = (fake_conn, None)
@@ -128,7 +129,7 @@ def test_bootstrapper_05(mocker):
 )
 def test_bootstrapper_06(mocker, redirect, recv, closed):
     """test Bootstrapper.wait()"""
-    fake_sock = mocker.Mock(spec_set=socket)
+    fake_sock = mocker.MagicMock(spec_set=socket)
     fake_conn = mocker.Mock(spec_set=socket)
     fake_conn.recv.side_effect = recv
     fake_sock.accept.return_value = (fake_conn, None)
@@ -144,7 +145,7 @@ def test_bootstrapper_07():
     """test Bootstrapper.wait() with a fake browser"""
 
     def _fake_browser(port, payload_size=5120):
-        conn = socket(AF_INET, SOCK_STREAM)
+        conn = socket()
         # 50 x 0.1 = 5 seconds
         conn.settimeout(0.1)
         # open connection
@@ -176,21 +177,33 @@ def test_bootstrapper_07():
 @mark.parametrize(
     "bind, attempts, raised",
     [
-        # failed to bind (PermissionError)
-        ((PermissionError(10013, "foo"),), 1, LaunchError),
-        # failed to bind (PermissionError) - multiple attempts
-        (repeat(PermissionError(10013, "foo"), 4), 4, LaunchError),
         # failed to bind (OSError)
-        ((OSError(0, "foo"),), 1, OSError),
+        ((OSError(0, "foo1"),), 1, LaunchError),
+        # failed to bind (PermissionError) - multiple attempts
+        (repeat(PermissionError(10013, "foo2"), 4), 4, LaunchError),
     ],
 )
 def test_bootstrapper_08(mocker, bind, attempts, raised):
     """test Bootstrapper() - failures"""
-    fake_sock = mocker.Mock(spec_set=socket)
+    mocker.patch("ffpuppet.bootstrapper.sleep", autospec=True)
+    fake_sock = mocker.MagicMock(spec_set=socket)
     fake_sock.bind.side_effect = bind
     mocker.patch("ffpuppet.bootstrapper.socket.socket", return_value=fake_sock)
     with raises(raised):
         with Bootstrapper(attempts=attempts):
             pass
     assert fake_sock.bind.call_count == attempts
-    assert fake_sock.close.call_count == 1
+    assert fake_sock.close.call_count == attempts
+
+
+def test_bootstrapper_09(mocker):
+    """test Bootstrapper() - blocked ports"""
+    fake_sock = mocker.MagicMock(spec_set=socket)
+    fake_sock.getsockname.side_effect = (
+        (None, Bootstrapper.BLOCKED_PORTS[0]),
+        (None, 12345),
+    )
+    mocker.patch("ffpuppet.bootstrapper.socket.socket", return_value=fake_sock)
+    with Bootstrapper(attempts=2):
+        pass
+    assert fake_sock.close.call_count == 2

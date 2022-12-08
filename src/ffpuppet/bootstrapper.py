@@ -3,10 +3,8 @@
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
 """ffpuppet bootstrapper module"""
 import socket
-from errno import EADDRINUSE
 from logging import getLogger
-from random import sample
-from time import time
+from time import sleep, time
 from typing import Any, Callable, Optional
 
 from .exceptions import BrowserTerminatedError, BrowserTimeoutError, LaunchError
@@ -18,39 +16,58 @@ __all__ = ("Bootstrapper",)
 
 
 class Bootstrapper:  # pylint: disable=missing-docstring
-    BUF_SIZE = 4096  # receive buffer size
-    POLL_WAIT: float = 1  # duration of initial blocking socket operations
-    PORT_MAX = 0xFFFF  # bootstrap range
-    PORT_MIN = 0x3000  # bootstrap range
-    PORT_RETRIES = 100  # number of attempts to find an available port
+    # see: searchfox.org/mozilla-central/source/netwerk/base/nsIOService.cpp
+    # include ports above 1024
+    BLOCKED_PORTS = (
+        1719,
+        1720,
+        1723,
+        2049,
+        3659,
+        4045,
+        5060,
+        5061,
+        6000,
+        6566,
+        6665,
+        6666,
+        6667,
+        6668,
+        6669,
+        6697,
+        10080,
+    )
+    # receive buffer size
+    BUF_SIZE = 4096
+    # duration of initial blocking socket operations
+    POLL_WAIT: float = 1
+    # number of attempts to find an available port
+    PORT_ATTEMPTS = 50
 
     __slots__ = ("_socket",)
 
-    def __init__(self, attempts: int = PORT_RETRIES) -> None:
+    def __init__(self, attempts: int = PORT_ATTEMPTS, port: int = 0) -> None:
         assert attempts > 0
-        assert self.PORT_MAX > self.PORT_MIN
-        assert self.PORT_MAX - self.PORT_MIN >= attempts
-        self._socket: Optional[socket.socket] = socket.socket(
-            socket.AF_INET, socket.SOCK_STREAM
-        )
-        self._socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        self._socket.settimeout(self.POLL_WAIT)
-        # attempt to bind to random ports
-        for port in sample(range(self.PORT_MIN, self.PORT_MAX), k=attempts):
+        assert port >= 0
+        for _ in range(attempts):
+            self._socket: Optional[socket.socket] = socket.socket()
+            self._socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            self._socket.settimeout(self.POLL_WAIT)
             try:
                 self._socket.bind(("127.0.0.1", port))
                 self._socket.listen(5)
             except (OSError, PermissionError) as exc:
-                if exc.errno in (EADDRINUSE, 10013):
-                    # Address already in use
-                    LOG.debug("%s: %s", type(exc).__name__, exc)
-                    continue
-                LOG.error("Failed to bind/listen (port: %d)", port)
+                LOG.debug("%s: %s", type(exc).__name__, exc)
                 self._socket.close()
-                raise
+                sleep(0.1)
+                continue
+            # avoid blocked ports
+            if port == 0 and self._socket.getsockname()[1] in self.BLOCKED_PORTS:
+                LOG.debug("bound to blocked port, retrying...")
+                self._socket.close()
+                continue
             break
         else:
-            self._socket.close()
             raise LaunchError("Could not find available port")
 
     def __enter__(self) -> "Bootstrapper":
