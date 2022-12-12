@@ -149,7 +149,7 @@ def test_minidump_parser_03(tmp_path):
         # minidump-stackwalk is available
         ((0,), True),
         # minidump-stackwalk is not available
-        (OSError, False),
+        (OSError("test"), False),
     ],
 )
 def test_minidump_parser_04(mocker, call_result, result):
@@ -159,24 +159,33 @@ def test_minidump_parser_04(mocker, call_result, result):
 
 
 @mark.parametrize(
-    "mdsw, syms, bad_json",
+    "mdsw, syms, md_json_data, raised",
     [
         # loading minidump files - success
-        (True, True, False),
+        (True, True, ["{}"], False),
         # loading minidump files - JSONDecodeError
-        (True, True, True),
+        (True, True, ["bad,json"], True),
+        # loading minidump files - zero byte minidumps
+        (True, True, ["", "{}", ""], False),
         # symbols_path does not exist
-        (True, False, False),
+        (True, False, ["{}"], False),
         # test minidump-stackwalk not available
-        (False, False, False),
+        (False, False, [], False),
     ],
 )
-def test_process_minidumps_01(mocker, tmp_path, mdsw, syms, bad_json):
+def test_process_minidumps_01(mocker, tmp_path, mdsw, syms, md_json_data, raised):
     """test process_minidumps()"""
     fake_mdp = mocker.patch("ffpuppet.minidump_parser.MinidumpParser", autospec=True)
     fake_mdp.mdsw_available.return_value = mdsw
-    (tmp_path / "minidump.dmp").write_text("bad,json" if bad_json else "{}")
-    fake_mdp.return_value.to_json.return_value = tmp_path / "minidump.dmp"
+
+    to_json_results = []
+    for count, md_data in enumerate(md_json_data):
+        md_file = tmp_path / f"minidump{count:02d}.dmp"
+        md_file.write_text(md_data)
+        if md_data:
+            to_json_results.append(md_file)
+    fake_mdp.return_value.to_json.side_effect = to_json_results
+
     try:
         process_minidumps(
             tmp_path,
@@ -185,10 +194,11 @@ def test_process_minidumps_01(mocker, tmp_path, mdsw, syms, bad_json):
             working_path=str(tmp_path),
         )
     except JSONDecodeError:
-        assert bad_json
+        assert raised
     else:
-        assert not bad_json
+        assert not raised
+
     assert fake_mdp.mdsw_available.call_count == 1
     if mdsw:
         assert fake_mdp.return_value.to_json.call_count == 1
-        assert fake_mdp.return_value.format_output.call_count == (0 if bad_json else 1)
+        assert fake_mdp.return_value.format_output.call_count == (0 if raised else 1)

@@ -203,6 +203,10 @@ def process_minidumps(
     # order by last modified date hopefully the oldest log is the cause of the issue
     dmp_files = sorted(path.glob("*.dmp"), key=lambda x: x.stat().st_mtime)
     for count, file in enumerate(dmp_files):
+        # filter out zero byte files and warn
+        if file.stat().st_size == 0:
+            LOG.warning("Ignored zero byte minidump: %s", file)
+            continue
         try:
             # parse minidump with minidump-stackwalk
             md_json = md_parser.to_json(file, Path(working_path))
