@@ -155,7 +155,7 @@ def test_minidump_parser_03(tmp_path):
 def test_minidump_parser_04(mocker, call_result, result):
     """test MinidumpParser.mdsw_available()"""
     mocker.patch("ffpuppet.minidump_parser.call", side_effect=call_result)
-    assert MinidumpParser.mdsw_available() == result
+    assert MinidumpParser.mdsw_available(force_check=True) == result
 
 
 @mark.parametrize(
