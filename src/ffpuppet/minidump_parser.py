@@ -129,24 +129,33 @@ class MinidumpParser:
         Returns:
             A file containing JSON output.
         """
-        cmd = [self.MDSW_BIN, "--json"]
+        cmd = [self.MDSW_BIN, "--no-color", "--json"]
         if self._symbols_path:
             cmd.extend(["--symbols-path", str(self._symbols_path)])
         else:
             cmd.extend(["--symbols-url", "https://symbols.mozilla.org/"])
         cmd.append(str(src))
-        with NamedTemporaryFile(delete=False, dir=dst, prefix="mdsw_out_") as out_fp:
+        with NamedTemporaryFile(
+            dir=dst, prefix="mdsw_err_", suffix=".txt"
+        ) as err_fp, NamedTemporaryFile(
+            delete=False, dir=dst, prefix="mdsw_out_", suffix=".json"
+        ) as out_fp:
             LOG.debug("running %r", " ".join(cmd))
             try:
-                run(cmd, check=True, stderr=out_fp, stdout=out_fp, timeout=60)
+                run(cmd, check=True, stderr=err_fp, stdout=out_fp, timeout=60)
             except CalledProcessError as exc:
-                raise MinidumpStackwalkFailure(
-                    f"{self.MDSW_BIN!r} returned {exc.returncode!r} processing {src!s}"
-                ) from None
+                LOG.error("Failed to process: %s (%r)", src, exc.returncode)
+                # keep stderr file
+                err_fp.delete = False
+                err_fp.seek(0)
+                # use last line of stderr which should be the error message
+                err_msg: List[bytes] = err_fp.read().strip().splitlines() or [
+                    b"minidump-stackwalk failed"
+                ]
+                raise MinidumpStackwalkFailure(err_msg[-1]) from None
             except TimeoutExpired:
-                raise MinidumpStackwalkFailure(
-                    f"{self.MDSW_BIN!r} hung processing {src!s}"
-                ) from None
+                LOG.error("Failed to process: %s", src)
+                raise MinidumpStackwalkFailure("minidump-stackwalk hung") from None
             return Path(out_fp.name)
 
     @classmethod
