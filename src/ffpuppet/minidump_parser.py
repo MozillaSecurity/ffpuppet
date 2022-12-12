@@ -12,6 +12,8 @@ from typing import IO, Any, Callable, Dict, List, Optional
 
 LOG = getLogger(__name__)
 
+MDSW_AVAILABLE = False
+
 __author__ = "Tyson Smith"
 __all__ = ("process_minidumps",)
 
@@ -159,19 +161,23 @@ class MinidumpParser:
             return Path(out_fp.name)
 
     @classmethod
-    def mdsw_available(cls) -> bool:
-        """Check if MDSW binary is available.
+    def mdsw_available(cls, force_check: bool = False) -> bool:
+        """Check if minidump-stackwalk binary is available.
 
         Args:
-            None
+            force_check: Always perform a check.
 
         Returns:
             True if binary is available otherwise False.
         """
-        try:
-            call([cls.MDSW_BIN], stdout=DEVNULL, stderr=DEVNULL)
-        except OSError:
-            return False
+        global MDSW_AVAILABLE  # pylint: disable=global-statement
+        if not MDSW_AVAILABLE or force_check:
+            try:
+                call([cls.MDSW_BIN], stdout=DEVNULL, stderr=DEVNULL)
+            except OSError:
+                LOG.debug("minidump-stackwalk not available (%s)", cls.MDSW_BIN)
+                return False
+            MDSW_AVAILABLE = True
         return True
 
 
