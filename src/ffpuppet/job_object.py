@@ -4,6 +4,7 @@
 """Windows Job Object management"""
 import ctypes
 import ctypes.wintypes
+from subprocess import Handle  # type: ignore[attr-defined]
 
 JOB_OBJECT_EXTENDED_LIMIT_INFORMATION = 9
 JOB_OBJECT_LIMIT_JOB_MEMORY = 0x200
@@ -55,7 +56,7 @@ class JobObjectExtendedLimitInformation(ctypes.Structure):
     ]
 
 
-def config_job_object(handle: int, limit: int) -> None:
+def config_job_object(handle: Handle, limit: int) -> None:
     """Configure Windows Job object.
 
     Args:
@@ -67,16 +68,18 @@ def config_job_object(handle: int, limit: int) -> None:
     """
     assert limit > 0
     kernel32 = ctypes.windll.kernel32  # type: ignore[attr-defined]
-    job = kernel32.CreateJobObjectA(None, None)
-    assert kernel32.AssignProcessToJobObject(job, handle)
-    info = JobObjectExtendedLimitInformation()
-    info.basic_limit_information.limit_flags = JOB_OBJECT_LIMIT_JOB_MEMORY
-    # pylint: disable=attribute-defined-outside-init
-    info.job_memory_limit = limit
-    assert kernel32.SetInformationJobObject(
-        job,
-        JOB_OBJECT_EXTENDED_LIMIT_INFORMATION,
-        ctypes.byref(info),
-        ctypes.sizeof(info),
-    )
-    kernel32.CloseHandle(job)
+    job = Handle(kernel32.CreateJobObjectA(None, None))
+    try:
+        assert kernel32.AssignProcessToJobObject(job, handle)
+        info = JobObjectExtendedLimitInformation()
+        info.basic_limit_information.limit_flags = JOB_OBJECT_LIMIT_JOB_MEMORY
+        # pylint: disable=attribute-defined-outside-init
+        info.job_memory_limit = limit
+        assert kernel32.SetInformationJobObject(
+            job,
+            JOB_OBJECT_EXTENDED_LIMIT_INFORMATION,
+            ctypes.byref(info),
+            ctypes.sizeof(info),
+        )
+    finally:
+        job.Close()
