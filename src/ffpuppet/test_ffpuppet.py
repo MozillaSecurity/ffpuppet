@@ -1053,3 +1053,17 @@ def test_ffpuppet_35(mocker, tmp_path, bin_exists, expect_exc):
             ffp.launch(TESTFF_BIN)
         assert not ffp.is_healthy()
         assert ffp.launches == 0
+
+
+@mark.skipif(system() != "Windows", reason="Only supported on Windows")
+def test_ffpuppet_36(mocker):
+    """test FFPuppet.launch() config_job_object code path"""
+    fake_bts = mocker.patch("ffpuppet.core.Bootstrapper", autospec=True)
+    fake_bts.return_value.location = ""
+    fake_popen = mocker.patch("ffpuppet.core.Popen", autospec=True)
+    fake_popen.return_value._handle = 123
+    config_job_object = mocker.patch("ffpuppet.core.config_job_object", autospec=True)
+    with FFPuppet() as ffp:
+        ffp.launch(TESTFF_BIN, memory_limit=456)
+    assert config_job_object.call_count == 1
+    assert config_job_object.mock_calls[0] == mocker.call(123, 456)
