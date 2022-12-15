@@ -48,6 +48,10 @@ from .helpers import (
 from .minidump_parser import process_minidumps
 from .puppet_logger import PuppetLogger
 
+if system() == "Windows":
+    # config_job_object is only available on Windows
+    from .job_object import config_job_object
+
 LOG = getLogger(__name__)
 
 __author__ = "Tyson Smith"
@@ -857,6 +861,13 @@ class FFPuppet:
                 stdout=self._logs.get_fp("stdout"),
             )
             LOG.debug("launched process %r", self.get_pid())
+            if memory_limit and is_windows:
+                LOG.debug("configuring job object")
+                # pylint: disable=no-member,protected-access
+                config_job_object(
+                    self._proc._handle,  # type: ignore[attr-defined]
+                    memory_limit,
+                )
             bootstrapper.wait(self.is_healthy, timeout=launch_timeout, url=location)
         except FileNotFoundError as exc:
             if Path(exc.filename).exists():
@@ -891,7 +902,8 @@ class FFPuppet:
                     logs_fp_stdout.name,
                 )
             )
-        if memory_limit:
+        if memory_limit and not is_windows:
+            # memory limit is enforced with config_job_object on Windows
             curr_pid = self.get_pid()
             assert curr_pid is not None
             self._checks.append(CheckMemoryUsage(curr_pid, memory_limit))

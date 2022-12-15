@@ -246,6 +246,7 @@ def test_ffpuppet_07(tmp_path):
         assert ffp.clone_log("stdout", target_file=str(logs)) is None
 
 
+@mark.skipif(system() == "Windows", reason="Unsupported on Windows")
 def test_ffpuppet_08(tmp_path):
     """test hitting memory limit"""
     with FFPuppet() as ffp:
