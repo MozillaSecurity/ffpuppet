@@ -26,7 +26,7 @@ try:
 except ImportError:
     pass
 
-from psutil import AccessDenied, NoSuchProcess, Process, process_iter, wait_procs
+from psutil import AccessDenied, NoSuchProcess, Process, wait_procs
 
 try:
     from xvfbwrapper import Xvfb
@@ -535,9 +535,7 @@ class FFPuppet:
             # create a list of processes that are using the stderr file
             # this *should* only include the browser and the current Python process
             procs = []
-            for _, other_pid, _ in files_in_use(
-                [Path(stderr_fp.name)], process_iter(["pid", "name", "open_files"])
-            ):
+            for _, other_pid, _ in files_in_use([Path(stderr_fp.name)]):
                 # don't include the current Python process in the results
                 if other_pid != getpid():
                     try:

@@ -10,7 +10,6 @@ from pathlib import Path
 from platform import system
 from shutil import rmtree
 
-from psutil import Process as PSProcess
 from pytest import raises
 
 from .helpers import (
@@ -427,12 +426,15 @@ def test_helpers_10(tmp_path):
     """test files_in_use()"""
     t_file = tmp_path / "file.bin"
     t_file.touch()
-    procs = [PSProcess(os.getpid())]
     # test with open file
     with (tmp_path / "file").open("w") as wait_fp:
-        assert any(files_in_use([t_file, Path(wait_fp.name)], procs))
+        assert any(files_in_use([t_file, Path(wait_fp.name)]))
     # existing but closed file
-    assert not any(files_in_use([t_file], procs))
+    assert not any(files_in_use([t_file]))
+    # missing file
+    assert not any(files_in_use([tmp_path / "missing_file"]))
+    # no files
+    assert not any(files_in_use([]))
 
 
 def test_helpers_11(tmp_path):

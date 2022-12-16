@@ -287,35 +287,33 @@ def create_profile(
     return profile
 
 
-def files_in_use(
-    files: Iterable[Path], procs: Iterable[Process]
-) -> Iterator[Tuple[Path, int, str]]:
-    """Check if any of the given files are open by any of the given processes.
+def files_in_use(files: Iterable[Path]) -> Iterator[Tuple[Path, int, str]]:
+    """Check if any of the given files are open.
+    WARNING: This can be slow on Windows.
 
     Args:
         files: Files to check.
-        procs: Processes to scan for open files.
 
     Yields:
         Path of file, process ID and process name.
     """
-    assert isinstance(files, (set, tuple, list))
+    # only check existing file
+    files = tuple(x for x in files if x.exists())
     if files:
-        for proc in procs:
-            try:
-                # WARNING: Process.open_files() has issues on Windows!
-                # https://psutil.readthedocs.io/en/latest/#psutil.Process.open_files
-                for open_file in (Path(x.path) for x in proc.open_files()):
-                    for check_file in files:
-                        try:
-                            if check_file.samefile(open_file):
-                                yield open_file, proc.pid, proc.name()
-                        except OSError:
-                            # samefile() can raise if either file cannot be accessed
-                            # this is triggered on Windows if a file is missing
-                            pass
-            except (AccessDenied, NoSuchProcess):  # pragma: no cover
-                pass
+        for proc in process_iter(["pid", "name", "open_files"]):
+            if not proc.info["open_files"]:
+                continue
+            # WARNING: Process.open_files() has issues on Windows!
+            # https://psutil.readthedocs.io/en/latest/#psutil.Process.open_files
+            for open_file in (Path(x.path) for x in proc.info["open_files"]):
+                for check_file in files:
+                    try:
+                        if check_file.samefile(open_file):
+                            yield open_file, proc.info["pid"], proc.info["name"]
+                    except OSError:
+                        # samefile() can raise if either file cannot be accessed
+                        # this is triggered on Windows if a file is missing
+                        pass
 
 
 def get_processes(pid: int, recursive: bool = True) -> Iterator[Process]:
@@ -474,9 +472,7 @@ def wait_on_files(
     poll_rate = min(poll_rate, timeout)
     deadline = time() + timeout
     while True:
-        open_iter = files_in_use(
-            wait_files, process_iter(["pid", "name", "open_files"])
-        )
+        open_iter = files_in_use(wait_files)
         if deadline <= time():
             LOG.debug("wait_on_files() timeout (%ds)", timeout)
             for entry in open_iter:
@@ -500,7 +496,5 @@ def warn_open(path: str) -> None:
     Returns:
         None
     """
-    for entry in files_in_use(
-        list(Path(path).iterdir()), process_iter(["pid", "name", "open_files"])
-    ):
+    for entry in files_in_use(Path(path).iterdir()):
         LOG.warning("%r open by %r (%d)", str(entry[0]), entry[2], entry[1])

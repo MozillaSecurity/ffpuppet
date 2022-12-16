@@ -120,6 +120,7 @@ def test_ffpuppet_01():
 )
 def test_ffpuppet_02(mocker, exc_type):
     """test launch failures"""
+    mocker.patch("ffpuppet.core.files_in_use", autospec=True)
     mocker.patch("ffpuppet.core.Popen", autospec=True)
     fake_bts = mocker.patch("ffpuppet.core.Bootstrapper", autospec=True)
     fake_bts.return_value.location = ""
@@ -131,8 +132,9 @@ def test_ffpuppet_02(mocker, exc_type):
         assert ffp.launches == 0
 
 
-def test_ffpuppet_03(tmp_path):
+def test_ffpuppet_03(mocker, tmp_path):
     """test logging"""
+    mocker.patch("ffpuppet.core.files_in_use", autospec=True)
     with FFPuppet() as ffp:
         ffp.close()
         ffp.save_logs(str(tmp_path / "no_logs"))
@@ -340,6 +342,7 @@ def test_ffpuppet_12():
 
 def test_ffpuppet_13(mocker):
     """test launching under Xvfb"""
+    mocker.patch("ffpuppet.core.files_in_use", autospec=True)
     mocker.patch("ffpuppet.core.Popen", autospec=True)
     fake_bts = mocker.patch("ffpuppet.core.Bootstrapper", autospec=True)
     fake_bts.return_value.location = "http://test:123"
@@ -369,8 +372,9 @@ def test_ffpuppet_13(mocker):
     assert fake_xvfb.start.call_count == 0
 
 
-def test_ffpuppet_14(tmp_path):
+def test_ffpuppet_14(mocker, tmp_path):
     """test passing a file and a non existing file to launch() via location"""
+    mocker.patch("ffpuppet.core.files_in_use", autospec=True)
     with FFPuppet() as ffp:
         with raises(OSError, match="Cannot find"):
             ffp.launch(TESTFF_BIN, location="missing.file")
@@ -537,8 +541,10 @@ def test_ffpuppet_21(tmp_path):
         )
 
 
-def test_ffpuppet_22(tmp_path):
+def test_ffpuppet_22(mocker, tmp_path):
     """test collecting and cleaning up ASan logs"""
+    mocker.patch("ffpuppet.core.files_in_use", autospec=True)
+    mocker.patch("ffpuppet.core.wait_on_files", autospec=True)
     test_logs = []
     with FFPuppet() as ffp:
         ffp.launch(TESTFF_BIN)
@@ -600,6 +606,8 @@ def test_ffpuppet_22(tmp_path):
 
 def test_ffpuppet_23(mocker, tmp_path):
     """test multiple minidumps"""
+    mocker.patch("ffpuppet.core.files_in_use", autospec=True)
+    mocker.patch("ffpuppet.core.wait_on_files", autospec=True)
 
     # pylint: disable=unused-argument
     def _fake_process_minidumps(dmps, _, add_log, working_path=None):
@@ -920,6 +928,7 @@ def test_ffpuppet_31(mocker):
 
 def test_ffpuppet_32(mocker, tmp_path):
     """test FFPuppet.close() setting reason"""
+    mocker.patch("ffpuppet.core.files_in_use", autospec=True)
 
     class StubbedProc(FFPuppet):
         # pylint: disable=arguments-differ
@@ -1058,6 +1067,7 @@ def test_ffpuppet_35(mocker, tmp_path, bin_exists, expect_exc):
 @mark.skipif(system() != "Windows", reason="Only supported on Windows")
 def test_ffpuppet_36(mocker):
     """test FFPuppet.launch() config_job_object code path"""
+    mocker.patch("ffpuppet.core.files_in_use", autospec=True)
     fake_bts = mocker.patch("ffpuppet.core.Bootstrapper", autospec=True)
     fake_bts.return_value.location = ""
     fake_popen = mocker.patch("ffpuppet.core.Popen", autospec=True)
