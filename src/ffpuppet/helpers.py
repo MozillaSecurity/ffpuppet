@@ -310,7 +310,7 @@ def files_in_use(files: Iterable[Path]) -> Iterator[Tuple[Path, int, str]]:
                     try:
                         if check_file.samefile(open_file):
                             yield open_file, proc.info["pid"], proc.info["name"]
-                    except OSError:
+                    except OSError:  # pragma: no cover
                         # samefile() can raise if either file cannot be accessed
                         # this is triggered on Windows if a file is missing
                         pass
