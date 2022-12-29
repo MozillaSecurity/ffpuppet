@@ -380,18 +380,20 @@ class FFPuppet:
                 "--error-exitcode=99",
                 "--exit-on-first-error=yes",
                 "--expensive-definedness-checks=yes",
-                "--fair-sched=try",
+                "--fair-sched=yes",
                 "--gen-suppressions=all",
                 "--leak-check=no",
                 f"--log-file={valgrind_log_prefix}.%p",
-                "--read-inline-info=no",
+                "--num-transtab-sectors=48",
+                "--read-inline-info=yes",
                 "--show-mismatched-frees=no",
                 "--show-possibly-lost=no",
                 "--smc-check=all-non-file",
                 "--trace-children=yes",
                 "--trace-children-skip=python*,*/lsb_release",
-                "--track-origins=yes",
+                "--track-origins=no",
                 "--vex-iropt-register-updates=allregs-at-mem-access",
+                "--vgdb=no",
             ]
 
             sup_file = getenv("VALGRIND_SUP_PATH")
