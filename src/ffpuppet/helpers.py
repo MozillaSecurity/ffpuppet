@@ -21,6 +21,9 @@ from psutil import AccessDenied, NoSuchProcess, Process, process_iter
 
 from .sanitizer_util import SanitizerOptions
 
+if system() == "Windows":
+    from .lsof import pids_by_file
+
 LOG = getLogger(__name__)
 
 __author__ = "Tyson Smith"
@@ -300,20 +303,32 @@ def files_in_use(files: Iterable[Path]) -> Iterator[Tuple[Path, int, str]]:
     # only check existing file
     files = tuple(x for x in files if x.exists())
     if files:
-        for proc in process_iter(["pid", "name", "open_files"]):
-            if not proc.info["open_files"]:
-                continue
-            # WARNING: Process.open_files() has issues on Windows!
-            # https://psutil.readthedocs.io/en/latest/#psutil.Process.open_files
-            for open_file in (Path(x.path) for x in proc.info["open_files"]):
+        # WARNING: Process.open_files() has issues on Windows!
+        # https://psutil.readthedocs.io/en/latest/#psutil.Process.open_files
+        # use an alternative implementation instead
+        if system() == "Windows":
+            for open_file, pids in pids_by_file().items():
                 for check_file in files:
                     try:
                         if check_file.samefile(open_file):
-                            yield open_file, proc.info["pid"], proc.info["name"]
+                            for pid in pids:
+                                yield open_file, pid, Process(pid).name
                     except OSError:  # pragma: no cover
                         # samefile() can raise if either file cannot be accessed
                         # this is triggered on Windows if a file is missing
                         pass
+        else:
+            for proc in process_iter(["pid", "name", "open_files"]):
+                if not proc.info["open_files"]:
+                    continue
+                for open_file in (Path(x.path) for x in proc.info["open_files"]):
+                    for check_file in files:
+                        try:
+                            if check_file.samefile(open_file):
+                                yield open_file, proc.info["pid"], proc.info["name"]
+                        except OSError:  # pragma: no cover
+                            # samefile() can raise if either file cannot be accessed
+                            pass
 
 
 def get_processes(pid: int, recursive: bool = True) -> Iterator[Process]:
