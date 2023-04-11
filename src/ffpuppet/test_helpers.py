@@ -8,11 +8,14 @@ import os
 from multiprocessing import Event, Process
 from pathlib import Path
 from platform import system
+from subprocess import CalledProcessError
 
-from pytest import raises
+from pytest import mark, raises
 
 from .helpers import (
     _configure_sanitizers,
+    certutil_available,
+    certutil_find,
     files_in_use,
     get_processes,
     prepare_environment,
@@ -265,3 +268,40 @@ def test_helpers_07(tmp_path):
     """test warn_open()"""
     with (tmp_path / "file.bin").open("w") as _:
         warn_open(str(tmp_path))
+
+
+@mark.parametrize(
+    "raised, result",
+    [
+        (None, False),
+        (OSError("test"), False),
+        (CalledProcessError(1, "test"), False),
+        (
+            CalledProcessError(
+                1,
+                "test",
+                output=b"certutil - Utility to manipulate NSS certificate databases",
+            ),
+            True,
+        ),
+    ],
+)
+def test_certutil_available_01(mocker, raised, result):
+    """test certutil_available()"""
+    mocker.patch("ffpuppet.helpers.check_output", autospec=True, side_effect=raised)
+    assert certutil_available("certutil") == result
+
+
+def test_certutil_find_01(tmp_path):
+    """test certutil_find()"""
+    # default
+    assert certutil_find() == "certutil"
+    # missing bundled certutil
+    browser_bin = tmp_path / "browser"
+    browser_bin.touch()
+    assert certutil_find(str(browser_bin)) == "certutil"
+    # found bundled certutil
+    certutil_bin = tmp_path / "bin" / "certutil"
+    certutil_bin.parent.mkdir()
+    certutil_bin.touch()
+    assert certutil_find(str(browser_bin)) == str(certutil_bin)

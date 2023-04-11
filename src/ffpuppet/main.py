@@ -15,6 +15,7 @@ from typing import List, Optional
 
 from .core import Debugger, FFPuppet, Reason
 from .exceptions import BrowserExecutionError
+from .helpers import certutil_available, certutil_find
 from .profile import Profile
 
 LOG = getLogger(__name__)
@@ -95,6 +96,11 @@ def parse_args(argv: Optional[List[str]] = None) -> Namespace:
     )
 
     cfg_group = parser.add_argument_group("Browser Configuration")
+    cfg_group.add_argument(
+        "--certs",
+        nargs="+",
+        help="Install trusted certificates.",
+    )
     cfg_group.add_argument(
         "-e",
         "--extension",
@@ -224,7 +230,13 @@ def parse_args(argv: Optional[List[str]] = None) -> Namespace:
     # sanity checks
     if not isfile(args.binary):
         parser.error(f"Invalid browser binary {args.binary!r}")
-    if args.extension is not None:
+    if args.certs:
+        if not certutil_available(certutil_find(args.binary)):
+            parser.error("'--certs' requires NSS certutil")
+        for cert in args.certs:
+            if not isfile(cert):
+                parser.error(f"Invalid certificate file {cert!r}")
+    if args.extension:
         for ext in args.extension:
             if not exists(ext):
                 parser.error(f"Extension {ext!r} does not exist")
@@ -276,6 +288,7 @@ def main(argv: Optional[List[str]] = None) -> None:  # pylint: disable=missing-d
             memory_limit=args.memory,
             prefs_js=args.prefs,
             extension=args.extension,
+            cert_files=args.certs,
         )
         if args.prefs and isfile(args.prefs):
             assert ffp.profile is not None

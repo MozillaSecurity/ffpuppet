@@ -5,6 +5,7 @@
 """ffpuppet profile tests"""
 
 from shutil import rmtree
+from subprocess import CalledProcessError
 
 from pytest import mark, raises
 
@@ -207,3 +208,40 @@ def test_profile_06(mocker, tmp_path):
     with Profile(working_path=str(tmp_path)) as profile:
         with raises(OSError, match="test"):
             profile.remove(ignore_errors=False)
+
+
+def test_profile_07(mocker, tmp_path):
+    """test Profile with certs"""
+    mocker.patch("ffpuppet.profile.certutil_available", autospec=True)
+    fake_check = mocker.patch("ffpuppet.profile.check_output", autospec=True)
+    working = tmp_path / "working"
+    working.mkdir()
+    cert = tmp_path / "cert"
+    cert.touch()
+    with Profile(cert_files=[str(cert)], working_path=str(working)):
+        assert fake_check.call_count == 2
+
+
+def test_profile_08(mocker, tmp_path):
+    """test Profile missing certutil"""
+    mocker.patch(
+        "ffpuppet.profile.check_output", autospec=True, side_effect=OSError("test")
+    )
+    cert = tmp_path / "cert"
+    cert.touch()
+    with raises(OSError, match="certutil not found"):
+        Profile(cert_files=[str(cert)], working_path=str(tmp_path))
+
+
+def test_profile_09(mocker, tmp_path):
+    """test Profile._install_cert() certutil error"""
+    mocker.patch("ffpuppet.profile.certutil_available", autospec=True)
+    mocker.patch(
+        "ffpuppet.profile.check_output",
+        autospec=True,
+        side_effect=CalledProcessError(1, "test", output=b"error msg"),
+    )
+    cert = tmp_path / "cert"
+    cert.touch()
+    with raises(RuntimeError, match="certutil error"):
+        Profile(cert_files=[str(cert)], working_path=str(tmp_path))

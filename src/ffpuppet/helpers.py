@@ -10,6 +10,7 @@ from os.path import join as pathjoin
 from pathlib import Path
 from platform import system
 from stat import S_IWUSR
+from subprocess import STDOUT, CalledProcessError, check_output
 from time import sleep, time
 from typing import Any, Callable, Dict, Iterable, Iterator, Optional, Tuple
 
@@ -24,6 +25,8 @@ LOG = getLogger(__name__)
 
 __author__ = "Tyson Smith"
 __all__ = (
+    "certutil_available",
+    "certutil_find",
     "files_in_use",
     "get_processes",
     "onerror",
@@ -151,6 +154,47 @@ def _configure_sanitizers(
     env["UBSAN_OPTIONS"] = str(ubsan_config)
 
     return env
+
+
+def certutil_available(certutil: str) -> bool:
+    """Check if NSS certutil is available.
+
+    Args:
+        certutil: certutil location.
+
+    Returns:
+        True if certutil is available for use otherwise False.
+    """
+    try:
+        check_output([certutil], stderr=STDOUT, timeout=10)
+    except CalledProcessError as exc:
+        # there are multiple "certutil" tools and one is installed on Windows by default
+        # check the help output to make sure we have the correct tool
+        if (
+            exc.output
+            and b"Utility to manipulate NSS certificate databases" in exc.output
+        ):
+            return True
+    except OSError as exc:
+        LOG.debug(str(exc))
+    LOG.debug("%r is not suitable for use", certutil)
+    return False
+
+
+def certutil_find(browser_bin: Optional[str] = None) -> str:
+    """Look for NSS certutil in known location or fallback to built-in tool.
+
+    Args:
+        browser_bin: Location of browser binary.
+
+    Returns:
+        Path to certutil tool to use.
+    """
+    if browser_bin:
+        path = Path(browser_bin).parent / "bin" / "certutil"
+        if path.is_file():
+            return str(path)
+    return "certutil"
 
 
 def files_in_use(files: Iterable[Path]) -> Iterator[Tuple[Path, int, str]]:
