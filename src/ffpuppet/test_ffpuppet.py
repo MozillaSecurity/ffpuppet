@@ -10,7 +10,6 @@ from errno import EADDRINUSE
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 from platform import system
-from shutil import rmtree
 from stat import S_IREAD, S_IWRITE
 from subprocess import Popen
 from threading import Thread
@@ -28,6 +27,7 @@ from .exceptions import (
     LaunchError,
     TerminateError,
 )
+from .profile import Profile
 
 Bootstrapper.POLL_WAIT = 0.2
 TESTFF_BIN = str((Path(__file__).parent / "resources" / "testff.py").resolve())
@@ -621,10 +621,10 @@ def test_ffpuppet_23(mocker, tmp_path):
     (profile / "minidumps").mkdir()
     with FFPuppet(use_profile=str(profile)) as ffp:
         ffp.launch(TESTFF_BIN)
-        ffp._bin_path = ffp.profile
+        ffp._bin_path = str(ffp.profile.path)
         assert ffp._bin_path is not None
         # create "test.dmp" files
-        md_path = Path(ffp._bin_path) / "minidumps"
+        md_path = ffp.profile.path / "minidumps"
         (md_path / "test1.dmp").write_text("1a\n1b")
         (md_path / "test2.dmp").write_text("2a\n2b")
         (md_path / "test3.dmp").write_text("3a\n3b")
@@ -673,11 +673,11 @@ def test_ffpuppet_25(tmp_path):
     with FFPuppet() as ffp:
         ffp.launch(TESTFF_BIN)
         assert ffp.profile is not None
-        ro_file = Path(ffp.profile) / "read-only-test.txt"
+        ro_file = ffp.profile.path / "read-only-test.txt"
         ro_file.touch()
         ro_file.chmod(S_IREAD)
         ffp.close()
-        assert not os.path.isfile(ro_file)
+        assert not ro_file.is_file()
         ffp.clean_up()
     # use template profile that contains a readonly file
     profile = tmp_path / "profile"
@@ -688,10 +688,10 @@ def test_ffpuppet_25(tmp_path):
     with FFPuppet(use_profile=str(profile)) as ffp:
         ffp.launch(TESTFF_BIN)
         assert ffp.profile is not None
-        prof_path = ffp.profile
-        assert os.path.isdir(prof_path)
+        prof_path = ffp.profile.path
+        assert prof_path.is_dir()
         ffp.close()
-        assert not os.path.isdir(prof_path)
+        assert not prof_path.is_dir()
 
 
 def test_ffpuppet_26(tmp_path):
@@ -704,10 +704,10 @@ def test_ffpuppet_26(tmp_path):
     ext.chmod(S_IREAD)
     with FFPuppet() as ffp:
         ffp.launch(TESTFF_BIN, extension=str(ext), prefs_js=str(prefs))
-        prof_path = ffp.profile
+        prof_path = ffp.profile.path
         ffp.close()
         assert prof_path is not None
-        assert not os.path.isdir(prof_path)
+        assert not prof_path.is_dir()
 
 
 def test_ffpuppet_27(mocker, tmp_path):
@@ -719,15 +719,12 @@ def test_ffpuppet_27(mocker, tmp_path):
     class StubbedLaunch(FFPuppet):
         # pylint: disable=arguments-differ
         def launch(self):
-            profile = tmp_path / "profile"
-            profile.mkdir()
-            (profile / "minidumps").mkdir()
-            self.profile = str(profile)
+            self.profile = Profile(working_path=tmp_path)
+            (self.profile.path / "minidumps").mkdir()
 
         def close(self, force_close=False):
             assert self.profile is not None
-            if os.path.isdir(self.profile):
-                rmtree(self.profile)
+            self.profile.remove()
             self.profile = None
 
     is_linux = system() == "Linux"
@@ -759,9 +756,9 @@ def test_ffpuppet_27(mocker, tmp_path):
         (Path(ffp._logs.working_path) / "junk.log").write_text("test\n")
         # valid minidump
         assert ffp.profile is not None
-        (Path(ffp.profile) / "minidumps" / "test.dmp").write_text("test\n")
+        (ffp.profile.path / "minidumps" / "test.dmp").write_text("test\n")
         # nothing interesting
-        (Path(ffp.profile) / "minidumps" / "test.junk").write_text("\n")
+        (ffp.profile.path / "minidumps" / "test.junk").write_text("\n")
         assert not ffp._logs.watching
         assert len(list(ffp._crashreports())) == (3 if is_linux else 2)
         assert ffp._logs.watching
@@ -941,7 +938,7 @@ def test_ffpuppet_32(mocker, tmp_path):
             self._proc.poll.return_value = None
             profile = tmp_path / "profile"
             profile.mkdir(exist_ok=True)
-            self.profile = str(profile)
+            self.profile = Profile(working_path=profile)
 
         @staticmethod
         def _terminate(_procs, _retry_delay=0, _use_kill=False):
