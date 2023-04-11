@@ -7,12 +7,13 @@ from json import load as json_load
 from logging import getLogger
 from pathlib import Path
 from shutil import copyfile, copytree, rmtree
+from subprocess import STDOUT, CalledProcessError, check_output
 from tempfile import mkdtemp
 from time import time
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 from xml.etree import ElementTree
 
-from .helpers import onerror
+from .helpers import certutil_available, certutil_find, onerror
 
 LOG = getLogger(__name__)
 
@@ -29,11 +30,16 @@ class Profile:
 
     def __init__(
         self,
+        browser_bin: Optional[str] = None,
+        cert_files: Optional[List[str]] = None,
         extension: Optional[str] = None,
         prefs_file: Optional[str] = None,
         template: Optional[str] = None,
         working_path: Optional[str] = None,
     ) -> None:
+        if cert_files and not certutil_available(certutil_find(browser_bin)):
+            raise OSError("NSS certutil not found")
+
         self.path: Optional[Path] = Path(mkdtemp(dir=working_path, prefix="ffprofile_"))
         try:
             if template is not None:
@@ -42,8 +48,11 @@ class Profile:
                 self._copy_prefs_file(prefs_file)
             if extension is not None:
                 self._copy_extensions(extension)
-        except (OSError, RuntimeError):
-            rmtree(self.path)
+            if cert_files:
+                for cert in cert_files:
+                    self._install_cert(cert, certutil_find(browser_bin))
+        except Exception:
+            rmtree(self.path, onerror=onerror)
             raise
 
     def __enter__(self) -> "Profile":
@@ -119,6 +128,43 @@ class Profile:
         # if Invalidprefs.js was copied from the template profile remove it
         if invalid_prefs.is_file():
             invalid_prefs.unlink()
+
+    def _install_cert(self, cert_file: str, certutil: str) -> None:
+        assert self.path
+        LOG.debug("installing certificate %r with %r", cert_file, certutil)
+        try:
+            # create certificate database if needed
+            if not (self.path / "cert9.db").exists():
+                check_output(
+                    [
+                        certutil,
+                        "-N",
+                        "-d",
+                        str(self.path),
+                        "--empty-password",
+                    ],
+                    stderr=STDOUT,
+                    timeout=10,
+                )
+            check_output(
+                [
+                    certutil,
+                    "-A",
+                    "-d",
+                    str(self.path),
+                    "-t",
+                    "CT,,",
+                    "-n",
+                    "test cert",
+                    "-i",
+                    cert_file,
+                ],
+                stderr=STDOUT,
+                timeout=10,
+            )
+        except CalledProcessError as exc:
+            LOG.error(exc.output.decode().strip())
+            raise RuntimeError("certutil error") from None
 
     def add_prefs(self, prefs: Dict[str, str]) -> None:
         """Write or append preferences from prefs to prefs.js file in profile_path.

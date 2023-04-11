@@ -733,6 +733,7 @@ class FFPuppet:
         memory_limit: int = 0,
         prefs_js: Optional[str] = None,
         extension: Optional[str] = None,
+        cert_files: Optional[List[str]] = None,
     ) -> None:
         """Launch a new browser process.
 
@@ -792,6 +793,8 @@ class FFPuppet:
 
         # create a profile
         self.profile = Profile(
+            browser_bin=bin_path,
+            cert_files=cert_files,
             extension=extension,
             prefs_file=prefs_js,
             template=self._profile_template,

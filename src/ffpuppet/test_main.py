@@ -58,8 +58,9 @@ def test_main_01(mocker, tmp_path, reason, launch, is_healthy, extra_args):
     assert fake_ffp.return_value.clean_up.call_count == 1
 
 
-def test_parse_args_01(tmp_path):
+def test_parse_args_01(mocker, tmp_path):
     """test parse_args()"""
+    certutil_avail = mocker.patch("ffpuppet.main.certutil_available", autospec=True)
     with raises(SystemExit):
         parse_args(["-h"])
     # invalid/missing binary
@@ -79,6 +80,14 @@ def test_parse_args_01(tmp_path):
     # missing extension
     with raises(SystemExit):
         parse_args([str(fake_bin), "-e", str(tmp_path / "missing")])
+    # missing certificate
+    certutil_avail.return_value = True
+    with raises(SystemExit):
+        parse_args([str(fake_bin), "--cert", str(tmp_path / "missing")])
+    # missing certutil
+    certutil_avail.return_value = False
+    with raises(SystemExit):
+        parse_args([str(fake_bin), "--cert", str(fake_bin)])
     # multiple debuggers
     with raises(SystemExit):
         parse_args([str(fake_bin), "--gdb", "--valgrind"])
