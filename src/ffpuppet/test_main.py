@@ -9,6 +9,7 @@ from pytest import mark, raises
 from .core import Reason
 from .exceptions import BrowserExecutionError
 from .main import dump_to_console, main, parse_args
+from .profile import Profile
 
 
 @mark.parametrize(
@@ -35,7 +36,7 @@ def test_main_01(mocker, tmp_path, reason, launch, is_healthy, extra_args):
     fake_ffp.return_value.get_pid.return_value = 12345
     fake_ffp.return_value.is_healthy.side_effect = is_healthy
     fake_ffp.return_value.launch.side_effect = launch
-    fake_ffp.return_value.profile = str(tmp_path)
+    fake_ffp.return_value.profile = mocker.Mock(spec_set=Profile, path=tmp_path)
     fake_ffp.return_value.reason = reason
     out_logs = tmp_path / "logs"
     out_logs.mkdir()

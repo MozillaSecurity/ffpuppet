@@ -7,7 +7,6 @@ from argparse import ArgumentParser, Namespace
 from logging import DEBUG, ERROR, INFO, WARNING, basicConfig, getLogger
 from os import scandir
 from os.path import abspath, exists, isdir, isfile
-from os.path import join as pathjoin
 from platform import system
 from shutil import rmtree
 from tempfile import mkdtemp
@@ -16,7 +15,7 @@ from typing import List, Optional
 
 from .core import Debugger, FFPuppet, Reason
 from .exceptions import BrowserExecutionError
-from .helpers import check_prefs
+from .profile import Profile
 
 LOG = getLogger(__name__)
 
@@ -280,7 +279,8 @@ def main(argv: Optional[List[str]] = None) -> None:  # pylint: disable=missing-d
         )
         if args.prefs and isfile(args.prefs):
             assert ffp.profile is not None
-            check_prefs(pathjoin(ffp.profile, "prefs.js"), args.prefs)
+            assert ffp.profile.path is not None
+            Profile.check_prefs(str(ffp.profile.path / "prefs.js"), args.prefs)
         LOG.info("Running Firefox (pid: %d)...", ffp.get_pid())
         while ffp.is_healthy():
             sleep(args.poll_interval)

@@ -14,7 +14,6 @@ from platform import system
 from re import IGNORECASE
 from re import compile as re_compile
 from re import match as re_match
-from shutil import rmtree
 from subprocess import Popen, check_output
 from sys import executable
 from typing import Any, Dict, Iterator, List, Optional, Pattern, Set, Tuple, Union
@@ -36,16 +35,9 @@ except ImportError:
 from .bootstrapper import Bootstrapper
 from .checks import CheckLogContents, CheckLogSize, CheckMemoryUsage
 from .exceptions import BrowserExecutionError, InvalidPrefs, LaunchError, TerminateError
-from .helpers import (
-    append_prefs,
-    create_profile,
-    files_in_use,
-    get_processes,
-    onerror,
-    prepare_environment,
-    wait_on_files,
-)
+from .helpers import files_in_use, get_processes, prepare_environment, wait_on_files
 from .minidump_parser import process_minidumps
+from .profile import Profile
 from .puppet_logger import PuppetLogger
 
 if system() == "Windows":
@@ -135,7 +127,7 @@ class FFPuppet:
         self._profile_template = use_profile  # profile that is used as a template
         self._xvfb = None
         self._working_path = working_path
-        self.profile: Optional[str] = None  # path to profile
+        self.profile: Optional[Profile] = None
         self.reason: Optional[Reason] = Reason.CLOSED
 
         if use_xvfb:
@@ -237,7 +229,8 @@ class FFPuppet:
         # scan for minidump files
         if not skip_md:
             assert self.profile is not None
-            for entry in (Path(self.profile) / "minidumps").glob("*.dmp"):
+            assert self.profile.path is not None
+            for entry in (self.profile.path / "minidumps").glob("*.dmp"):
                 yield entry.resolve()
 
     @classmethod
@@ -364,7 +357,7 @@ class FFPuppet:
         if self._headless == "default":
             cmd.append("-headless")
         if self.profile is not None:
-            cmd += ["-profile", self.profile]
+            cmd += ["-profile", str(self.profile)]
 
         if additional_args:
             cmd.extend(additional_args)
@@ -625,9 +618,10 @@ class FFPuppet:
                 for log_path in self._crashreports(skip_md=True, skip_benign=False):
                     self._logs.add_log(log_path.name, log_path.open("rb"))
                 assert self.profile is not None
+                assert self.profile.path is not None
                 assert self._bin_path is not None
                 # check for minidumps and process them if possible
-                md_path = Path(self.profile) / "minidumps"
+                md_path = self.profile.path / "minidumps"
                 if any(md_path.glob("*.dmp")):
                     # check for local build symbols
                     sym_path = Path(self._bin_path) / ".." / "crashreporter-symbols"
@@ -651,16 +645,9 @@ class FFPuppet:
             self._proc = None
             self._logs.close()
             self._checks = []
-            # remove temporary profile directory if necessary
-            try:
-                assert self.profile is not None
-                rmtree(self.profile, onerror=onerror)
-            except OSError:  # pragma: no cover
-                LOG.error("Failed to remove profile %r", self.profile)
-                if not force_close:
-                    raise
-            finally:
-                self.profile = None
+            assert self.profile
+            self.profile.remove(ignore_errors=force_close)
+            self.profile = None
         finally:
             LOG.debug("reason code: %s", r_code.name)
             self.reason = r_code
@@ -803,14 +790,14 @@ class FFPuppet:
         if self._headless == "xvfb":
             env_mod["MOZ_ENABLE_WAYLAND"] = "0"
 
-        # create and modify a profile
-        self.profile = create_profile(
+        # create a profile
+        self.profile = Profile(
             extension=extension,
-            prefs_js=prefs_js,
+            prefs_file=prefs_js,
             template=self._profile_template,
             working_path=self._working_path,
         )
-        LOG.debug("using profile %r", self.profile)
+        LOG.debug("using profile '%s'", self.profile)
 
         # performing the bootstrap helps guarantee that the browser
         # will be loaded and ready to accept input when launch() returns
@@ -828,7 +815,7 @@ class FFPuppet:
                 "network.proxy.failover_direct": "false",
                 "privacy.partition.network_state": "false",
             }
-            append_prefs(self.profile, prefs)
+            self.profile.add_prefs(prefs)
 
             launch_args = [bootstrapper.location]
             is_windows = system().startswith("Windows")
@@ -879,16 +866,13 @@ class FFPuppet:
             if self._proc is None:
                 # only clean up here if a launch was not attempted or Popen failed
                 LOG.debug("process not launched")
-                rmtree(self.profile, ignore_errors=True)
+                self.profile.remove()
                 self.profile = None
                 self.reason = Reason.CLOSED
             bootstrapper.close()
-            if (
-                prefs_js
-                and self.profile
-                and isfile(pathjoin(self.profile, "Invalidprefs.js"))
-            ):
-                raise InvalidPrefs(f"{prefs_js!r} is invalid")
+
+        if prefs_js and self.profile.invalid_prefs:
+            raise InvalidPrefs(f"{prefs_js!r} is invalid")
 
         logs_fp_stderr = self._logs.get_fp("stderr")
         assert logs_fp_stderr is not None

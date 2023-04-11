@@ -8,15 +8,11 @@ import os
 from multiprocessing import Event, Process
 from pathlib import Path
 from platform import system
-from shutil import rmtree
 
 from pytest import raises
 
 from .helpers import (
     _configure_sanitizers,
-    append_prefs,
-    check_prefs,
-    create_profile,
     files_in_use,
     get_processes,
     prepare_environment,
@@ -27,165 +23,6 @@ from .sanitizer_util import SanitizerOptions
 
 
 def test_helpers_01(tmp_path):
-    """test create_profile()"""
-    # try creating a profile from scratch
-    # does nothing but create a directory to be populated
-    (tmp_path / "dst1").mkdir()
-    prof = create_profile(working_path=str(tmp_path / "dst1"))
-    assert os.path.isdir(prof)
-    assert not os.listdir(prof)
-    # try creating a profile from a template profile
-    (tmp_path / "profile").mkdir()
-    invalid_js = tmp_path / "profile" / "Invalidprefs.js"
-    invalid_js.write_bytes(b"blah!")
-    (tmp_path / "dst2").mkdir()
-    prof = create_profile(
-        prefs_js=str(invalid_js),
-        template=str(tmp_path / "profile"),
-        working_path=str(tmp_path / "dst2"),
-    )
-    assert os.path.isdir(prof)
-    contents = os.listdir(prof)
-    assert "prefs.js" in contents
-    assert "times.json" in contents
-    assert "Invalidprefs.js" not in contents
-    # cleanup on failure
-    (tmp_path / "dst3").mkdir()
-    with raises(OSError):
-        create_profile(prefs_js="fake", working_path=str(tmp_path / "dst3"))
-    assert not any((tmp_path / "dst3").iterdir())
-
-
-def test_helpers_02(tmp_path):
-    """test check_prefs()"""
-    dummy_prefs = tmp_path / "dummy.js"
-    dummy_prefs.write_text(
-        "// comment line\n"
-        "# comment line\n"
-        " \n\n"
-        'user_pref("a.a", 0);\n'
-        'user_pref("a.b", "test");\n'
-        'user_pref("a.c", true);\n'
-    )
-    custom_prefs = tmp_path / "custom.js"
-    custom_prefs.write_text(
-        "// comment line\n"
-        "# comment line\n"
-        "/* comment block.\n"
-        "*\n"
-        " \n\n"
-        'user_pref("a.a", 0); // test comment\n'
-        'user_pref("a.c", true);\n'
-    )
-    assert check_prefs(str(dummy_prefs), str(custom_prefs))
-    # test detecting missing prefs
-    custom_prefs.write_text('user_pref("a.a", 0);\nuser_pref("b.a", false);\n')
-    assert not check_prefs(str(dummy_prefs), str(custom_prefs))
-
-
-def test_helpers_03(mocker, tmp_path):
-    """test create_profile() extension support"""
-    mocker.patch(
-        "ffpuppet.helpers.mkdtemp", autospec=True, return_value=str(tmp_path / "dst")
-    )
-    # create a profile with a non-existent ext
-    (tmp_path / "dst").mkdir()
-    with raises(RuntimeError, match="Unknown extension: 'fake_ext'"):
-        create_profile(extension="fake_ext")
-    assert not (tmp_path / "dst").is_dir()
-    # create a profile with an xpi ext
-    (tmp_path / "dst").mkdir()
-    xpi = tmp_path / "xpi-ext.xpi"
-    xpi.touch()
-    prof = create_profile(extension=str(xpi))
-    assert "extensions" in os.listdir(prof)
-    assert "xpi-ext.xpi" in os.listdir(os.path.join(prof, "extensions"))
-    rmtree(tmp_path / "dst")
-    # create a profile with an unknown ext
-    (tmp_path / "dst").mkdir()
-    dummy_ext = tmp_path / "dummy_ext"
-    dummy_ext.mkdir()
-    with raises(
-        RuntimeError, match=r"Failed to find extension id in manifest: '.+?dummy_ext'"
-    ):
-        create_profile(extension=str(dummy_ext))
-    assert not (tmp_path / "dst").is_dir()
-    # create a profile with a bad legacy ext
-    (tmp_path / "dst").mkdir()
-    bad_legacy = tmp_path / "bad_legacy"
-    bad_legacy.mkdir()
-    (bad_legacy / "install.rdf").touch()
-    with raises(
-        RuntimeError, match=r"Failed to find extension id in manifest: '.+?bad_legacy'"
-    ):
-        create_profile(extension=str(bad_legacy))
-    assert not (tmp_path / "dst").is_dir()
-    # create a profile with a good legacy ext
-    (tmp_path / "dst").mkdir()
-    good_legacy = tmp_path / "good_legacy"
-    good_legacy.mkdir()
-    (good_legacy / "install.rdf").write_text(
-        '<?xml version="1.0"?>'
-        '<RDF xmlns="http://www.w3.org/1999/02/22-rdf-syntax-ns#"\n'
-        '     xmlns:em="http://www.mozilla.org/2004/em-rdf#">\n'
-        '  <Description about="urn:mozilla:install-manifest">\n'
-        "    <em:id>good-ext-id</em:id>\n"
-        "  </Description>\n"
-        "</RDF>"
-    )
-    (good_legacy / "example.js").touch()
-    prof = create_profile(extension=str(good_legacy))
-    assert "extensions" in os.listdir(prof)
-    assert "good-ext-id" in os.listdir(os.path.join(prof, "extensions"))
-    assert set(os.listdir(os.path.join(prof, "extensions", "good-ext-id"))) == {
-        "install.rdf",
-        "example.js",
-    }
-    rmtree(tmp_path / "dst")
-    # create a profile with a bad webext
-    (tmp_path / "dst").mkdir()
-    bad_webext = tmp_path / "bad_webext"
-    bad_webext.mkdir()
-    (bad_webext / "manifest.json").touch()
-    with raises(
-        RuntimeError, match=r"Failed to find extension id in manifest: '.+?bad_webext'"
-    ):
-        create_profile(extension=str(bad_webext))
-    assert not (tmp_path / "dst").is_dir()
-    # create a profile with a good webext
-    (tmp_path / "dst").mkdir()
-    good_webext = tmp_path / "good_webext"
-    good_webext.mkdir()
-    (good_webext / "manifest.json").write_bytes(
-        b"""{"applications": {"gecko": {"id": "good-webext-id"}}}"""
-    )
-    (good_webext / "example.js").touch()
-    prof = create_profile(extension=str(good_webext))
-    assert "extensions" in os.listdir(prof)
-    ext_path = os.path.join(prof, "extensions")
-    assert "good-webext-id" in os.listdir(ext_path)
-    assert set(os.listdir(os.path.join(ext_path, "good-webext-id"))) == {
-        "manifest.json",
-        "example.js",
-    }
-    rmtree(tmp_path / "dst")
-    # create a profile with multiple extensions
-    (tmp_path / "dst").mkdir()
-    prof = create_profile(extension=[str(good_webext), str(good_legacy)])
-    assert "extensions" in os.listdir(prof)
-    ext_path = os.path.join(prof, "extensions")
-    assert set(os.listdir(ext_path)) == {"good-ext-id", "good-webext-id"}
-    assert set(os.listdir(os.path.join(ext_path, "good-webext-id"))) == {
-        "manifest.json",
-        "example.js",
-    }
-    assert set(os.listdir(os.path.join(ext_path, "good-ext-id"))) == {
-        "install.rdf",
-        "example.js",
-    }
-
-
-def test_helpers_04(tmp_path):
     """test _configure_sanitizers()"""
 
     def parse(opt_str):
@@ -308,7 +145,7 @@ def test_helpers_04(tmp_path):
     assert asan_opts["external_symbolizer_path"].strip("'") == str(llvm_sym_b)
 
 
-def test_helpers_05():
+def test_helpers_02():
     """test prepare_environment()"""
     env = prepare_environment("", "blah")
     assert "ASAN_OPTIONS" in env
@@ -318,7 +155,7 @@ def test_helpers_05():
     assert "MOZ_CRASHREPORTER" in env
 
 
-def test_helpers_06(mocker):
+def test_helpers_03(mocker):
     """test prepare_environment() using some predefined environment variables"""
     mocker.patch.dict(
         "ffpuppet.helpers.environ",
@@ -360,7 +197,7 @@ def test_helpers_06(mocker):
     assert "MOZ_CRASHREPORTER" not in env
 
 
-def test_helpers_07(mocker, tmp_path):
+def test_helpers_04(mocker, tmp_path):
     """test wait_on_files()"""
     fake_sleep = mocker.patch("ffpuppet.helpers.sleep", autospec=True)
     fake_time = mocker.patch("ffpuppet.helpers.time", autospec=True)
@@ -393,7 +230,7 @@ def _dummy_process(is_alive, is_done):
     is_done.wait(30)
 
 
-def test_helpers_08():
+def test_helpers_05():
     """test get_processes()"""
     assert len(list(get_processes(os.getpid(), recursive=False))) == 1
     assert not any(get_processes(0xFFFFFF))
@@ -409,20 +246,7 @@ def test_helpers_08():
     proc.join()
 
 
-def test_helpers_09(tmp_path):
-    """test append_prefs()"""
-    prefs = tmp_path / "prefs.js"
-    prefs.write_bytes(b"user_pref('pre.existing', 1);")
-    append_prefs(str(tmp_path), {"test.enabled": "true", "foo": "'a1b2c3'"})
-    prefs.is_file()
-    data = prefs.read_text().splitlines()
-    assert len(data) == 3
-    assert "user_pref('pre.existing', 1);" in data
-    assert "user_pref('test.enabled', true);" in data
-    assert "user_pref('foo', 'a1b2c3');" in data
-
-
-def test_helpers_10(tmp_path):
+def test_helpers_06(tmp_path):
     """test files_in_use()"""
     t_file = tmp_path / "file.bin"
     t_file.touch()
@@ -437,7 +261,7 @@ def test_helpers_10(tmp_path):
     assert not any(files_in_use([]))
 
 
-def test_helpers_11(tmp_path):
+def test_helpers_07(tmp_path):
     """test warn_open()"""
     with (tmp_path / "file.bin").open("w") as _:
         warn_open(str(tmp_path))
