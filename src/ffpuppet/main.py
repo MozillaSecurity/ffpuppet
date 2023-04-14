@@ -4,6 +4,7 @@
 """ffpuppet main.py"""
 
 from argparse import ArgumentParser, Namespace
+from importlib.metadata import PackageNotFoundError, version
 from logging import DEBUG, ERROR, INFO, WARNING, basicConfig, getLogger
 from os import scandir
 from os.path import abspath, exists, isdir, isfile
@@ -21,6 +22,11 @@ from .profile import Profile
 LOG = getLogger(__name__)
 
 __author__ = "Tyson Smith"
+try:
+    __version__ = version("ffpuppet")
+except PackageNotFoundError:  # pragma: no cover
+    # package is not installed
+    __version__ = "unknown"
 
 
 def dump_to_console(log_dir: str, log_quota: int = 0x8000) -> str:
@@ -93,6 +99,13 @@ def parse_args(argv: Optional[List[str]] = None) -> Namespace:
         choices=sorted(log_level_map),
         default="INFO",
         help="Configure console logging (default: %(default)s)",
+    )
+    parser.add_argument(
+        "--version",
+        "-V",
+        action="version",
+        version=__version__,
+        help="Show version number",
     )
 
     cfg_group = parser.add_argument_group("Browser Configuration")
