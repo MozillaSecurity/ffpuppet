@@ -84,8 +84,9 @@ def parse_args(argv: Optional[List[str]] = None) -> Namespace:
     log_level_map = {"ERROR": ERROR, "WARN": WARNING, "INFO": INFO, "DEBUG": DEBUG}
 
     parser = ArgumentParser(
+        prog="ffpuppet",
         description="FFPuppet - Firefox process launcher and log collector. "
-        "Happy bug hunting!"
+        "Happy bug hunting!",
     )
     parser.add_argument("binary", help="Firefox binary to launch")
     parser.add_argument(
@@ -104,7 +105,7 @@ def parse_args(argv: Optional[List[str]] = None) -> Namespace:
         "--version",
         "-V",
         action="version",
-        version=__version__,
+        version=f"%(prog)s {__version__}",
         help="Show version number",
     )
 
