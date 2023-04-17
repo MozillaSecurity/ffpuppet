@@ -122,11 +122,11 @@ def test_parse_args_02(mocker, tmp_path):
 def test_dump_to_console_01(tmp_path):
     """test dump_to_console()"""
     # call with no logs
-    assert not dump_to_console(str(tmp_path))
+    assert not dump_to_console(tmp_path)
     # call with dummy logs
     (tmp_path / "log_stderr.txt").write_bytes(b"dummy-stderr")
     (tmp_path / "log_stdout.txt").write_bytes(b"dummy-stdout")
-    output = dump_to_console(str(tmp_path))
+    output = dump_to_console(tmp_path)
     assert "Dumping 'log_stderr.txt'" in output
     assert "dummy-stderr" in output
     assert "Dumping 'log_stdout.txt'" in output
@@ -136,7 +136,7 @@ def test_dump_to_console_01(tmp_path):
         log_fp.write(b"dummy-stdout")
         for _ in range(1024):
             log_fp.write(b"test")
-    output = dump_to_console(str(tmp_path), log_quota=100)
+    output = dump_to_console(tmp_path, log_quota=100)
     assert "Dumping 'log_stderr.txt'" in output
     assert "dummy-stderr" in output
     assert "Dumping 'log_stdout.txt'" in output

@@ -6,8 +6,8 @@
 from argparse import ArgumentParser, Namespace
 from importlib.metadata import PackageNotFoundError, version
 from logging import DEBUG, ERROR, INFO, WARNING, basicConfig, getLogger
-from os import scandir
-from os.path import abspath, exists, isdir, isfile
+from os.path import exists, isdir, isfile
+from pathlib import Path
 from platform import system
 from shutil import rmtree
 from tempfile import mkdtemp
@@ -29,7 +29,7 @@ except PackageNotFoundError:  # pragma: no cover
     __version__ = "unknown"
 
 
-def dump_to_console(log_dir: str, log_quota: int = 0x8000) -> str:
+def dump_to_console(log_dir: Path, log_quota: int = 0x8000) -> str:
     """Read and merge log files and format for output on the console.
 
     Args:
@@ -40,7 +40,7 @@ def dump_to_console(log_dir: str, log_quota: int = 0x8000) -> str:
         Merged log data to be displayed on the console.
     """
 
-    logs = list(x for x in scandir(log_dir) if x.is_file())
+    logs = list(x for x in log_dir.iterdir() if x.is_file())
     if not logs:
         return ""
     # display stdout and stderr last to avoid the need to scroll back
@@ -61,7 +61,7 @@ def dump_to_console(log_dir: str, log_quota: int = 0x8000) -> str:
         fsize = log.stat().st_size
         lines.append("\n===\n")
         lines.append(f"=== Dumping {log.name!r} ({fsize / 1024.0:0.2f}KB)")
-        with open(log.path, "rb") as log_fp:
+        with log.open("rb") as log_fp:
             # tail log if needed
             log_fp.seek(max(fsize - log_quota, 0))
             if log_fp.tell() > 0:
@@ -323,12 +323,12 @@ def main(argv: Optional[List[str]] = None) -> None:  # pylint: disable=missing-d
             LOG.info("Firefox process is closed. (Reason: %s)", ffp.reason.name)
         else:
             LOG.error("FFPuppet.close() failed")
-        log_path = mkdtemp(prefix=strftime("%Y%m%d-%H%M%S_ffp_logs_"), dir=args.logs)
-        ffp.save_logs(log_path, logs_only=user_exit)
+        logs = Path(mkdtemp(prefix=strftime("%Y%m%d-%H%M%S_ffp_logs_"), dir=args.logs))
+        ffp.save_logs(str(logs), logs_only=user_exit)
         if args.display_logs:
-            LOG.info("Displaying logs...%s", dump_to_console(log_path))
+            LOG.info("Displaying logs...%s", dump_to_console(logs))
         if ffp.reason == Reason.ALERT or args.save_all:
-            LOG.info("Browser logs available here %r", abspath(log_path))
+            LOG.info("Browser logs available here '%s'", logs.resolve())
         else:
-            rmtree(log_path)
+            rmtree(logs)
         ffp.clean_up()
