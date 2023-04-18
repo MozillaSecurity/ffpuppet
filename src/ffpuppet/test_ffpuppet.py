@@ -30,7 +30,7 @@ from .exceptions import (
 from .profile import Profile
 
 Bootstrapper.POLL_WAIT = 0.2
-TESTFF_BIN = str((Path(__file__).parent / "resources" / "testff.py").resolve())
+TESTFF_BIN = Path(__file__).parent / "resources" / "testff.py"
 
 
 class ReqHandler(BaseHTTPRequestHandler):
@@ -83,7 +83,7 @@ def test_ffpuppet_00(tmp_path):
     """test that invalid executables raise the right exception"""
     with FFPuppet() as ffp:
         with raises(OSError, match="is not an executable"):
-            ffp.launch(str(tmp_path))
+            ffp.launch(tmp_path)
 
 
 def test_ffpuppet_01():
@@ -137,11 +137,11 @@ def test_ffpuppet_03(mocker, tmp_path):
     mocker.patch("ffpuppet.core.files_in_use", autospec=True)
     with FFPuppet() as ffp:
         ffp.close()
-        ffp.save_logs(str(tmp_path / "no_logs"))
+        ffp.save_logs(tmp_path / "no_logs")
         prefs = tmp_path / "prefs.js"
         prefs.write_bytes(b"//fftest_exit_code_0\n")
         with HTTPTestServer() as srv:
-            ffp.launch(TESTFF_BIN, location=srv.get_addr(), prefs_js=str(prefs))
+            ffp.launch(TESTFF_BIN, location=srv.get_addr(), prefs_js=prefs)
             ffp.wait(timeout=10)
             ffp.close()
         assert ffp._logs.closed
@@ -150,7 +150,7 @@ def test_ffpuppet_03(mocker, tmp_path):
         assert "stderr" in log_ids
         assert "stdout" in log_ids
         logs = tmp_path / "logs"  # nonexistent directory
-        ffp.save_logs(str(logs), meta=True)
+        ffp.save_logs(logs, meta=True)
         assert logs.is_dir()
         assert len(tuple(logs.iterdir())) == 3
         log_data = (logs / "log_stderr.txt").read_text()
@@ -227,10 +227,10 @@ def test_ffpuppet_07(tmp_path):
             ffp.launch(TESTFF_BIN, location=srv.get_addr())
             ffp.wait(timeout=0.25)  # wait for log prints
             # make sure logs are available
-            assert ffp.clone_log("stdout", target_file=str(logs)) == str(logs)
+            assert ffp.clone_log("stdout", target_file=str(logs)) == logs
             orig = logs.read_text()
             assert len(orig) > 5
-            assert ffp.clone_log("stdout", target_file=str(logs), offset=5) == str(logs)
+            assert ffp.clone_log("stdout", target_file=str(logs), offset=5) == logs
             assert logs.read_text() == orig[5:]
             # grab log without giving a target file name
             rnd_log = ffp.clone_log("stdout")
@@ -238,7 +238,7 @@ def test_ffpuppet_07(tmp_path):
             try:
                 ffp.close()
                 # make sure logs are available
-                assert ffp.clone_log("stdout", target_file=str(logs)) == str(logs)
+                assert ffp.clone_log("stdout", target_file=str(logs)) == logs
                 assert logs.read_text().startswith(orig)
             finally:
                 if os.path.isfile(rnd_log):
@@ -259,7 +259,7 @@ def test_ffpuppet_08(tmp_path):
             ffp.launch(
                 TESTFF_BIN,
                 location=srv.get_addr(),
-                prefs_js=str(prefs),
+                prefs_js=prefs,
                 memory_limit=0x100000,
             )
             for _ in range(100):
@@ -270,7 +270,7 @@ def test_ffpuppet_08(tmp_path):
         assert ffp.reason == Reason.WORKER
         assert len(ffp.available_logs()) == 3
         logs = tmp_path / "logs"
-        ffp.save_logs(str(logs))
+        ffp.save_logs(logs)
     worker_log = logs / "log_ffp_worker_memory_usage.txt"
     assert worker_log.is_file()
     assert "MEMORY_LIMIT_EXCEEDED" in worker_log.read_text()
@@ -301,7 +301,7 @@ def test_ffpuppet_10(tmp_path):
         ffp.add_abort_token("simple_string")
         ffp.add_abort_token(r"ASSERTION:\s\w+")
         with HTTPTestServer() as srv:
-            ffp.launch(TESTFF_BIN, location=srv.get_addr(), prefs_js=str(prefs))
+            ffp.launch(TESTFF_BIN, location=srv.get_addr(), prefs_js=prefs)
             for _ in range(200):
                 if not ffp.is_healthy():
                     break
@@ -310,7 +310,7 @@ def test_ffpuppet_10(tmp_path):
         assert ffp.reason == Reason.WORKER
         assert len(ffp.available_logs()) == 3
         logs = tmp_path / "logs"
-        ffp.save_logs(str(logs))
+        ffp.save_logs(logs)
         worker_log = logs / "log_ffp_worker_log_contents.txt"
         assert worker_log.is_file()
         assert b"TOKEN_LOCATED: ASSERTION: test" in worker_log.read_bytes()
@@ -320,7 +320,7 @@ def test_ffpuppet_11(tmp_path):
     """test using an existing profile directory"""
     prf_dir = tmp_path / "ffp_test_prof"
     prf_dir.mkdir()
-    with FFPuppet(use_profile=str(prf_dir)) as ffp:
+    with FFPuppet(use_profile=prf_dir) as ffp:
         ffp.launch(TESTFF_BIN)
     assert prf_dir.is_dir()
 
@@ -385,11 +385,11 @@ def test_ffpuppet_14(mocker, tmp_path):
         test_file.write_bytes(b"test")
         # needs realpath() for OSX & normcase() for Windows
         fname = os.path.normcase(os.path.realpath(str(test_file)))
-        ffp.launch(TESTFF_BIN, location=fname, prefs_js=str(prefs))
+        ffp.launch(TESTFF_BIN, location=fname, prefs_js=prefs)
         ffp.wait(timeout=10)
         ffp.close()
         logs = tmp_path / "logs"
-        ffp.save_logs(str(logs))
+        ffp.save_logs(logs)
         with (logs / "log_stdout.txt").open("r") as log_fp:
             assert "url: 'file:///" in log_fp.read()
             log_fp.seek(0)
@@ -423,7 +423,7 @@ def test_ffpuppet_15(mocker, tmp_path):
         ffp.close()
         assert ffp.reason == Reason.CLOSED
         logs = tmp_path / "logs"
-        ffp.save_logs(str(logs))
+        ffp.save_logs(logs)
     log_data = (logs / "log_stderr.txt").read_bytes()
     # verify launch command was correct
     assert b"gdb" in log_data
@@ -436,7 +436,7 @@ def test_ffpuppet_16(tmp_path):
         with HTTPTestServer() as srv:
             ffp.launch(TESTFF_BIN, location=srv.get_addr())
             with raises(AssertionError):
-                ffp.save_logs(str(tmp_path / "logs"))
+                ffp.save_logs(tmp_path / "logs")
 
 
 def test_ffpuppet_17(mocker, tmp_path):
@@ -461,7 +461,7 @@ def test_ffpuppet_17(mocker, tmp_path):
         ffp.close()
         assert ffp.reason == Reason.CLOSED
         logs = tmp_path / "logs"
-        ffp.save_logs(str(logs))
+        ffp.save_logs(logs)
     log_data = (logs / "log_stderr.txt").read_bytes()
     # verify launch command was correct
     assert b"valgrind -q" in log_data
@@ -475,7 +475,7 @@ def test_ffpuppet_18(tmp_path):
     with FFPuppet() as ffp:
         with HTTPTestServer() as srv:
             with raises(LaunchError, match="'.+?' is invalid"):
-                ffp.launch(TESTFF_BIN, location=srv.get_addr(), prefs_js=str(prefs))
+                ffp.launch(TESTFF_BIN, location=srv.get_addr(), prefs_js=prefs)
 
 
 def test_ffpuppet_19():
@@ -523,7 +523,7 @@ def test_ffpuppet_21(tmp_path):
     prefs.write_bytes(b"//fftest_big_log\n")
     with FFPuppet() as ffp:
         limit = 0x100000  # 1MB
-        ffp.launch(TESTFF_BIN, prefs_js=str(prefs), log_limit=limit)
+        ffp.launch(TESTFF_BIN, prefs_js=prefs, log_limit=limit)
         for _ in range(100):
             if not ffp.is_healthy():
                 break
@@ -531,7 +531,7 @@ def test_ffpuppet_21(tmp_path):
         ffp.close()
         assert ffp.reason == Reason.WORKER
         logs = tmp_path / "logs"
-        ffp.save_logs(str(logs))
+        ffp.save_logs(logs)
         logfiles = tuple(logs.iterdir())
         assert len(logfiles) == 3
         assert sum(x.stat().st_size for x in logfiles) > limit
@@ -548,20 +548,19 @@ def test_ffpuppet_22(mocker, tmp_path):
     test_logs = []
     with FFPuppet() as ffp:
         ffp.launch(TESTFF_BIN)
-        assert ffp._logs.working_path is not None
-        asan_prefix = os.path.join(ffp._logs.working_path, ffp._logs.PREFIX_SAN)
+        assert ffp._logs.path is not None
         for i in range(4):
-            test_logs.append(".".join([asan_prefix, str(i)]))
+            test_logs.append(Path(f"{ffp._logs.path / ffp._logs.PREFIX_SAN}.{i}"))
         # ignore benign ASan warning
-        with open(test_logs[0], "w") as log_fp:
+        with test_logs[0].open("w") as log_fp:
             log_fp.write("==123==WARNING: Symbolizer buffer too small")
         assert ffp.is_healthy()
         # small log with nothing interesting
-        with open(test_logs[1], "w") as log_fp:
+        with test_logs[1].open("w") as log_fp:
             log_fp.write("SHORT LOG\n")
             log_fp.write("filler line")
         # crash on another thread
-        with open(test_logs[2], "w") as log_fp:
+        with test_logs[2].open("w") as log_fp:
             log_fp.write("GOOD LOG\n")
             log_fp.write(
                 "==70811==ERROR: AddressSanitizer:"
@@ -571,7 +570,7 @@ def test_ffpuppet_22(mocker, tmp_path):
             for _ in range(4):  # pad out to 6 lines
                 log_fp.write("filler line\n")
         # child log that should be ignored (created when parent crashes)
-        with open(test_logs[3], "w") as log_fp:
+        with test_logs[3].open("w") as log_fp:
             log_fp.write("BAD LOG\n")
             log_fp.write(
                 "==70811==ERROR: AddressSanitizer:"
@@ -587,7 +586,7 @@ def test_ffpuppet_22(mocker, tmp_path):
         ffp.close()
         assert ffp.reason == Reason.ALERT
         logs = tmp_path / "logs"
-        ffp.save_logs(str(logs))
+        ffp.save_logs(logs)
         logfiles = tuple(logs.iterdir())
         assert len(logfiles) == 6
         for logfile in logfiles:
@@ -601,7 +600,7 @@ def test_ffpuppet_22(mocker, tmp_path):
                     "SHORT LOG\n",
                     "==123==WARNING: Symbolizer buffer too small",
                 )
-    assert not any(os.path.isfile(f) for f in test_logs)
+    assert not any(f.is_file() for f in test_logs)
 
 
 def test_ffpuppet_23(mocker, tmp_path):
@@ -619,9 +618,9 @@ def test_ffpuppet_23(mocker, tmp_path):
     profile = tmp_path / "profile"
     profile.mkdir()
     (profile / "minidumps").mkdir()
-    with FFPuppet(use_profile=str(profile)) as ffp:
+    with FFPuppet(use_profile=profile) as ffp:
         ffp.launch(TESTFF_BIN)
-        ffp._bin_path = str(ffp.profile.path)
+        ffp._bin_path = ffp.profile.path
         assert ffp._bin_path is not None
         # create "test.dmp" files
         md_path = ffp.profile.path / "minidumps"
@@ -633,7 +632,7 @@ def test_ffpuppet_23(mocker, tmp_path):
         Process(ffp.get_pid()).terminate()
         ffp.close()
         logs = tmp_path / "logs"
-        ffp.save_logs(str(logs))
+        ffp.save_logs(logs)
         assert any(logs.glob("log_minidump_01.txt"))
         assert any(logs.glob("log_minidump_02.txt"))
         assert any(logs.glob("log_minidump_03.txt"))
@@ -659,7 +658,7 @@ def test_ffpuppet_24(mocker, tmp_path):
         ffp.close()
         assert ffp.reason == Reason.CLOSED
         logs = tmp_path / "logs"
-        ffp.save_logs(str(logs))
+        ffp.save_logs(logs)
     log_data = (logs / "log_stderr.txt").read_bytes()
     # verify launch command was correct
     assert b"rr record" in log_data
@@ -685,7 +684,7 @@ def test_ffpuppet_25(tmp_path):
     ro_file = profile / "read-only.txt"
     ro_file.touch()
     ro_file.chmod(S_IREAD)
-    with FFPuppet(use_profile=str(profile)) as ffp:
+    with FFPuppet(use_profile=profile) as ffp:
         ffp.launch(TESTFF_BIN)
         assert ffp.profile is not None
         prof_path = ffp.profile.path
@@ -703,7 +702,7 @@ def test_ffpuppet_26(tmp_path):
     ext.touch()
     ext.chmod(S_IREAD)
     with FFPuppet() as ffp:
-        ffp.launch(TESTFF_BIN, extension=str(ext), prefs_js=str(prefs))
+        ffp.launch(TESTFF_BIN, extension=[ext], prefs_js=prefs)
         prof_path = ffp.profile.path
         ffp.close()
         assert prof_path is not None
@@ -735,8 +734,8 @@ def test_ffpuppet_27(mocker, tmp_path):
         ffp.launch()
         assert not any(ffp._crashreports())
         # benign sanitizer warnings
-        assert ffp._logs.working_path is not None
-        ign_log = Path(ffp._logs.working_path) / (f"{ffp._logs.PREFIX_SAN}.1")
+        assert ffp._logs.path is not None
+        ign_log = ffp._logs.path / f"{ffp._logs.PREFIX_SAN}.1"
         ign_log.write_text(
             "==123==WARNING: Symbolizer buffer too small\n\n"
             "==123==WARNING: Symbolizer buffer too small\n\n"
@@ -745,15 +744,15 @@ def test_ffpuppet_27(mocker, tmp_path):
         )
         assert any(ffp._crashreports(skip_benign=False))
         # valid sanitizer log
-        san_log = Path(ffp._logs.working_path) / (f"{ffp._logs.PREFIX_SAN}.2")
+        san_log = ffp._logs.path / f"{ffp._logs.PREFIX_SAN}.2"
         san_log.write_text("test\n")
         # valid Valgrind log - with error
-        vg1_log = Path(ffp._logs.working_path) / (f"{ffp._logs.PREFIX_VALGRIND}.1")
+        vg1_log = ffp._logs.path / f"{ffp._logs.PREFIX_VALGRIND}.1"
         vg1_log.write_text("test\n")
         # valid Valgrind log - without error
-        (Path(ffp._logs.working_path) / (f"{ffp._logs.PREFIX_VALGRIND}.2")).touch()
+        (ffp._logs.path / f"{ffp._logs.PREFIX_VALGRIND}.2").touch()
         # nothing interesting
-        (Path(ffp._logs.working_path) / "junk.log").write_text("test\n")
+        (ffp._logs.path / "junk.log").write_text("test\n")
         # valid minidump
         assert ffp.profile is not None
         (ffp.profile.path / "minidumps" / "test.dmp").write_text("test\n")
@@ -931,7 +930,7 @@ def test_ffpuppet_32(mocker, tmp_path):
         # pylint: disable=arguments-differ
         def launch(self):
             self.reason = None
-            self._bin_path = str(tmp_path)
+            self._bin_path = tmp_path
             self._logs.reset()
             self._logs.add_log("stderr")
             self._proc = mocker.Mock(spec=Popen, pid=123)
@@ -1015,8 +1014,8 @@ def test_ffpuppet_33():
     """test ignoring benign sanitizer logs"""
     with FFPuppet() as ffp:
         ffp.launch(TESTFF_BIN)
-        assert ffp._logs.working_path is not None
-        san_log = f"{os.path.join(ffp._logs.working_path, ffp._logs.PREFIX_SAN)}.1"
+        assert ffp._logs.path is not None
+        san_log = f"{ffp._logs.path / ffp._logs.PREFIX_SAN}.1"
         assert not ffp._logs.watching
         # ignore benign ASan warning
         with open(san_log, "w") as log_fp:
@@ -1050,7 +1049,7 @@ def test_ffpuppet_35(mocker, tmp_path, bin_exists, expect_exc):
     if bin_exists:
         bin_fake.touch()
     exc = FileNotFoundError()
-    exc.filename = str(bin_fake)
+    exc.filename = bin_fake
     mocker.patch("ffpuppet.core.Popen", autospec=True, side_effect=exc)
     fake_bts = mocker.patch("ffpuppet.core.Bootstrapper", autospec=True)
     fake_bts.return_value.location = ""

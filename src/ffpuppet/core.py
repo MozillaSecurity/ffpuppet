@@ -6,9 +6,7 @@
 from enum import Enum, unique
 from logging import getLogger
 from os import X_OK, access, getenv, getpid
-from os.path import abspath, dirname, isfile
-from os.path import join as pathjoin
-from os.path import realpath
+from os.path import isfile, realpath
 from pathlib import Path
 from platform import system
 from re import IGNORECASE
@@ -110,13 +108,13 @@ class FFPuppet:
         self,
         debugger: Debugger = Debugger.NONE,
         headless: Optional[str] = None,
-        use_profile: Optional[str] = None,
+        use_profile: Optional[Path] = None,
         use_xvfb: bool = False,
         working_path: Optional[str] = None,
     ):
         # tokens used to notify log scanner to kill the browser process
         self._abort_tokens: Set[Pattern[str]] = set()
-        self._bin_path: Optional[str] = None
+        self._bin_path: Optional[Path] = None
         self._checks: List[Union[CheckLogContents, CheckLogSize, CheckMemoryUsage]] = []
         self._dbg = debugger
         self._dbg_sanity_check(self._dbg)
@@ -124,7 +122,7 @@ class FFPuppet:
         self._launches = 0  # number of successful browser launches
         self._logs = PuppetLogger(base_path=working_path)
         self._proc: Optional["Popen[bytes]"] = None
-        self._profile_template = use_profile  # profile that is used as a template
+        self._profile_template = use_profile
         self._xvfb = None
         self._working_path = working_path
         self.profile: Optional[Profile] = None
@@ -214,16 +212,15 @@ class FFPuppet:
         Yields:
             Log on the filesystem.
         """
-        assert self._logs.working_path is not None
-        log_path = Path(self._logs.working_path)
+        assert self._logs.path is not None
         # scan for sanitizer logs
-        for entry in log_path.glob(f"{self._logs.PREFIX_SAN}*"):
+        for entry in self._logs.path.glob(f"{self._logs.PREFIX_SAN}*"):
             if skip_benign and self._benign_sanitizer_report(entry):
                 continue
             yield entry.resolve()
         # scan for Valgrind logs
         if self._dbg == Debugger.VALGRIND:
-            for entry in log_path.glob(f"{self._logs.PREFIX_VALGRIND}*"):
+            for entry in self._logs.path.glob(f"{self._logs.PREFIX_VALGRIND}*"):
                 if entry.stat().st_size:
                     yield entry.resolve()
         # scan for minidump files
@@ -363,10 +360,7 @@ class FFPuppet:
             cmd.extend(additional_args)
 
         if self._dbg == Debugger.VALGRIND:
-            assert self._logs.working_path is not None
-            valgrind_log_prefix = pathjoin(
-                self._logs.working_path, self._logs.PREFIX_VALGRIND
-            )
+            assert self._logs.path is not None
             valgrind_cmd = [
                 "valgrind",
                 "-q",
@@ -376,7 +370,7 @@ class FFPuppet:
                 "--fair-sched=yes",
                 "--gen-suppressions=all",
                 "--leak-check=no",
-                f"--log-file={valgrind_log_prefix}.%p",
+                f"--log-file={self._logs.path / self._logs.PREFIX_VALGRIND}.%p",
                 "--num-transtab-sectors=48",
                 "--read-inline-info=yes",
                 "--show-mismatched-frees=no",
@@ -403,7 +397,7 @@ class FFPuppet:
                 "gdb",
                 "-nx",
                 "-x",
-                abspath(pathjoin(dirname(__file__), "cmds.gdb")),
+                str((Path(__file__).parent / "cmds.gdb").resolve()),
                 "-ex",
                 "run",
                 "-ex",
@@ -486,9 +480,9 @@ class FFPuppet:
     def clone_log(
         self,
         log_id: str,
-        offset: Optional[int] = None,
+        offset: int = 0,
         target_file: Optional[str] = None,
-    ) -> Optional[str]:
+    ) -> Optional[Path]:
         """Create a copy of the selected browser log.
 
         Args:
@@ -497,7 +491,7 @@ class FFPuppet:
             target_file: The log contents will be saved to target_file.
 
         Returns:
-            Name of the file containing the cloned log or None on failure.
+            Cloned log file or None on failure.
         """
         return self._logs.clone_log(log_id, offset=offset, target_file=target_file)
 
@@ -624,10 +618,10 @@ class FFPuppet:
                 md_path = self.profile.path / "minidumps"
                 if any(md_path.glob("*.dmp")):
                     # check for local build symbols
-                    sym_path = Path(self._bin_path) / ".." / "crashreporter-symbols"
+                    sym_path = self._bin_path.parent / "crashreporter-symbols"
                     if not sym_path.is_dir():
                         # use packaged symbols
-                        sym_path = Path(self._bin_path) / "symbols"
+                        sym_path = self._bin_path / "symbols"
                     process_minidumps(
                         md_path,
                         sym_path,
@@ -725,20 +719,20 @@ class FFPuppet:
 
     def launch(
         self,
-        bin_path: str,
+        bin_path: Path,
         env_mod: Optional[Dict[str, Optional[str]]] = None,
         launch_timeout: int = 300,
         location: Optional[str] = None,
         log_limit: int = 0,
         memory_limit: int = 0,
-        prefs_js: Optional[str] = None,
-        extension: Optional[str] = None,
-        cert_files: Optional[List[str]] = None,
+        prefs_js: Optional[Path] = None,
+        extension: Optional[List[Path]] = None,
+        cert_files: Optional[List[Path]] = None,
     ) -> None:
         """Launch a new browser process.
 
         Args:
-            bin_path: Path to the Firefox binary.
+            bin_path: Firefox binary.
             env_mod: Environment modifier. Add, remove and update entries
                      in the prepared environment. Add and update by
                      setting value (str) and remove by setting entry value to None.
@@ -748,8 +742,8 @@ class FFPuppet:
                        terminated if the log file exceeds the amount specified.
             memory_limit: Memory limit in bytes. Browser will be terminated
                           if its memory usage exceeds the amount specified.
-            prefs_js: Path to a prefs.js file to install in the Firefox profile.
-            extension: Path to an extension (or list of extension) to be installed.
+            prefs_js: prefs.js file to install in the Firefox profile.
+            extension: List of extensions to be installed.
 
         Returns:
             None
@@ -760,11 +754,10 @@ class FFPuppet:
         if self._proc is not None:
             raise LaunchError("Process is already running")
 
-        bin_path = abspath(bin_path)
-        if not isfile(bin_path) or not access(bin_path, X_OK):
-            raise OSError(f"{bin_path} is not an executable")
+        if not bin_path.is_file() or not access(bin_path, X_OK):
+            raise OSError(f"{bin_path.resolve()} is not an executable")
         # need the path to help find symbols
-        self._bin_path = dirname(bin_path)
+        self._bin_path = bin_path.parent
 
         LOG.debug("requested location: %r", location)
         if location is not None:
@@ -777,13 +770,12 @@ class FFPuppet:
 
         # clean up existing log files
         self._logs.reset()
-        assert self._logs.working_path is not None
-        sanitizer_logs = pathjoin(self._logs.working_path, self._logs.PREFIX_SAN)
+        assert self._logs.path is not None
 
         # process environment
         env_mod = env_mod or {}
         if self._dbg in (Debugger.PERNOSCO, Debugger.RR):
-            env_mod["_RR_TRACE_DIR"] = self._logs.add_path(self._logs.PATH_RR)
+            env_mod["_RR_TRACE_DIR"] = str(self._logs.add_path(self._logs.PATH_RR))
         elif self._dbg == Debugger.VALGRIND:
             # https://developer.gimp.org/api/2.0/glib/glib-running.html#G_DEBUG
             env_mod["G_DEBUG"] = "gc-friendly"
@@ -795,7 +787,7 @@ class FFPuppet:
         self.profile = Profile(
             browser_bin=bin_path,
             cert_files=cert_files,
-            extension=extension,
+            extensions=extension,
             prefs_file=prefs_js,
             template=self._profile_template,
             working_path=self._working_path,
@@ -826,7 +818,7 @@ class FFPuppet:
                 # disable launcher process
                 launch_args.append("-no-deelevate")
                 launch_args.append("-wait-for-browser")
-            cmd = self.build_launch_cmd(bin_path, additional_args=launch_args)
+            cmd = self.build_launch_cmd(str(bin_path), additional_args=launch_args)
 
             # open logs
             self._logs.add_log("stdout")
@@ -844,7 +836,9 @@ class FFPuppet:
                 bufsize=0,  # unbuffered (for log scanners)
                 creationflags=CREATE_NEW_PROCESS_GROUP if is_windows else 0,
                 env=prepare_environment(
-                    self._bin_path, sanitizer_logs, env_mod=env_mod
+                    self._bin_path,
+                    self._logs.path / self._logs.PREFIX_SAN,
+                    env_mod=env_mod,
                 ),
                 shell=False,
                 stderr=stderr,
@@ -875,7 +869,7 @@ class FFPuppet:
             bootstrapper.close()
 
         if prefs_js and self.profile.invalid_prefs:
-            raise InvalidPrefs(f"{prefs_js!r} is invalid")
+            raise InvalidPrefs(f"'{prefs_js}' is invalid")
 
         logs_fp_stderr = self._logs.get_fp("stderr")
         assert logs_fp_stderr is not None
@@ -931,21 +925,21 @@ class FFPuppet:
         """
         return self._logs.log_length(log_id)
 
-    def save_logs(self, dest: str, logs_only: bool = False, meta: bool = False) -> None:
+    def save_logs(
+        self, dest: Path, logs_only: bool = False, meta: bool = False
+    ) -> None:
         """The browser logs will be saved to dest. This can only be called
         after close().
 
         Args:
-            dest: Destination path for log data. Existing files will
-                        be overwritten.
-            logs_only: Do not include other data such as debugger
-                              output files.
+            dest: Destination path for log data. Existing files will be overwritten.
+            logs_only: Do not include other data such as debugger output files.
             meta: Output JSON file containing log file meta data.
 
         Returns:
             None
         """
-        LOG.debug("save_logs(%r, logs_only=%r, meta=%r)", dest, logs_only, meta)
+        LOG.debug("save_logs('%s', logs_only=%r, meta=%r)", dest, logs_only, meta)
         assert self._launches > -1, "clean_up() has been called"
         assert self._logs.closed, "Logs are still in use. Call close() first!"
         self._logs.save_logs(

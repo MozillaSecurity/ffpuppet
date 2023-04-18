@@ -82,14 +82,14 @@ def test_profile_04(mocker, tmp_path):
     )
     # create a profile with a non-existent ext
     (tmp_path / "dst").mkdir()
-    with raises(RuntimeError, match="Unknown extension: 'fake_ext'"):
-        Profile(extension="fake_ext")
+    with raises(RuntimeError, match=r"Unknown extension: '.+?fake_ext'"):
+        Profile(extensions=[tmp_path / "fake_ext"])
     assert not (tmp_path / "dst").is_dir()
     # create a profile with an xpi ext
     (tmp_path / "dst").mkdir()
     xpi = tmp_path / "xpi-ext.xpi"
     xpi.touch()
-    with Profile(extension=str(xpi)) as prof:
+    with Profile(extensions=[xpi]) as prof:
         assert any(prof.path.glob("extensions"))
         assert (prof.path / "extensions" / "xpi-ext.xpi").is_file()
         rmtree(tmp_path / "dst")
@@ -100,7 +100,7 @@ def test_profile_04(mocker, tmp_path):
     with raises(
         RuntimeError, match=r"Failed to find extension id in manifest: '.+?dummy_ext'"
     ):
-        Profile(extension=str(dummy_ext))
+        Profile(extensions=[dummy_ext])
     assert not (tmp_path / "dst").is_dir()
     # create a profile with a bad legacy ext
     (tmp_path / "dst").mkdir()
@@ -110,7 +110,7 @@ def test_profile_04(mocker, tmp_path):
     with raises(
         RuntimeError, match=r"Failed to find extension id in manifest: '.+?bad_legacy'"
     ):
-        Profile(extension=str(bad_legacy))
+        Profile(extensions=[bad_legacy])
     assert not (tmp_path / "dst").is_dir()
     # create a profile with a good legacy ext
     (tmp_path / "dst").mkdir()
@@ -126,7 +126,7 @@ def test_profile_04(mocker, tmp_path):
         "</RDF>"
     )
     (good_legacy / "example.js").touch()
-    with Profile(extension=str(good_legacy)) as prof:
+    with Profile(extensions=[good_legacy]) as prof:
         assert any(prof.path.glob("extensions"))
         ext_path = prof.path / "extensions" / "good-ext-id"
         assert (ext_path / "install.rdf").is_file()
@@ -140,7 +140,7 @@ def test_profile_04(mocker, tmp_path):
     with raises(
         RuntimeError, match=r"Failed to find extension id in manifest: '.+?bad_webext'"
     ):
-        Profile(extension=str(bad_webext))
+        Profile(extensions=[bad_webext])
     assert not (tmp_path / "dst").is_dir()
     # create a profile with a good webext
     (tmp_path / "dst").mkdir()
@@ -150,7 +150,7 @@ def test_profile_04(mocker, tmp_path):
         b"""{"applications": {"gecko": {"id": "good-webext-id"}}}"""
     )
     (good_webext / "example.js").touch()
-    with Profile(extension=str(good_webext)) as prof:
+    with Profile(extensions=[good_webext]) as prof:
         assert any(prof.path.glob("extensions"))
         ext_path = prof.path / "extensions" / "good-webext-id"
         assert ext_path.is_dir()
@@ -159,7 +159,7 @@ def test_profile_04(mocker, tmp_path):
         rmtree(tmp_path / "dst")
     # create a profile with multiple extensions
     (tmp_path / "dst").mkdir()
-    with Profile(extension=[str(good_webext), str(good_legacy)]) as prof:
+    with Profile(extensions=[good_webext, good_legacy]) as prof:
         assert any(prof.path.glob("extensions"))
         ext_path = prof.path / "extensions"
         assert ext_path.is_dir()
@@ -194,10 +194,10 @@ def test_profile_05(tmp_path):
         'user_pref("a.a", 0); // test comment\n'
         'user_pref("a.c", true);\n'
     )
-    assert Profile.check_prefs(str(dummy_prefs), str(custom_prefs))
+    assert Profile.check_prefs(dummy_prefs, custom_prefs)
     # test detecting missing prefs
     custom_prefs.write_text('user_pref("a.a", 0);\nuser_pref("b.a", false);\n')
-    assert not Profile.check_prefs(str(dummy_prefs), str(custom_prefs))
+    assert not Profile.check_prefs(dummy_prefs, custom_prefs)
 
 
 def test_profile_06(mocker, tmp_path):
@@ -218,7 +218,7 @@ def test_profile_07(mocker, tmp_path):
     working.mkdir()
     cert = tmp_path / "cert"
     cert.touch()
-    with Profile(cert_files=[str(cert)], working_path=str(working)):
+    with Profile(cert_files=[cert], working_path=str(working)):
         assert fake_check.call_count == 2
 
 
@@ -230,7 +230,7 @@ def test_profile_08(mocker, tmp_path):
     cert = tmp_path / "cert"
     cert.touch()
     with raises(OSError, match="certutil not found"):
-        Profile(cert_files=[str(cert)], working_path=str(tmp_path))
+        Profile(cert_files=[cert], working_path=str(tmp_path))
 
 
 def test_profile_09(mocker, tmp_path):
@@ -244,4 +244,4 @@ def test_profile_09(mocker, tmp_path):
     cert = tmp_path / "cert"
     cert.touch()
     with raises(RuntimeError, match="certutil error"):
-        Profile(cert_files=[str(cert)], working_path=str(tmp_path))
+        Profile(cert_files=[cert], working_path=str(tmp_path))

@@ -6,7 +6,6 @@
 from logging import getLogger
 from os import W_OK, access, chmod, environ
 from os.path import isfile
-from os.path import join as pathjoin
 from pathlib import Path
 from platform import system
 from stat import S_IWUSR
@@ -21,6 +20,7 @@ from .sanitizer_util import SanitizerOptions
 if system() == "Windows":
     from .lsof import pids_by_file
 
+LLVM_SYMBOLIZER = "llvm-symbolizer.exe" if system() == "Windows" else "llvm-symbolizer"
 LOG = getLogger(__name__)
 
 __author__ = "Tyson Smith"
@@ -37,7 +37,7 @@ __all__ = (
 
 
 def _configure_sanitizers(
-    orig_env: Dict[str, str], target_dir: str, log_path: str
+    orig_env: Dict[str, str], target_path: Path, log_path: Path
 ) -> Dict[str, str]:
     """Copy environment and update default values in *SAN_OPTIONS entries.
     These values are only updated if they are not provided, with the exception of
@@ -45,7 +45,7 @@ def _configure_sanitizers(
 
     Args:
         env: Current environment.
-        target_dir: Directory containing browser binary.
+        target_path: Directory containing browser binary.
         log_path: Location to write sanitizer logs to.
 
     Returns:
@@ -66,19 +66,13 @@ def _configure_sanitizers(
     ]
     # set llvm-symbolizer path
     # *SAN_OPTIONS=external_symbolizer_path takes priority if it is defined in env
-    llvm_sym = env.get("ASAN_SYMBOLIZER_PATH")
-    if not llvm_sym:
-        # use packaged llvm-symbolizer
-        llvm_sym = pathjoin(
-            target_dir,
-            "llvm-symbolizer.exe" if system() == "Windows" else "llvm-symbolizer",
-        )
+    llvm_sym = env.get("ASAN_SYMBOLIZER_PATH", str(target_path / LLVM_SYMBOLIZER))
     if isfile(llvm_sym):
         # add *SAN_OPTIONS=external_symbolizer_path
         common_flags.append(("external_symbolizer_path", f"'{llvm_sym}'"))
     else:
         # assume system llvm-symbolizer will be used
-        LOG.debug("llvm-symbolizer not found (%s)", llvm_sym)
+        LOG.debug("external llvm-symbolizer not found (%s)", llvm_sym)
 
     # setup Address Sanitizer options ONLY if not set manually in environment
     # https://github.com/google/sanitizers/wiki/AddressSanitizerFlags
@@ -181,7 +175,7 @@ def certutil_available(certutil: str) -> bool:
     return False
 
 
-def certutil_find(browser_bin: Optional[str] = None) -> str:
+def certutil_find(browser_bin: Optional[Path] = None) -> str:
     """Look for NSS certutil in known location or fallback to built-in tool.
 
     Args:
@@ -191,7 +185,7 @@ def certutil_find(browser_bin: Optional[str] = None) -> str:
         Path to certutil tool to use.
     """
     if browser_bin:
-        path = Path(browser_bin).parent / "bin" / "certutil"
+        path = browser_bin.parent / "bin" / "certutil"
         if path.is_file():
             return str(path)
     return "certutil"
@@ -244,8 +238,7 @@ def get_processes(pid: int, recursive: bool = True) -> Iterator[Process]:
 
     Args:
         pid: PID of the process to lookup.
-        recursive: Include the children (and so on) of the Process
-                          that was created.
+        recursive: Include the children (and so on) of the Process that was created.
 
     Yields:
         psutil.Process objects. The first object will always be the Process that
@@ -287,16 +280,16 @@ def onerror(
 
 
 def prepare_environment(
-    target_dir: str,
-    sanitizer_log: str,
+    target_path: Path,
+    sanitizer_log: Path,
     env_mod: Optional[Dict[str, Optional[str]]] = None,
 ) -> Dict[str, str]:
     """Create environment that can be used when launching the browser.
 
     Args:
-        target_dir: Path to the directory containing the Firefox binary.
+        target_path: Directory containing the Firefox binary.
         sanitizer_log: Location to write sanitizer logs. Log prefix set
-                             with ASAN_OPTIONS=log_path=<sanitizer_log>.
+                       with ASAN_OPTIONS=log_path=<sanitizer_log>.
         env_mod (dict): Environment modifier. Add, remove and update entries
                         in the prepared environment. Add and update by setting
                         value (str) and remove by setting entry value to None.
@@ -368,7 +361,7 @@ def prepare_environment(
         env.pop("MOZ_CRASHREPORTER_NO_REPORT", None)
         env.pop("MOZ_CRASHREPORTER_SHUTDOWN", None)
 
-    env = _configure_sanitizers(env, target_dir, sanitizer_log)
+    env = _configure_sanitizers(env, target_path, sanitizer_log)
     # filter environment to avoid leaking sensitive information
     return {k: v for k, v in env.items() if "_SECRET" not in k}
 
@@ -407,7 +400,7 @@ def wait_on_files(
     return all_closed
 
 
-def warn_open(path: str) -> None:
+def warn_open(path: Path) -> None:
     """Output a message via `LOG.warning` for each file found to be open by a Process.
     On Windows open files cannot be removed. Hopefully this can be used to help identify
     the processes using the files and the underlying issue.
@@ -418,5 +411,5 @@ def warn_open(path: str) -> None:
     Returns:
         None
     """
-    for entry in files_in_use(Path(path).iterdir()):
+    for entry in files_in_use(path.iterdir()):
         LOG.warning("%r open by %r (%d)", str(entry[0]), entry[2], entry[1])
