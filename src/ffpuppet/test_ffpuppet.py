@@ -150,16 +150,15 @@ def test_ffpuppet_03(mocker, tmp_path):
         assert "stderr" in log_ids
         assert "stdout" in log_ids
         logs = tmp_path / "logs"  # nonexistent directory
-        ffp.save_logs(logs, meta=True)
+        ffp.save_logs(logs)
         assert logs.is_dir()
-        assert len(tuple(logs.iterdir())) == 3
+        assert len(tuple(logs.iterdir())) == 2
         log_data = (logs / "log_stderr.txt").read_text()
         assert "[ffpuppet] Launch command:" in log_data
         assert "[ffpuppet] Reason code:" in log_data
         log_data = (logs / "log_stdout.txt").read_text()
         assert "url: 'http://" in log_data
         assert "hello world" in log_data
-        assert any(logs.glob(ffp._logs.META_FILE))
 
 
 def test_ffpuppet_04(mocker):

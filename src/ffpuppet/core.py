@@ -925,27 +925,23 @@ class FFPuppet:
         """
         return self._logs.log_length(log_id)
 
-    def save_logs(
-        self, dest: Path, logs_only: bool = False, meta: bool = False
-    ) -> None:
+    def save_logs(self, dest: Path, logs_only: bool = False) -> None:
         """The browser logs will be saved to dest. This can only be called
         after close().
 
         Args:
             dest: Destination path for log data. Existing files will be overwritten.
             logs_only: Do not include other data such as debugger output files.
-            meta: Output JSON file containing log file meta data.
 
         Returns:
             None
         """
-        LOG.debug("save_logs('%s', logs_only=%r, meta=%r)", dest, logs_only, meta)
+        LOG.debug("save_logs('%s', logs_only=%r)", dest, logs_only)
         assert self._launches > -1, "clean_up() has been called"
         assert self._logs.closed, "Logs are still in use. Call close() first!"
         self._logs.save_logs(
             dest,
             logs_only=logs_only,
-            meta=meta,
             bin_path=self._bin_path,
             rr_pack=self._dbg in (Debugger.PERNOSCO, Debugger.RR),
         )
