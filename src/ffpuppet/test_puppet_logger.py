@@ -6,7 +6,6 @@
 # pylint: disable=protected-access
 
 import os
-from json import loads
 from tempfile import SpooledTemporaryFile
 from time import sleep
 
@@ -167,27 +166,14 @@ def test_puppet_logger_06(tmp_path):
         assert plog_fp_test_3 is not None
         for _ in range(500):
             plog_fp_test_3.write(data)
-        meta_test = tmp_path / "test_meta.txt"
-        with meta_test.open("w+b") as meta_fp:
-            meta_fp.write(b"blah")
-            plog.add_log("test_meta", logfp=meta_fp)
         # delay to check if creation time was copied when save_logs is called
         sleep(0.1)
         plog.close()
         dest.mkdir()
-        plog.save_logs(dest, meta=True)
-        # grab meta data and remove test file
-        meta_ctime = meta_test.stat().st_ctime
-        meta_test.unlink()
+        plog.save_logs(dest)
         # check saved file count
-        assert len(plog.available_logs()) == 5
-        assert len(tuple(dest.iterdir())) == 6
-        # verify meta data was copied
-        meta_file = dest / PuppetLogger.META_FILE
-        assert meta_file.is_file()
-        meta_map = loads(meta_file.read_text())
-        assert len(meta_map) == 5
-        assert meta_ctime == meta_map["log_test_meta.txt"]["st_ctime"]
+        assert len(plog.available_logs()) == 4
+        assert len(tuple(dest.iterdir())) == 4
         # verify all data was copied
         assert os.stat(plog_fp_test_1.name).st_size == 12
         assert os.stat(plog_fp_test_2.name).st_size == 7

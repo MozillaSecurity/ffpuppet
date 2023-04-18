@@ -3,7 +3,6 @@
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
 """browser and debugger log management"""
 
-from json import dump as json_dump
 from logging import getLogger
 from os import getpid, stat
 from os.path import isfile
@@ -25,7 +24,6 @@ __all__ = ("PuppetLogger",)
 
 class PuppetLogger:  # pylint: disable=missing-docstring
     BUF_SIZE = 0x10000  # buffer size used to copy logs
-    META_FILE = "log_metadata.json"
     PATH_RR = "rr-traces"
     PREFIX_SAN = f"ffp_asan_{getpid()}.log"
     PREFIX_VALGRIND = f"valgrind.{getpid()}"
@@ -245,7 +243,6 @@ class PuppetLogger:  # pylint: disable=missing-docstring
         self,
         dest: Path,
         logs_only: bool = False,
-        meta: bool = False,
         bin_path: Optional[Path] = None,
         rr_pack: bool = False,
     ) -> None:
@@ -253,11 +250,8 @@ class PuppetLogger:  # pylint: disable=missing-docstring
         after close() has been called.
 
         Args:
-            dest: Destination path for log data. Existing files will be
-                        overwritten.
-            logs_only: Do not include other data, including debugger
-                              output files.
-            meta: Output JSON file containing log file meta data.
+            dest: Destination path for log data. Existing files will be overwritten.
+            logs_only: Do not include other data, including debugger output files.
             bin_path: Firefox binary.
             rr_pack: Pack rr trace if required.
 
@@ -270,17 +264,8 @@ class PuppetLogger:  # pylint: disable=missing-docstring
         # copy log to location specified by dest
         dest.mkdir(parents=True, exist_ok=True)
 
-        meta_map = {}
         for log_id, log_fp in self._logs.items():
-            out_name = f"log_{log_id}.txt"
-            if meta:
-                file_stat = stat(log_fp.name)
-                meta_map[out_name] = {
-                    field: getattr(file_stat, field)
-                    for field in dir(file_stat)
-                    if field.startswith("st_")
-                }
-            copy2(log_fp.name, dest / out_name)
+            copy2(log_fp.name, dest / f"log_{log_id}.txt")
 
         if not logs_only:
             rr_trace = self.path / self.PATH_RR / "latest-trace"
@@ -304,7 +289,3 @@ class PuppetLogger:  # pylint: disable=missing-docstring
             for entry in self.path.iterdir():
                 if entry.is_dir():
                     copytree(entry, dest / entry.name, symlinks=True)
-
-        if meta_map:
-            with (dest / self.META_FILE).open("w") as json_fp:
-                json_dump(meta_map, json_fp, indent=2, sort_keys=True)
