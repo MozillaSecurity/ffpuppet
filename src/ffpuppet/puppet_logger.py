@@ -5,14 +5,12 @@
 
 from json import dump as json_dump
 from logging import getLogger
-from os import close as os_close
-from os import getpid, makedirs, mkdir, scandir, stat, stat_result
-from os.path import abspath, isdir, isfile
-from os.path import join as pathjoin
-from os.path import realpath
+from os import getpid, stat
+from os.path import isfile
+from pathlib import Path
 from shutil import copy2, copyfileobj, copytree, rmtree
 from subprocess import STDOUT, CalledProcessError, check_output
-from tempfile import mkdtemp, mkstemp
+from tempfile import NamedTemporaryFile, mkdtemp
 from typing import IO, Any, Dict, Iterator, KeysView, Optional
 
 from .helpers import onerror, warn_open
@@ -32,15 +30,15 @@ class PuppetLogger:  # pylint: disable=missing-docstring
     PREFIX_SAN = f"ffp_asan_{getpid()}.log"
     PREFIX_VALGRIND = f"valgrind.{getpid()}"
 
-    __slots__ = ("_base", "_logs", "_rr_packed", "closed", "watching", "working_path")
+    __slots__ = ("_base", "_logs", "_rr_packed", "closed", "path", "watching")
 
     def __init__(self, base_path: Optional[str] = None) -> None:
         self._base = base_path
         self._logs: Dict[str, IO[bytes]] = {}
         self._rr_packed = False
         self.closed = True
+        self.path: Optional[Path] = None
         self.watching: Dict[str, int] = {}
-        self.working_path: Optional[str] = None
         self.reset()
 
     def __enter__(self) -> "PuppetLogger":
@@ -55,7 +53,7 @@ class PuppetLogger:  # pylint: disable=missing-docstring
         Args:
             log_id: ID of the log to add.
             logfp: File object to use. If None is provided a new log
-                          file will be created.
+                   file will be created.
 
         Returns:
             Newly added log file.
@@ -63,11 +61,11 @@ class PuppetLogger:  # pylint: disable=missing-docstring
         assert log_id not in self._logs
         assert not self.closed
         if logfp is None:
-            logfp = PuppetLogger.open_unique(base_dir=self.working_path)
+            logfp = PuppetLogger.open_unique(base_dir=str(self.path))
         self._logs[log_id] = logfp
         return logfp
 
-    def add_path(self, name: str) -> str:
+    def add_path(self, name: str) -> Path:
         """Add a directory that can be used as temporary storage for
         miscellaneous items such as additional debugger output.
 
@@ -78,10 +76,10 @@ class PuppetLogger:  # pylint: disable=missing-docstring
             Path of newly created directory.
         """
         assert not self.closed
-        assert self.working_path is not None
-        path = pathjoin(self.working_path, name)
-        LOG.debug("adding path %r as %r", name, path)
-        mkdir(path)
+        assert self.path is not None
+        path = self.path / name
+        LOG.debug("adding path %r as '%s'", name, path)
+        path.mkdir()
         return path
 
     def available_logs(self) -> KeysView[str]:
@@ -107,33 +105,31 @@ class PuppetLogger:  # pylint: disable=missing-docstring
         """
         if not self.closed:
             self.close()
-        if self.working_path is not None and isdir(self.working_path):
+        if self.path is not None and self.path.is_dir():
             for attempt in range(2):
                 try:
-                    rmtree(
-                        self.working_path, ignore_errors=ignore_errors, onerror=onerror
-                    )
+                    rmtree(self.path, ignore_errors=ignore_errors, onerror=onerror)
                 except OSError:
                     if attempt > 0:
-                        warn_open(self.working_path)
+                        warn_open(self.path)
                         raise
                     continue
                 break
         self._logs.clear()
-        self.working_path = None
+        self.path = None
 
     def clone_log(
         self,
         log_id: str,
-        offset: Optional[int] = None,
+        offset: int = 0,
         target_file: Optional[str] = None,
-    ) -> Optional[str]:
+    ) -> Optional[Path]:
         """Create a copy of the specified log.
 
         Args:
             log_id: ID of the log to clone.
-            target_file: The log contents will be saved to target_file.
             offset: Where to begin reading the log from.
+            target_file: The log contents will be saved to target_file.
 
         Returns:
             Name of the file containing the cloned log or None on failure.
@@ -144,19 +140,14 @@ class PuppetLogger:  # pylint: disable=missing-docstring
         if not log_fp.closed:
             log_fp.flush()
         with open(log_fp.name, "rb") as in_fp:
-            if offset is not None:
+            if offset:
                 in_fp.seek(offset)
             if target_file is None:
-                cpyfp = PuppetLogger.open_unique(base_dir=self._base)
-                target_file = cpyfp.name
-            else:
-                # pylint: disable=consider-using-with
-                cpyfp = open(target_file, "wb")
-            try:
+                with PuppetLogger.open_unique(base_dir=self._base) as cpyfp:
+                    target_file = cpyfp.name
+            with open(target_file, "wb") as cpyfp:
                 copyfileobj(in_fp, cpyfp, self.BUF_SIZE)
-            finally:
-                cpyfp.close()
-        return target_file
+        return Path(target_file)
 
     def close(self) -> None:
         """Close all open file objects.
@@ -226,16 +217,15 @@ class PuppetLogger:  # pylint: disable=missing-docstring
 
         Args:
             base_dir: This is where the file will be created. If None is
-                      passed mkstemp() will use the system default.
+                      passed the system default will be used.
             mode: File mode. See documentation for open().
 
         Returns:
             An open file object.
         """
-        tmp_fd, log_file = mkstemp(suffix=".txt", prefix="ffp_log_", dir=base_dir)
-        os_close(tmp_fd)
-        # use open() so the file object 'name' attribute is correct
-        return open(log_file, mode)  # pylint: disable=consider-using-with
+        return NamedTemporaryFile(
+            mode, delete=False, dir=base_dir, prefix="ffp_log_", suffix=".txt"
+        )
 
     def reset(self) -> None:
         """Reset logger for reuse.
@@ -249,14 +239,14 @@ class PuppetLogger:  # pylint: disable=missing-docstring
         self.clean_up()
         self.closed = False
         self._rr_packed = False
-        self.working_path = realpath(mkdtemp(prefix="ffplogs_", dir=self._base))
+        self.path = Path(mkdtemp(prefix="ffplogs_", dir=self._base))
 
     def save_logs(
         self,
-        dest: str,
+        dest: Path,
         logs_only: bool = False,
         meta: bool = False,
-        bin_path: Optional[str] = None,
+        bin_path: Optional[Path] = None,
         rr_pack: bool = False,
     ) -> None:
         """The browser logs will be saved to dest. This can only be called
@@ -268,18 +258,17 @@ class PuppetLogger:  # pylint: disable=missing-docstring
             logs_only: Do not include other data, including debugger
                               output files.
             meta: Output JSON file containing log file meta data.
-            bin_path: Path to Firefox binary.
+            bin_path: Firefox binary.
             rr_pack: Pack rr trace if required.
 
         Returns:
             None
         """
         assert self.closed, "save_logs() cannot be called before calling close()"
-        assert self.working_path is not None
+        assert self.path is not None
 
         # copy log to location specified by dest
-        makedirs(dest, exist_ok=True)
-        dest = abspath(dest)
+        dest.mkdir(parents=True, exist_ok=True)
 
         meta_map = {}
         for log_id, log_fp in self._logs.items():
@@ -288,34 +277,34 @@ class PuppetLogger:  # pylint: disable=missing-docstring
                 file_stat = stat(log_fp.name)
                 meta_map[out_name] = {
                     field: getattr(file_stat, field)
-                    for field in dir(stat_result)
+                    for field in dir(file_stat)
                     if field.startswith("st_")
                 }
-            copy2(log_fp.name, pathjoin(dest, out_name))
+            copy2(log_fp.name, dest / out_name)
 
         if not logs_only:
-            rr_trace = pathjoin(self.working_path, self.PATH_RR, "latest-trace")
-            if isdir(rr_trace):
+            rr_trace = self.path / self.PATH_RR / "latest-trace"
+            if rr_trace.is_dir():
                 if rr_pack and not self._rr_packed:
                     LOG.debug("packing rr trace")
                     try:
-                        check_output(["rr", "pack", rr_trace], stderr=STDOUT)
+                        check_output(["rr", "pack", str(rr_trace)], stderr=STDOUT)
                         self._rr_packed = True
                     except (OSError, CalledProcessError):
                         LOG.warning("Error calling 'rr pack %s'", rr_trace)
                 # copy `taskcluster-build-task` for use with Pernosco if available
                 if bin_path is not None:
-                    task_info = pathjoin(bin_path, "taskcluster-build-task")
-                    if isfile(task_info):
-                        moz_rr = pathjoin(rr_trace, "files.mozilla")
-                        makedirs(moz_rr, exist_ok=True)
+                    task_info = bin_path / "taskcluster-build-task"
+                    if task_info.is_file():
+                        moz_rr = rr_trace / "files.mozilla"
+                        moz_rr.mkdir(parents=True, exist_ok=True)
                         copy2(task_info, moz_rr)
                         LOG.debug("Copied 'taskcluster-build-task' to trace")
 
-            for entry in scandir(self.working_path):
+            for entry in self.path.iterdir():
                 if entry.is_dir():
-                    copytree(entry.path, pathjoin(dest, entry.name), symlinks=True)
+                    copytree(entry, dest / entry.name, symlinks=True)
 
         if meta_map:
-            with open(pathjoin(dest, self.META_FILE), "w") as json_fp:
+            with (dest / self.META_FILE).open("w") as json_fp:
                 json_dump(meta_map, json_fp, indent=2, sort_keys=True)

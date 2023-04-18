@@ -40,7 +40,7 @@ def test_helpers_01(tmp_path):
 
     # test with empty environment
     env = {}
-    env = _configure_sanitizers(env, str(tmp_path), "blah")
+    env = _configure_sanitizers(env, tmp_path, "blah")
     assert "ASAN_OPTIONS" in env
     asan_opts = parse(env["ASAN_OPTIONS"])
     assert "external_symbolizer_path" not in asan_opts
@@ -55,7 +55,7 @@ def test_helpers_01(tmp_path):
         "LSAN_OPTIONS": "a=1",
         "UBSAN_OPTIONS": "",
     }
-    env = _configure_sanitizers(env, str(tmp_path), "blah")
+    env = _configure_sanitizers(env, tmp_path, "blah")
     assert "ASAN_OPTIONS" in env
     asan_opts = parse(env["ASAN_OPTIONS"])
     assert "detect_leaks" in asan_opts
@@ -68,7 +68,7 @@ def test_helpers_01(tmp_path):
     sup = tmp_path / "test.sup"
     sup.touch()
     env = {"ASAN_OPTIONS": f"suppressions='{sup}'"}
-    env = _configure_sanitizers(env, str(tmp_path), "blah")
+    env = _configure_sanitizers(env, tmp_path, "blah")
     asan_opts = parse(env["ASAN_OPTIONS"])
     assert "suppressions" in asan_opts
     # test overwrite log_path
@@ -77,7 +77,7 @@ def test_helpers_01(tmp_path):
         "TSAN_OPTIONS": "log_path='overwrite'",
         "UBSAN_OPTIONS": "log_path='overwrite'",
     }
-    env = _configure_sanitizers(env, str(tmp_path), "blah")
+    env = _configure_sanitizers(env, tmp_path, "blah")
     assert "ASAN_OPTIONS" in env
     asan_opts = parse(env["ASAN_OPTIONS"])
     assert asan_opts["log_path"] == "'blah'"
@@ -87,11 +87,11 @@ def test_helpers_01(tmp_path):
     # test missing suppression file
     env = {"ASAN_OPTIONS": "suppressions=not_a_file"}
     with raises(AssertionError, match="missing suppressions file"):
-        _configure_sanitizers(env, str(tmp_path), "blah")
+        _configure_sanitizers(env, tmp_path, "blah")
     # unquoted path containing ':'
     env = {"ASAN_OPTIONS": "strip_path_prefix=x:\\foo\\bar"}
     with raises(AssertionError, match=r"\(strip_path_prefix\) must be quoted"):
-        _configure_sanitizers(env, str(tmp_path), "blah")
+        _configure_sanitizers(env, tmp_path, "blah")
     # multiple options
     options = (
         "opt1=1",
@@ -104,7 +104,7 @@ def test_helpers_01(tmp_path):
         "opt8='x:\\with a space\\or two'",
     )
     env = {"ASAN_OPTIONS": ":".join(options)}
-    env = _configure_sanitizers(env, str(tmp_path), "blah")
+    env = _configure_sanitizers(env, tmp_path, "blah")
     asan_opts = parse(env["ASAN_OPTIONS"])
     for key, value in (x.split(sep="=", maxsplit=1) for x in options):
         assert asan_opts[key] == value
@@ -115,13 +115,13 @@ def test_helpers_01(tmp_path):
         llvm_sym_packed = tmp_path / "llvm-symbolizer"
     llvm_sym_packed.touch()
     env = {"ASAN_OPTIONS": ":".join(options)}
-    env = _configure_sanitizers(env, str(tmp_path), "blah")
+    env = _configure_sanitizers(env, tmp_path, "blah")
     asan_opts = parse(env["ASAN_OPTIONS"])
     assert "external_symbolizer_path" in asan_opts
     assert asan_opts["external_symbolizer_path"].strip("'") == str(llvm_sym_packed)
     # test malformed option pair
     env = {"ASAN_OPTIONS": "a=b=c:x"}
-    env = _configure_sanitizers(env, str(tmp_path), "blah")
+    env = _configure_sanitizers(env, tmp_path, "blah")
     asan_opts = parse(env["ASAN_OPTIONS"])
     assert asan_opts["a"] == "b=c"
     assert "x" not in asan_opts
@@ -130,7 +130,7 @@ def test_helpers_01(tmp_path):
     llvm_sym_a = tmp_path / "a" / "llvm-symbolizer"
     llvm_sym_a.touch()
     env = {"ASAN_SYMBOLIZER_PATH": str(llvm_sym_a)}
-    env = _configure_sanitizers(env, str(tmp_path), "blah")
+    env = _configure_sanitizers(env, tmp_path, "blah")
     asan_opts = parse(env["ASAN_OPTIONS"])
     assert "external_symbolizer_path" in asan_opts
     assert asan_opts["external_symbolizer_path"].strip("'") == str(llvm_sym_a)
@@ -142,15 +142,15 @@ def test_helpers_01(tmp_path):
         "ASAN_SYMBOLIZER_PATH": str(llvm_sym_a),
         "ASAN_OPTIONS": f"external_symbolizer_path='{str(llvm_sym_b)}'",
     }
-    env = _configure_sanitizers(env, str(tmp_path), "blah")
+    env = _configure_sanitizers(env, tmp_path, "blah")
     asan_opts = parse(env["ASAN_OPTIONS"])
     assert "external_symbolizer_path" in asan_opts
     assert asan_opts["external_symbolizer_path"].strip("'") == str(llvm_sym_b)
 
 
-def test_helpers_02():
+def test_helpers_02(tmp_path):
     """test prepare_environment()"""
-    env = prepare_environment("", "blah")
+    env = prepare_environment(tmp_path, "blah")
     assert "ASAN_OPTIONS" in env
     assert "LSAN_OPTIONS" in env
     assert "UBSAN_OPTIONS" in env
@@ -158,7 +158,7 @@ def test_helpers_02():
     assert "MOZ_CRASHREPORTER" in env
 
 
-def test_helpers_03(mocker):
+def test_helpers_03(mocker, tmp_path):
     """test prepare_environment() using some predefined environment variables"""
     mocker.patch.dict(
         "ffpuppet.helpers.environ",
@@ -179,7 +179,7 @@ def test_helpers_03(mocker):
         "TEST_EXISTING_OVERWRITE": "1",
         "TEST_EXISTING_REMOVE": None,
     }
-    env = prepare_environment("", "blah", pre)
+    env = prepare_environment(tmp_path, "blah", pre)
     assert "ASAN_OPTIONS" in env
     assert "LSAN_OPTIONS" in env
     assert "lopt=newopt" in env["LSAN_OPTIONS"].split(":")
@@ -196,7 +196,7 @@ def test_helpers_03(mocker):
     assert "TEST_SECRET_TO_REMOVE" not in env
     # MOZ_CRASHREPORTER should not be added if MOZ_CRASHREPORTER_DISABLE is set
     pre = {"MOZ_CRASHREPORTER_DISABLE": "1"}
-    env = prepare_environment("", "blah", pre)
+    env = prepare_environment(tmp_path, "blah", pre)
     assert "MOZ_CRASHREPORTER" not in env
 
 
@@ -267,7 +267,7 @@ def test_helpers_06(tmp_path):
 def test_helpers_07(tmp_path):
     """test warn_open()"""
     with (tmp_path / "file.bin").open("w") as _:
-        warn_open(str(tmp_path))
+        warn_open(tmp_path)
 
 
 @mark.parametrize(
@@ -299,9 +299,9 @@ def test_certutil_find_01(tmp_path):
     # missing bundled certutil
     browser_bin = tmp_path / "browser"
     browser_bin.touch()
-    assert certutil_find(str(browser_bin)) == "certutil"
+    assert certutil_find(browser_bin) == "certutil"
     # found bundled certutil
     certutil_bin = tmp_path / "bin" / "certutil"
     certutil_bin.parent.mkdir()
     certutil_bin.touch()
-    assert certutil_find(str(browser_bin)) == str(certutil_bin)
+    assert certutil_find(browser_bin) == str(certutil_bin)

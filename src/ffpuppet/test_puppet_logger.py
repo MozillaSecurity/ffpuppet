@@ -21,8 +21,8 @@ def test_puppet_logger_01(tmp_path):
     plog = PuppetLogger(base_path=str(tmp_path))
     assert not plog.closed
     assert not plog._logs
-    assert plog.working_path is not None
-    assert os.path.isdir(plog.working_path)
+    assert plog.path is not None
+    assert plog.path.is_dir()
     assert plog._base is not None
     assert any(os.scandir(plog._base))
     plog.close()
@@ -61,15 +61,15 @@ def test_puppet_logger_03(tmp_path):
     with PuppetLogger(base_path=str(tmp_path)) as plog:
         assert not plog.closed
         assert not plog._logs
-        assert plog.working_path is not None
-        assert os.path.isdir(plog.working_path)
+        assert plog.path is not None
+        assert plog.path.is_dir()
         assert plog._base is not None
         assert any(os.scandir(plog._base))
         plog.add_log("test_new")
         plog.clean_up()
         assert plog.closed
         assert not any(os.scandir(plog._base))
-        assert plog.working_path is None
+        assert plog.path is None
         assert plog.closed
         assert not plog._logs
 
@@ -82,8 +82,8 @@ def test_puppet_logger_04(tmp_path):
         plog.reset()
         assert not plog.closed
         assert not plog._logs
-        assert plog.working_path is not None
-        assert os.path.isdir(plog.working_path)
+        assert plog.path is not None
+        assert plog.path.is_dir()
         assert plog._base is not None
         assert len(os.listdir(plog._base)) == 1
 
@@ -104,10 +104,9 @@ def test_puppet_logger_05(tmp_path):
         pl_fp.write(b"test1")
         cloned = plog.clone_log("test_new")
         assert cloned is not None
-        assert os.path.isfile(cloned)
-        with open(cloned, "rb") as log_fp:
-            assert log_fp.read() == b"test1"
-        os.remove(cloned)
+        assert cloned.is_file()
+        assert cloned.read_bytes() == b"test1"
+        cloned.unlink()
         # test target exists
         target = tmp_path / "target.txt"
         target.touch()
@@ -115,30 +114,28 @@ def test_puppet_logger_05(tmp_path):
         pl_fp.flush()
         cloned = plog.clone_log("test_new", target_file=str(target))
         assert cloned is not None
-        assert os.path.isfile(cloned)
-        with open(cloned, "rb") as log_fp:
-            assert log_fp.read() == b"test1test2"
-        os.remove(cloned)
+        assert cloned.is_file()
+        assert cloned.read_bytes() == b"test1test2"
+        cloned.unlink()
         # test target does not exist with offset
         assert not target.is_file()
         pl_fp.write(b"test3")
         pl_fp.flush()
         cloned = plog.clone_log("test_new", target_file=str(target), offset=4)
         assert cloned is not None
-        assert os.path.isfile(cloned)
-        with open(cloned, "rb") as log_fp:
-            assert log_fp.read() == b"1test2test3"
+        assert cloned.is_file()
+        assert cloned.read_bytes() == b"1test2test3"
         assert plog.log_length("test_new") == 15
-        os.remove(cloned)
+        cloned.unlink()
         # test non existent log
         assert plog.clone_log("no_log") is None
         # test empty log
         assert plog.log_length("test_empty") == 0
         cloned = plog.clone_log("test_empty")
         assert cloned is not None
-        assert os.path.isfile(cloned)
-        assert not os.stat(cloned).st_size
-        os.remove(cloned)
+        assert cloned.is_file()
+        assert not cloned.stat().st_size
+        cloned.unlink()
 
 
 def test_puppet_logger_06(tmp_path):
@@ -147,7 +144,7 @@ def test_puppet_logger_06(tmp_path):
         plog.close()
         # save when there are no logs
         dest = tmp_path / "dest"
-        plog.save_logs(str(dest))
+        plog.save_logs(dest)
         assert not any(dest.iterdir())
         plog.reset()
         dest.rmdir()
@@ -178,7 +175,7 @@ def test_puppet_logger_06(tmp_path):
         sleep(0.1)
         plog.close()
         dest.mkdir()
-        plog.save_logs(str(dest), meta=True)
+        plog.save_logs(dest, meta=True)
         # grab meta data and remove test file
         meta_ctime = meta_test.stat().st_ctime
         meta_test.unlink()
@@ -201,24 +198,24 @@ def test_puppet_logger_07(mocker, tmp_path):
     """test PuppetLogger.save_logs() rr trace directory"""
     fake_ck = mocker.patch("ffpuppet.puppet_logger.check_output", autospec=True)
     with PuppetLogger(base_path=str(tmp_path)) as plog:
-        assert plog.working_path is not None
-        os.makedirs(os.path.join(plog.working_path, plog.PATH_RR, "latest-trace"))
+        assert plog.path is not None
+        (plog.path / plog.PATH_RR / "latest-trace").mkdir(parents=True)
         plog.close()
         # test call to rr failing
         fake_ck.side_effect = OSError
-        plog.save_logs(str(tmp_path / "dest1"), rr_pack=True)
+        plog.save_logs(tmp_path / "dest1", rr_pack=True)
         assert fake_ck.call_count == 1
         assert not plog._rr_packed
         # test call to rr passing
         fake_ck.side_effect = None
-        plog.save_logs(str(tmp_path / "dest2"), rr_pack=True)
+        plog.save_logs(tmp_path / "dest2", rr_pack=True)
         assert fake_ck.call_count == 2
         assert plog._rr_packed
         # test 'taskcluster-build-task' copied
         bin_path = tmp_path / "bin_path"
         bin_path.mkdir()
         (bin_path / "taskcluster-build-task").write_text("task-info\n")
-        plog.save_logs(str(tmp_path / "dest3"), bin_path=str(bin_path))
+        plog.save_logs(tmp_path / "dest3", bin_path=bin_path)
         assert (
             tmp_path
             / "dest3"
@@ -245,36 +242,31 @@ def test_puppet_logger_09(mocker, tmp_path):
     fake_rmtree = mocker.patch("ffpuppet.puppet_logger.rmtree", autospec=True)
     with PuppetLogger(base_path=str(tmp_path)) as plog:
         plog.add_log("test")
-        working_path = plog.working_path
+        path = plog.path
         # test with ignore_errors=False
-        fake_rmtree.side_effect = OSError
+        fake_rmtree.side_effect = OSError("test")
         with raises(OSError):
             plog.clean_up()
         assert fake_rmtree.call_count == 2
-        fake_rmtree.assert_called_with(
-            working_path, ignore_errors=False, onerror=onerror
-        )
-        assert plog.working_path is not None
+        fake_rmtree.assert_called_with(path, ignore_errors=False, onerror=onerror)
+        assert plog.path is not None
         fake_rmtree.reset_mock()
         # test with ignore_errors=True
         fake_rmtree.side_effect = None
         plog.clean_up(ignore_errors=True)
         assert fake_rmtree.call_count == 1
-        fake_rmtree.assert_called_with(
-            working_path, ignore_errors=True, onerror=onerror
-        )
-        assert plog.working_path is None
+        fake_rmtree.assert_called_with(path, ignore_errors=True, onerror=onerror)
+        assert plog.path is None
 
 
 def test_puppet_logger_10(tmp_path):
     """test PuppetLogger.add_path()"""
     with PuppetLogger(base_path=str(tmp_path)) as plog:
         path = plog.add_path("test")
-        assert os.path.isdir(path)
-        with open(os.path.join(path, "simple.txt"), "w") as o_fp:
-            o_fp.write("test")
+        assert path.is_dir()
+        (path / "simple.txt").write_text("test")
         plog.close()
         dest = tmp_path / "dest"
-        plog.save_logs(str(dest))
+        plog.save_logs(dest)
         assert (dest / "test").is_dir()
         assert (dest / "test" / "simple.txt").is_file()

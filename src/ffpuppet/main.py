@@ -6,7 +6,6 @@
 from argparse import ArgumentParser, Namespace
 from importlib.metadata import PackageNotFoundError, version
 from logging import DEBUG, ERROR, INFO, WARNING, basicConfig, getLogger
-from os.path import exists, isdir, isfile
 from pathlib import Path
 from platform import system
 from shutil import rmtree
@@ -88,7 +87,7 @@ def parse_args(argv: Optional[List[str]] = None) -> Namespace:
         description="FFPuppet - Firefox process launcher and log collector. "
         "Happy bug hunting!",
     )
-    parser.add_argument("binary", help="Firefox binary to launch")
+    parser.add_argument("binary", type=Path, help="Firefox binary to launch")
     parser.add_argument(
         "-d",
         "--display-logs",
@@ -113,12 +112,14 @@ def parse_args(argv: Optional[List[str]] = None) -> Namespace:
     cfg_group.add_argument(
         "--certs",
         nargs="+",
+        type=Path,
         help="Install trusted certificates.",
     )
     cfg_group.add_argument(
         "-e",
         "--extension",
         action="append",
+        type=Path,
         help="Install extensions. Specify the path to the xpi or the directory "
         "containing the unpacked extension.",
     )
@@ -134,11 +135,15 @@ def parse_args(argv: Optional[List[str]] = None) -> Namespace:
         help="Headless mode. 'default' uses browser's built-in headless mode.",
     )
     cfg_group.add_argument(
-        "-p", "--prefs", help="Custom prefs.js file to use (default: profile default)"
+        "-p",
+        "--prefs",
+        type=Path,
+        help="Custom prefs.js file to use (default: profile default)",
     )
     cfg_group.add_argument(
         "-P",
         "--profile",
+        type=Path,
         help="Profile to use. This is non-destructive. A copy of the target profile "
         "will be used. (default: temporary profile)",
     )
@@ -173,7 +178,8 @@ def parse_args(argv: Optional[List[str]] = None) -> Namespace:
     report_group.add_argument(
         "-l",
         "--logs",
-        default=".",
+        default=Path.cwd(),
+        type=Path,
         help="Location to save browser logs. "
         "A sub-directory containing the browser logs will be created.",
     )
@@ -242,20 +248,20 @@ def parse_args(argv: Optional[List[str]] = None) -> Namespace:
     args = parser.parse_args(argv)
 
     # sanity checks
-    if not isfile(args.binary):
-        parser.error(f"Invalid browser binary {args.binary!r}")
+    if not args.binary.is_file():
+        parser.error(f"Invalid browser binary '{args.binary}'")
     if args.certs:
         if not certutil_available(certutil_find(args.binary)):
             parser.error("'--certs' requires NSS certutil")
         for cert in args.certs:
-            if not isfile(cert):
-                parser.error(f"Invalid certificate file {cert!r}")
+            if not cert.is_file():
+                parser.error(f"Invalid certificate file '{cert}'")
     if args.extension:
         for ext in args.extension:
-            if not exists(ext):
-                parser.error(f"Extension {ext!r} does not exist")
-    if not isdir(args.logs):
-        parser.error(f"Log output directory is invalid {args.logs!r}")
+            if not ext.exists():
+                parser.error(f"Extension '{ext}' does not exist")
+    if not args.logs.is_dir():
+        parser.error(f"Log output directory is invalid '{args.logs}'")
     args.log_level = log_level_map[args.log_level]
     if args.log_limit < 0:
         parser.error("--log-limit must be >= 0")
@@ -263,8 +269,8 @@ def parse_args(argv: Optional[List[str]] = None) -> Namespace:
     if args.memory < 0:
         parser.error("--memory must be >= 0")
     args.memory *= 1_048_576
-    if args.prefs is not None and not isfile(args.prefs):
-        parser.error(f"Invalid prefs.js file {args.prefs!r}")
+    if args.prefs is not None and not args.prefs.is_file():
+        parser.error(f"Invalid prefs.js file '{args.prefs}'")
     if args.xvfb:
         LOG.warning("'--xvfb' is DEPRECATED. Please use '--headless xvfb'")
         args.headless = "xvfb"
@@ -304,10 +310,10 @@ def main(argv: Optional[List[str]] = None) -> None:  # pylint: disable=missing-d
             extension=args.extension,
             cert_files=args.certs,
         )
-        if args.prefs and isfile(args.prefs):
+        if args.prefs and args.prefs.is_file():
             assert ffp.profile is not None
             assert ffp.profile.path is not None
-            Profile.check_prefs(str(ffp.profile.path / "prefs.js"), args.prefs)
+            Profile.check_prefs(ffp.profile.path / "prefs.js", args.prefs)
         LOG.info("Running Firefox (pid: %d)...", ffp.get_pid())
         while ffp.is_healthy():
             sleep(args.poll_interval)
@@ -324,7 +330,7 @@ def main(argv: Optional[List[str]] = None) -> None:  # pylint: disable=missing-d
         else:
             LOG.error("FFPuppet.close() failed")
         logs = Path(mkdtemp(prefix=strftime("%Y%m%d-%H%M%S_ffp_logs_"), dir=args.logs))
-        ffp.save_logs(str(logs), logs_only=user_exit)
+        ffp.save_logs(logs, logs_only=user_exit)
         if args.display_logs:
             LOG.info("Displaying logs...%s", dump_to_console(logs))
         if ffp.reason == Reason.ALERT or args.save_all:
