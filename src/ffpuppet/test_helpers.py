@@ -7,12 +7,13 @@
 from multiprocessing import Event, Process
 from os import getpid
 from pathlib import Path
-from platform import system
 from subprocess import CalledProcessError
 
 from pytest import mark, raises
 
 from .helpers import (
+    CERTUTIL,
+    LLVM_SYMBOLIZER,
     _configure_sanitizers,
     certutil_available,
     certutil_find,
@@ -109,10 +110,7 @@ def test_helpers_01(tmp_path):
     for key, value in (x.split(sep="=", maxsplit=1) for x in options):
         assert asan_opts[key] == value
     # test using packaged llvm-symbolizer
-    if system().startswith("Windows"):
-        llvm_sym_packed = tmp_path / "llvm-symbolizer.exe"
-    else:
-        llvm_sym_packed = tmp_path / "llvm-symbolizer"
+    llvm_sym_packed = tmp_path / LLVM_SYMBOLIZER
     llvm_sym_packed.touch()
     env = {"ASAN_OPTIONS": ":".join(options)}
     env = _configure_sanitizers(env, tmp_path, "blah")
@@ -289,19 +287,19 @@ def test_helpers_07(tmp_path):
 def test_certutil_available_01(mocker, raised, result):
     """test certutil_available()"""
     mocker.patch("ffpuppet.helpers.check_output", autospec=True, side_effect=raised)
-    assert certutil_available("certutil") == result
+    assert certutil_available(CERTUTIL) == result
 
 
 def test_certutil_find_01(tmp_path):
     """test certutil_find()"""
     # default
-    assert certutil_find() == "certutil"
+    assert certutil_find() == CERTUTIL
     # missing bundled certutil
     browser_bin = tmp_path / "browser"
     browser_bin.touch()
-    assert certutil_find(browser_bin) == "certutil"
+    assert certutil_find(browser_bin) == CERTUTIL
     # found bundled certutil
-    certutil_bin = tmp_path / "bin" / "certutil"
+    certutil_bin = tmp_path / "bin" / CERTUTIL
     certutil_bin.parent.mkdir()
     certutil_bin.touch()
     assert certutil_find(browser_bin) == str(certutil_bin)

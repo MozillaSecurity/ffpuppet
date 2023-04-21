@@ -5,7 +5,6 @@
 
 from logging import getLogger
 from os import W_OK, access, chmod, environ
-from os.path import isfile
 from pathlib import Path
 from platform import system
 from stat import S_IWUSR
@@ -20,6 +19,7 @@ from .sanitizer_util import SanitizerOptions
 if system() == "Windows":
     from .lsof import pids_by_file
 
+CERTUTIL = "certutil.exe" if system() == "Windows" else "certutil"
 LLVM_SYMBOLIZER = "llvm-symbolizer.exe" if system() == "Windows" else "llvm-symbolizer"
 LOG = getLogger(__name__)
 
@@ -66,8 +66,8 @@ def _configure_sanitizers(
     ]
     # set llvm-symbolizer path
     # *SAN_OPTIONS=external_symbolizer_path takes priority if it is defined in env
-    llvm_sym = env.get("ASAN_SYMBOLIZER_PATH", str(target_path / LLVM_SYMBOLIZER))
-    if isfile(llvm_sym):
+    llvm_sym = Path(env.get("ASAN_SYMBOLIZER_PATH") or target_path / LLVM_SYMBOLIZER)
+    if llvm_sym.is_file():
         # add *SAN_OPTIONS=external_symbolizer_path
         common_flags.append(("external_symbolizer_path", f"'{llvm_sym}'"))
     else:
@@ -185,10 +185,10 @@ def certutil_find(browser_bin: Optional[Path] = None) -> str:
         Path to certutil tool to use.
     """
     if browser_bin:
-        path = browser_bin.parent / "bin" / "certutil"
+        path = browser_bin.parent / "bin" / CERTUTIL
         if path.is_file():
             return str(path)
-    return "certutil"
+    return CERTUTIL
 
 
 def files_in_use(files: Iterable[Path]) -> Iterator[Tuple[Path, int, str]]:
