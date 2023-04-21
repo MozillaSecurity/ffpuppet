@@ -4,8 +4,8 @@
 # You can obtain one at http://mozilla.org/MPL/2.0/.
 """ffpuppet helpers tests"""
 
-import os
 from multiprocessing import Event, Process
+from os import getpid
 from pathlib import Path
 from platform import system
 from subprocess import CalledProcessError
@@ -229,13 +229,13 @@ def test_helpers_04(mocker, tmp_path):
 # this needs to be here in order to work correctly on Windows
 def _dummy_process(is_alive, is_done):
     is_alive.set()
-    print(f"I'm process {os.getpid()}\n")
+    print(f"I'm process {getpid()}\n")
     is_done.wait(30)
 
 
 def test_helpers_05():
     """test get_processes()"""
-    assert len(list(get_processes(os.getpid(), recursive=False))) == 1
+    assert len(list(get_processes(getpid(), recursive=False))) == 1
     assert not any(get_processes(0xFFFFFF))
     is_alive = Event()
     is_done = Event()
@@ -243,7 +243,7 @@ def test_helpers_05():
     proc.start()
     try:
         is_alive.wait(30)
-        assert len(list(get_processes(os.getpid()))) > 1
+        assert len(list(get_processes(getpid()))) > 1
     finally:
         is_done.set()
     proc.join()
