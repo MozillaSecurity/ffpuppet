@@ -6,7 +6,7 @@ from json import JSONDecodeError, load
 from logging import getLogger
 from pathlib import Path
 from shutil import copy2, rmtree, which
-from subprocess import CalledProcessError, TimeoutExpired, run
+from subprocess import DEVNULL, CalledProcessError, TimeoutExpired, run
 from tempfile import NamedTemporaryFile, mkdtemp
 from typing import IO, Any, Callable, Dict, List, Optional
 
@@ -137,29 +137,21 @@ class MinidumpParser:
             cmd.extend(["--symbols-path", str(self._symbols_path)])
         else:
             cmd.extend(["--symbols-url", "https://symbols.mozilla.org/"])
+        # add output files
+        with NamedTemporaryFile(dir=dst, prefix="mdsw_out_", suffix=".json") as ofp:
+            out_json = Path(ofp.name)
+        cmd.extend(["--output-file", str(out_json)])
         cmd.append(str(src))
-        with NamedTemporaryFile(
-            dir=dst, prefix="mdsw_err_", suffix=".txt"
-        ) as err_fp, NamedTemporaryFile(
-            delete=False, dir=dst, prefix="mdsw_out_", suffix=".json"
-        ) as out_fp:
-            LOG.debug("running %r", " ".join(cmd))
-            try:
-                run(cmd, check=True, stderr=err_fp, stdout=out_fp, timeout=60)
-            except CalledProcessError as exc:
-                LOG.error("Failed to process: %s (%r)", src, exc.returncode)
-                # keep stderr file
-                err_fp.delete = False
-                err_fp.seek(0)
-                # use last line of stderr which should be the error message
-                err_msg: List[bytes] = err_fp.read().strip().splitlines() or [
-                    b"minidump-stackwalk failed"
-                ]
-                raise MinidumpStackwalkFailure(err_msg[-1]) from None
-            except TimeoutExpired:
-                LOG.error("Failed to process: %s", src)
-                raise MinidumpStackwalkFailure("minidump-stackwalk hung") from None
-            return Path(out_fp.name)
+        LOG.debug("running %r", " ".join(cmd))
+        try:
+            run(cmd, check=True, stdout=DEVNULL, timeout=60)
+        except CalledProcessError:
+            LOG.error("Failed to process: %s", src)
+            raise MinidumpStackwalkFailure(b"minidump-stackwalk failed") from None
+        except TimeoutExpired:
+            LOG.error("Failed to process: %s", src)
+            raise MinidumpStackwalkFailure("minidump-stackwalk hung") from None
+        return out_json
 
     @classmethod
     def mdsw_available(
