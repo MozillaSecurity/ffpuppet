@@ -5,7 +5,7 @@
 """ffpuppet minidump parser tests"""
 
 from json import JSONDecodeError
-from subprocess import CalledProcessError, TimeoutExpired
+from subprocess import CalledProcessError, CompletedProcess, TimeoutExpired
 
 from pytest import mark, raises
 
@@ -27,10 +27,13 @@ from .minidump_parser import MinidumpParser, MinidumpStackwalkFailure, process_m
 )
 def test_minidump_parser_01(mocker, tmp_path, run_return, symbols, result):
     """test MinidumpParser.to_json()"""
+    mocker.patch(
+        "ffpuppet.minidump_parser.MinidumpParser.MDSW_BIN", "minidump_stackwalk"
+    )
     mocker.patch("ffpuppet.minidump_parser.run", autospec=True, side_effect=run_return)
     parser = MinidumpParser(symbols_path=tmp_path if symbols else None)
     if result:
-        assert parser.to_json(tmp_path, str(tmp_path)).is_file()
+        assert parser.to_json(tmp_path, str(tmp_path))
     else:
         with raises(MinidumpStackwalkFailure):
             parser.to_json(tmp_path, str(tmp_path))
@@ -144,18 +147,51 @@ def test_minidump_parser_03(tmp_path):
 
 
 @mark.parametrize(
-    "call_result, result",
+    "call_result, mdsw_bin, result",
     [
         # minidump-stackwalk is available
-        ((0,), True),
+        (
+            (CompletedProcess([], 0, stdout=b"minidump-stackwalk 0.17.0\n"),),
+            "minidump-stackwalk",
+            True,
+        ),
+        # minidump-stackwalk is matches minimum version
+        (
+            (CompletedProcess([], 0, stdout=b"minidump-stackwalk 0.15.2\n"),),
+            "minidump-stackwalk",
+            True,
+        ),
+        # minidump-stackwalk is out-of-date
+        (
+            (CompletedProcess([], 0, stdout=b"minidump-stackwalk 0.10.0\n"),),
+            "minidump-stackwalk",
+            False,
+        ),
+        # minidump-stackwalk is out-of-date
+        (
+            (CompletedProcess([], 0, stdout=b"minidump-stackwalk 0.15.1\n"),),
+            "minidump-stackwalk",
+            False,
+        ),
+        # minidump-stackwalk is bad version
+        (
+            (CompletedProcess([], 0, stdout=b"minidump-stackwalk badversion\n"),),
+            "minidump-stackwalk",
+            False,
+        ),
         # minidump-stackwalk is not available
-        (OSError("test"), False),
+        (OSError("test"), "minidump-stackwalk", False),
+        # minidump-stackwalk not installed
+        (None, None, False),
     ],
 )
-def test_minidump_parser_04(mocker, call_result, result):
+def test_minidump_parser_04(mocker, call_result, mdsw_bin, result):
     """test MinidumpParser.mdsw_available()"""
-    mocker.patch("ffpuppet.minidump_parser.call", side_effect=call_result)
-    assert MinidumpParser.mdsw_available(force_check=True) == result
+    mocker.patch("ffpuppet.minidump_parser.MinidumpParser.MDSW_BIN", mdsw_bin)
+    mocker.patch("ffpuppet.minidump_parser.run", side_effect=call_result)
+    assert (
+        MinidumpParser.mdsw_available(force_check=True, min_version="0.15.2") == result
+    )
 
 
 @mark.parametrize(
