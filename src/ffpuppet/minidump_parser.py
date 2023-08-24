@@ -5,8 +5,8 @@
 from json import JSONDecodeError, load
 from logging import getLogger
 from pathlib import Path
-from shutil import copy2, rmtree
-from subprocess import DEVNULL, CalledProcessError, TimeoutExpired, call, run
+from shutil import copy2, rmtree, which
+from subprocess import CalledProcessError, TimeoutExpired, run
 from tempfile import NamedTemporaryFile, mkdtemp
 from typing import IO, Any, Callable, Dict, List, Optional
 
@@ -32,7 +32,7 @@ class MinidumpParser:
         symbols_path: Path containing debug symbols.
     """
 
-    MDSW_BIN = "minidump-stackwalk"
+    MDSW_BIN = which("minidump-stackwalk")
 
     __slots__ = ("_symbols_path",)
 
@@ -131,6 +131,7 @@ class MinidumpParser:
         Returns:
             A file containing JSON output.
         """
+        assert self.MDSW_BIN
         cmd = [self.MDSW_BIN, "--no-color", "--json"]
         if self._symbols_path:
             cmd.extend(["--symbols-path", str(self._symbols_path)])
@@ -161,22 +162,50 @@ class MinidumpParser:
             return Path(out_fp.name)
 
     @classmethod
-    def mdsw_available(cls, force_check: bool = False) -> bool:
+    def mdsw_available(
+        cls, force_check: bool = False, min_version: str = "0.15.2"
+    ) -> bool:
         """Check if minidump-stackwalk binary is available.
 
         Args:
             force_check: Always perform a check.
+            min_version: Minimum supported minidump-stackwalk version.
 
         Returns:
             True if binary is available otherwise False.
         """
+        if not cls.MDSW_BIN:
+            LOG.debug("minidump-stackwalk not found")
+            return False
         global MDSW_AVAILABLE  # pylint: disable=global-statement
         if not MDSW_AVAILABLE or force_check:
+            assert len(min_version.split(".")) == 3
             try:
-                call([cls.MDSW_BIN], stdout=DEVNULL, stderr=DEVNULL)
+                result = run(
+                    [cls.MDSW_BIN, "--version"], check=False, capture_output=True
+                )
             except OSError:
                 LOG.debug("minidump-stackwalk not available (%s)", cls.MDSW_BIN)
                 return False
+            # expected output is 'minidump-stackwalk #.#.#'
+            current_version = result.stdout.strip().split()[-1].decode()
+            if len(current_version.split(".")) != 3:
+                LOG.error(
+                    "Unknown minidump-stackwalk version: %r",
+                    result.stdout.decode(errors="ignore"),
+                )
+                return False
+            # version check
+            for cver, mver in zip(current_version.split("."), min_version.split(".")):
+                if int(cver) > int(mver):
+                    break
+                if int(cver) < int(mver):
+                    LOG.error(
+                        "minidump-stackwalk %r is unsupported (minimum %r)",
+                        current_version,
+                        min_version,
+                    )
+                    return False
             MDSW_AVAILABLE = True
         return True
 
@@ -201,8 +230,8 @@ def process_minidumps(
     """
     if not MinidumpParser.mdsw_available():
         LOG.warning(
-            "Found a minidump, but can't process it without minidump-stackwalk."
-            " See README.md for how to obtain it."
+            "Unable to process minidump."
+            " See README.md for details on obtaining the latest minidump-stackwalk."
         )
         return
     assert path.is_dir(), f"missing minidump scan path '{path!s}'"
