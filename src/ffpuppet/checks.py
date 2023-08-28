@@ -5,7 +5,8 @@
 
 from abc import ABC, abstractmethod
 from os import SEEK_SET, stat
-from typing import IO, Iterable, List, Optional, Pattern
+from platform import system
+from typing import IO, Iterable, List, Optional, Pattern, Tuple
 
 from psutil import AccessDenied, NoSuchProcess
 
@@ -155,10 +156,11 @@ class CheckMemoryUsage(Check):
 
     name = "memory_usage"
 
-    __slots__ = ("limit", "pid")
+    __slots__ = ("_is_linux", "limit", "pid")
 
     def __init__(self, pid: int, limit: int) -> None:
         super().__init__()
+        self._is_linux = system() == "Linux"
         self.limit = limit
         self.pid = pid
 
@@ -172,15 +174,24 @@ class CheckMemoryUsage(Check):
             True if the total usage is greater than or equal to
             self.limit otherwise False.
         """
-        proc_info = []
+        largest_shared = 0
+        proc_info: List[Tuple[int, int]] = []
         total_usage = 0
         for proc in get_processes(self.pid):
             try:
-                cur_rss = proc.memory_info().rss
-                total_usage += cur_rss
-                proc_info.append((proc.pid, cur_rss))
+                mem_info = proc.memory_info()
             except (AccessDenied, NoSuchProcess):  # pragma: no cover
-                pass
+                continue
+            cur_usage: int = mem_info.rss
+            if self._is_linux:
+                # on Linux use "rss - shared" as the current usage
+                cur_usage -= mem_info.shared
+                # track largest shared amount to be appended to the grand total
+                # this is not perfect but it is close enough for this
+                largest_shared = max(largest_shared, mem_info.shared)
+            total_usage += cur_usage
+            proc_info.append((proc.pid, cur_usage))
+        total_usage += largest_shared
         if total_usage >= self.limit:
             msg = [
                 f"MEMORY_LIMIT_EXCEEDED: {total_usage:,}\n",
