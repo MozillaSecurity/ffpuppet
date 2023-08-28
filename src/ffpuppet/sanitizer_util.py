@@ -47,8 +47,7 @@ class SanitizerOptions:  # pylint: disable=missing-docstring
         Returns:
             None
         """
-        assert flag and isinstance(flag, str)
-        assert isinstance(value, str)
+        assert flag
         if ":" in value or " " in value:
             assert self.is_quoted(value), f"{value} ({flag}) must be quoted"
         if flag not in self._options or overwrite:
@@ -109,7 +108,7 @@ class SanitizerOptions:  # pylint: disable=missing-docstring
         if options:
             for option in self.re_delim.split(options):
                 try:
-                    self.add(*option.split("=", maxsplit=1))  # type: ignore
+                    self.add(*option.split("=", maxsplit=1))
                 except TypeError:
                     LOG.warning("Malformed option %r", option)
 

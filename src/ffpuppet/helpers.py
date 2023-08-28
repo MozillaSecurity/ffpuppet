@@ -330,7 +330,6 @@ def prepare_environment(
     base["XRE_NO_WINDOWS_CRASH_DIALOG"] = "1"
     # apply environment modifications
     if env_mod is not None:
-        assert isinstance(env_mod, dict)
         base.update(env_mod)
     # environment variables to skip if previously set in environ
     optional = (
