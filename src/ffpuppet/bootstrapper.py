@@ -136,7 +136,7 @@ class Bootstrapper:  # pylint: disable=missing-docstring
         assert timeout >= 0
         start_time = time()
         time_limit = start_time + timeout
-        conn = None
+        conn: Optional[socket.socket] = None
         try:
             while conn is None:
                 LOG.debug("waiting for browser connection...")
@@ -162,7 +162,8 @@ class Bootstrapper:  # pylint: disable=missing-docstring
                         count_recv = len(conn.recv(self.BUF_SIZE))
                         total_recv += count_recv
                     except socket.timeout:
-                        count_recv = None
+                        # use -1 to indicate timeout
+                        count_recv = -1
                     if count_recv == self.BUF_SIZE:
                         # check if there is more to read
                         continue

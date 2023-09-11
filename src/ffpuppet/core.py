@@ -123,7 +123,7 @@ class FFPuppet:
         self._logs = PuppetLogger(base_path=working_path)
         self._proc: Optional["Popen[bytes]"] = None
         self._profile_template = use_profile
-        self._xvfb = None
+        self._xvfb: Optional[Xvfb] = None
         self._working_path = working_path
         self.profile: Optional[Profile] = None
         self.reason: Optional[Reason] = Reason.CLOSED
@@ -347,7 +347,7 @@ class FFPuppet:
         """
         # if a python script is passed use 'sys.executable' as the binary
         # this is used by the test framework
-        cmd = []
+        cmd: List[str] = []
         if bin_path.lower().endswith(".py"):
             cmd.append(executable)
         cmd += [bin_path, "-no-remote"]
@@ -534,7 +534,7 @@ class FFPuppet:
             LOG.debug("secondary scan found %d browser process(es)", len(procs))
 
         # set reason code
-        exit_code = None
+        exit_code: Optional[int] = None
         if any(self._crashreports(skip_benign=True)):
             r_code = Reason.ALERT
             # Wait a moment for processes to exit automatically.
