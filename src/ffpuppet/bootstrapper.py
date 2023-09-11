@@ -201,7 +201,7 @@ class Bootstrapper:  # pylint: disable=missing-docstring
                 raise BrowserTerminatedError("Failure during browser startup")
             if resp_timeout:
                 raise BrowserTimeoutError("Timeout sending response")
-            LOG.debug("bootstrap complete (%0.2fs)", time() - start_time)
+            LOG.debug("bootstrap complete (%0.1fs)", time() - start_time)
         except OSError as exc:  # pragma: no cover
             raise LaunchError(f"Error attempting to launch browser: {exc}") from exc
         finally:

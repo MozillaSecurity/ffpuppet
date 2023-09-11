@@ -91,9 +91,7 @@ class SanitizerOptions:  # pylint: disable=missing-docstring
         Returns:
             True if token is quoted otherwise False.
         """
-        if len(token) > 1 and token[0] == token[-1] and token[0] in ('"', "'"):
-            return True
-        return False
+        return len(token) > 1 and token[0] == token[-1] and token[0] in ('"', "'")
 
     def load_options(self, options: Optional[str]) -> None:
         """Load flags from *SAN_OPTIONS in env.
