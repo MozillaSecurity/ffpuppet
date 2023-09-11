@@ -8,7 +8,7 @@ from importlib.metadata import PackageNotFoundError, version
 from logging import DEBUG, ERROR, INFO, WARNING, basicConfig, getLogger
 from pathlib import Path
 from platform import system
-from shutil import rmtree
+from shutil import rmtree, which
 from tempfile import mkdtemp
 from time import sleep, strftime
 from typing import List, Optional
@@ -259,6 +259,14 @@ def parse_args(argv: Optional[List[str]] = None) -> Namespace:
         for ext in args.extension:
             if not ext.exists():
                 parser.error(f"Extension '{ext}' does not exist")
+    if args.debugger in (Debugger.PERNOSCO, Debugger.RR):
+        # rr is only supported on Linux
+        if not which("rr"):
+            parser.error("rr is not installed")
+        settings = "/proc/sys/kernel/perf_event_paranoid"
+        value = int(Path(settings).read_bytes())
+        if value > 1:
+            parser.error(f"rr needs {settings} <= 1, but it is {value}")
     if not args.logs.is_dir():
         parser.error(f"Log output directory is invalid '{args.logs}'")
     args.log_level = log_level_map[args.log_level]
