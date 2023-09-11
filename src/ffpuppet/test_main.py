@@ -3,6 +3,7 @@
 # License, v. 2.0. If a copy of the MPL was not distributed with this file,
 # You can obtain one at http://mozilla.org/MPL/2.0/.
 """ffpuppet main.py tests"""
+from platform import system
 
 from pytest import mark, raises
 
@@ -58,45 +59,65 @@ def test_main_01(mocker, tmp_path, reason, launch, is_healthy, extra_args):
     assert fake_ffp.return_value.clean_up.call_count == 1
 
 
-def test_parse_args_01(mocker, tmp_path):
+def test_parse_args_01(capsys, mocker, tmp_path):
     """test parse_args()"""
+    mocker.patch("ffpuppet.main.Path.read_bytes", autospec=True, return_value=b"99")
     certutil_avail = mocker.patch("ffpuppet.main.certutil_available", autospec=True)
+    fake_which = mocker.patch("ffpuppet.main.which", autospec=True)
     with raises(SystemExit):
         parse_args(["-h"])
     # invalid/missing binary
     with raises(SystemExit):
-        parse_args(["fake_bin"])
+        parse_args(["missing_bin"])
+    assert "error: Invalid browser binary 'missing_bin'" in capsys.readouterr()[-1]
     fake_bin = tmp_path / "fake.bin"
     fake_bin.touch()
     # invalid log-limit
     with raises(SystemExit):
         parse_args([str(fake_bin), "--log-limit", "-1"])
+    assert "error: --log-limit must be >= 0" in capsys.readouterr()[-1]
     # invalid memory limit
     with raises(SystemExit):
         parse_args([str(fake_bin), "--memory", "-1"])
+    assert "error: --memory must be >= 0" in capsys.readouterr()[-1]
     # missing prefs
     with raises(SystemExit):
-        parse_args([str(fake_bin), "-p", str(tmp_path / "missing")])
+        parse_args([str(fake_bin), "-p", "missing_prefs"])
+    assert "error: Invalid prefs.js file 'missing_prefs'" in capsys.readouterr()[-1]
     # missing extension
     with raises(SystemExit):
-        parse_args([str(fake_bin), "-e", str(tmp_path / "missing")])
+        parse_args([str(fake_bin), "-e", "missing_ext"])
+    assert "error: Extension 'missing_ext' does not exist" in capsys.readouterr()[-1]
     # missing certificate
     certutil_avail.return_value = True
     with raises(SystemExit):
-        parse_args([str(fake_bin), "--cert", str(tmp_path / "missing")])
+        parse_args([str(fake_bin), "--cert", "missing_cert"])
+    assert "error: Invalid certificate file 'missing_cert'" in capsys.readouterr()[-1]
     # missing certutil
     certutil_avail.return_value = False
     with raises(SystemExit):
         parse_args([str(fake_bin), "--cert", str(fake_bin)])
-    # multiple debuggers
-    with raises(SystemExit):
-        parse_args([str(fake_bin), "--gdb", "--valgrind"])
+    assert "error: '--certs' requires NSS certutil" in capsys.readouterr()[-1]
     # invalid log path
     (tmp_path / "junk.log").touch()
+    missing = tmp_path / "missing"
     with raises(SystemExit):
-        parse_args([str(fake_bin), "--logs", "/missing/path/"])
-    # success
-    assert parse_args([str(fake_bin)])
+        parse_args([str(fake_bin), "--logs", str(missing)])
+    assert f"Log output directory is invalid '{missing}'" in capsys.readouterr()[-1]
+    # rr is Linux only
+    if system() == "Linux":
+        # missing rr
+        fake_which.return_value = None
+        with raises(SystemExit):
+            parse_args([str(fake_bin), "--rr"])
+        assert "error: rr is not installed" in capsys.readouterr()[-1]
+        # rr - perf_event_paranoid > 1
+        fake_which.return_value = "rr"
+        with raises(SystemExit):
+            parse_args([str(fake_bin), "--rr"])
+        assert "/proc/sys/kernel/perf_event_paranoid <= 1" in capsys.readouterr()[-1]
+        # success
+        assert parse_args([str(fake_bin)])
 
 
 def test_parse_args_02(mocker, tmp_path):
