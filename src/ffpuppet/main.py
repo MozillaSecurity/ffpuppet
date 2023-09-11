@@ -124,7 +124,7 @@ def parse_args(argv: Optional[List[str]] = None) -> Namespace:
         "containing the unpacked extension.",
     )
     headless_choices = ["default"]
-    if system().startswith("Linux"):
+    if system() == "Linux":
         headless_choices.append("xvfb")
     cfg_group.add_argument(
         "--headless",
@@ -150,7 +150,7 @@ def parse_args(argv: Optional[List[str]] = None) -> Namespace:
     cfg_group.add_argument(
         "-u", "--url", help="Server URL or path to local file to load."
     )
-    if system().startswith("Linux"):
+    if system() == "Linux":
         cfg_group.add_argument(
             "--xvfb",
             action="store_true",
@@ -209,7 +209,8 @@ def parse_args(argv: Optional[List[str]] = None) -> Namespace:
         " By default logs are saved only when an issue is detected.",
     )
 
-    if system().startswith("Linux"):
+    parser.set_defaults(debugger=Debugger.NONE)
+    if system() == "Linux":
         dbg_group = parser.add_argument_group("Available Debuggers")
         # Add the mutually exclusive group to a regular group
         # because mutually exclusive groups don't accept a title
@@ -242,8 +243,6 @@ def parse_args(argv: Optional[List[str]] = None) -> Namespace:
             dest="debugger",
             help="Use Valgrind.",
         )
-
-    parser.set_defaults(debugger=Debugger.NONE)
 
     args = parser.parse_args(argv)
 

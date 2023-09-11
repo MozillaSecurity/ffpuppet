@@ -111,13 +111,13 @@ class Profile:
 
     def _copy_prefs_file(self, prefs_file: Path) -> None:
         assert self.path
-        LOG.debug("using prefs.js: %r", prefs_file)
+        LOG.debug("using prefs.js: '%s'", prefs_file)
         copyfile(prefs_file, self.path / "prefs.js")
         self._add_times_json()
 
     def _copy_template(self, template: Path) -> None:
         assert self.path
-        LOG.debug("using profile template: %s", template)
+        LOG.debug("using profile template: '%s'", template)
         rmtree(self.path)
         copytree(template, self.path)
         invalid_prefs = self.path / "Invalidprefs.js"

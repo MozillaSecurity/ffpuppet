@@ -50,8 +50,7 @@ class PuppetLogger:  # pylint: disable=missing-docstring
 
         Args:
             log_id: ID of the log to add.
-            logfp: File object to use. If None is provided a new log
-                   file will be created.
+            logfp: File object to use. If None a new log file will be created.
 
         Returns:
             Newly added log file.
@@ -95,8 +94,7 @@ class PuppetLogger:  # pylint: disable=missing-docstring
         """Remove log files from disk.
 
         Args:
-            ignore_errors: Ignore errors triggered by removing files and
-                           directories will be ignored.
+            ignore_errors: Ignore errors triggered by removing files and directories.
 
         Returns:
             None

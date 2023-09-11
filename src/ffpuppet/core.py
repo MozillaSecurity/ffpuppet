@@ -206,8 +206,7 @@ class FFPuppet:
 
         Args:
             skip_md: Do not scan for minidumps.
-            skip_benign: Skip reports that only contain benign non-fatal
-                                warnings.
+            skip_benign: Skip reports that only contain benign non-fatal warnings.
 
         Yields:
             Log on the filesystem.
@@ -242,21 +241,21 @@ class FFPuppet:
         """
         LOG.debug("checking %s support", dbg)
         if dbg == Debugger.GDB:
-            if not system().startswith("Linux"):
+            if system() != "Linux":
                 raise OSError("GDB is only supported on Linux")
             try:
                 check_output(["gdb", "--version"])
             except OSError:
                 raise OSError("Please install GDB") from None
         elif dbg in (Debugger.PERNOSCO, Debugger.RR):
-            if not system().startswith("Linux"):
+            if system() != "Linux":
                 raise OSError("rr is only supported on Linux")
             try:
                 check_output(["rr", "--version"])
             except OSError:
                 raise OSError("Please install rr") from None
         elif dbg == Debugger.VALGRIND:
-            if not system().startswith("Linux"):
+            if system() != "Linux":
                 raise OSError("Valgrind is only supported on Linux")
             try:
                 match = re_match(
@@ -813,7 +812,7 @@ class FFPuppet:
             self.profile.add_prefs(prefs)
 
             launch_args = [bootstrapper.location]
-            is_windows = system().startswith("Windows")
+            is_windows = system() == "Windows"
             if is_windows:
                 # disable launcher process
                 launch_args.append("-no-deelevate")
