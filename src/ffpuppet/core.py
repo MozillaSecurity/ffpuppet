@@ -33,7 +33,7 @@ except ImportError:
 from .bootstrapper import Bootstrapper
 from .checks import CheckLogContents, CheckLogSize, CheckMemoryUsage
 from .exceptions import BrowserExecutionError, InvalidPrefs, LaunchError, TerminateError
-from .helpers import files_in_use, get_processes, prepare_environment, wait_on_files
+from .helpers import get_processes, prepare_environment, wait_on_files
 from .minidump_parser import process_minidumps
 from .profile import Profile
 from .puppet_logger import PuppetLogger
@@ -512,25 +512,8 @@ class FFPuppet:
             return
 
         assert self._proc is not None
-        pid = self.get_pid()
-        procs = list(get_processes(pid)) if pid is not None else []
-        LOG.debug("browser pid: %r, %d process(es)", pid, len(procs))
-        # If the parent process closes while other processes are still open
-        # procs will be empty, perform a secondary scan if needed
-        if not procs and self._logs.get_fp("stderr"):
-            stderr_fp = self._logs.get_fp("stderr")
-            assert stderr_fp is not None
-            # create a list of processes that are using the stderr file
-            # this *should* only include the browser and the current Python process
-            procs = []
-            for _, other_pid, _ in files_in_use([Path(stderr_fp.name)]):
-                # don't include the current Python process in the results
-                if other_pid != getpid():
-                    try:
-                        procs.append(Process(other_pid))
-                    except (AccessDenied, NoSuchProcess):  # pragma: no cover
-                        pass
-            LOG.debug("secondary scan found %d browser process(es)", len(procs))
+        procs = sorted(get_processes(), key=Process.create_time)
+        LOG.debug("processes found: %d", len(procs))
 
         # set reason code
         exit_code: Optional[int] = None
@@ -591,6 +574,10 @@ class FFPuppet:
 
         # collect crash reports and logs
         if not force_close:
+            LOG.debug(
+                "all browser processes should be closed, found: %d",
+                len(tuple(get_processes())),
+            )
             if self._logs.closed:  # pragma: no cover
                 # This should not happen while everything is working as expected.
                 # This is here to prevent additional unexpected issues.
@@ -654,13 +641,11 @@ class FFPuppet:
         Yields:
             PID and the CPU usage as a percentage.
         """
-        pid = self.get_pid()
-        if pid is not None:
-            for proc in get_processes(pid):
-                try:
-                    yield proc.pid, proc.cpu_percent(interval=0.1)
-                except (AccessDenied, NoSuchProcess):  # pragma: no cover
-                    continue
+        for proc in get_processes():
+            try:
+                yield proc.pid, proc.cpu_percent(interval=0.1)
+            except (AccessDenied, NoSuchProcess):  # pragma: no cover
+                continue
 
     def get_pid(self) -> Optional[int]:
         """Get the browser process ID.
@@ -773,6 +758,10 @@ class FFPuppet:
 
         # process environment
         env_mod = env_mod or {}
+
+        # set FFPUPPET_PID in the environment of the browser
+        env_mod["FFPUPPET_PID"] = str(getpid())
+
         if self._dbg in (Debugger.PERNOSCO, Debugger.RR):
             env_mod["_RR_TRACE_DIR"] = str(self._logs.add_path(self._logs.PATH_RR))
         elif self._dbg == Debugger.VALGRIND:
@@ -952,14 +941,13 @@ class FFPuppet:
 
         Args:
             timeout: The maximum amount of time in seconds to wait or
-                             None (wait indefinitely).
+                     None (wait indefinitely).
 
         Returns:
             True if processes exit before timeout expires otherwise False.
         """
         assert timeout is None or timeout >= 0
-        pid = self.get_pid()
-        if pid is None or not wait_procs(list(get_processes(pid)), timeout=timeout)[1]:
+        if not wait_procs(list(get_processes()), timeout=timeout)[1]:
             return True
         LOG.debug("wait(timeout=%0.2f) timed out", timeout)
         return False

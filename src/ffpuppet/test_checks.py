@@ -7,6 +7,8 @@
 from os import getpid
 from re import compile as re_compile
 
+from psutil import Process
+
 from .checks import CheckLogContents, CheckLogSize, CheckMemoryUsage
 
 
@@ -70,8 +72,16 @@ def test_check_02(tmp_path):
         assert not lfp.tell()
 
 
-def test_check_03(tmp_path):
+def test_check_03(mocker, tmp_path):
     """test CheckMemoryUsage()"""
+    process_iter = mocker.patch("ffpuppet.helpers.process_iter", autospec=True)
+
+    proc = mocker.Mock(spec_set=Process)
+    proc.pid = getpid()
+    proc.environ.return_value = {"FFPUPPET_PID": str(getpid())}
+    proc.memory_info.side_effect = Process(getpid()).memory_info
+    process_iter.return_value = (proc,)
+
     checker = CheckMemoryUsage(getpid(), 300 * 1024 * 1024)
     # don't exceed limit
     assert not checker.check()

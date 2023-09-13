@@ -177,7 +177,7 @@ class CheckMemoryUsage(Check):
         largest_shared = 0
         proc_info: List[Tuple[int, int]] = []
         total_usage = 0
-        for proc in get_processes(self.pid):
+        for proc in get_processes():
             try:
                 mem_info = proc.memory_info()
             except (AccessDenied, NoSuchProcess):  # pragma: no cover
