@@ -4,7 +4,7 @@
 """ffpuppet helper utilities"""
 
 from logging import getLogger
-from os import W_OK, access, chmod, environ
+from os import W_OK, access, chmod, environ, getpid
 from pathlib import Path
 from platform import system
 from stat import S_IWUSR
@@ -232,25 +232,22 @@ def files_in_use(files: Iterable[Path]) -> Iterator[Tuple[Path, int, str]]:
                             pass
 
 
-def get_processes(pid: int, recursive: bool = True) -> Iterator[Process]:
-    """From a given PID create a psutil.Process object and lookup all of its
-    children.
+def get_processes() -> Iterator[Process]:
+    """Get browser processes directly and indirectly launched by this instance.
 
     Args:
-        pid: PID of the process to lookup.
-        recursive: Include the children (and so on) of the Process that was created.
+        None
 
     Yields:
-        psutil.Process objects. The first object will always be the Process that
-        corresponds to pid.
+        psutil.Process objects.
     """
-    try:
-        proc = Process(pid)
-        yield proc
-        if recursive and proc:
-            yield from proc.children(recursive=True)
-    except (AccessDenied, NoSuchProcess):
-        pass
+    launcher_pid = str(getpid())
+    for proc in process_iter():
+        try:
+            if proc.environ().get("FFPUPPET_PID") == launcher_pid:
+                yield proc
+        except (AccessDenied, NoSuchProcess):  # pragma: no cover
+            pass
 
 
 def onerror(

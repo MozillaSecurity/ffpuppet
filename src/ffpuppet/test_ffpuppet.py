@@ -27,6 +27,7 @@ from .exceptions import (
     LaunchError,
     TerminateError,
 )
+from .helpers import get_processes
 from .profile import Profile
 
 Bootstrapper.POLL_WAIT = 0.2
@@ -101,12 +102,16 @@ def test_ffpuppet_01():
             assert ffp.is_running()
             assert ffp.is_healthy()
             assert ffp.reason is None
+            assert ffp.get_pid() is not None
+            assert str(os.getpid()) == Process(ffp.get_pid()).environ()["FFPUPPET_PID"]
+            assert any(get_processes())
             ffp.close()
         assert ffp.reason == Reason.CLOSED
         assert ffp._proc is None
         assert not ffp.is_running()
         assert not ffp.is_healthy()
         assert ffp.wait(timeout=10)
+        assert not any(get_processes())
 
 
 @mark.parametrize(
@@ -120,7 +125,6 @@ def test_ffpuppet_01():
 )
 def test_ffpuppet_02(mocker, exc_type):
     """test launch failures"""
-    mocker.patch("ffpuppet.core.files_in_use", autospec=True)
     mocker.patch("ffpuppet.core.Popen", autospec=True)
     fake_bts = mocker.patch("ffpuppet.core.Bootstrapper", autospec=True)
     fake_bts.return_value.location = ""
@@ -132,9 +136,8 @@ def test_ffpuppet_02(mocker, exc_type):
         assert ffp.launches == 0
 
 
-def test_ffpuppet_03(mocker, tmp_path):
+def test_ffpuppet_03(tmp_path):
     """test logging"""
-    mocker.patch("ffpuppet.core.files_in_use", autospec=True)
     with FFPuppet() as ffp:
         ffp.close()
         ffp.save_logs(tmp_path / "no_logs")
@@ -203,9 +206,6 @@ def test_ffpuppet_06(mocker):
     fake_wait_procs = mocker.patch("ffpuppet.core.wait_procs", autospec=True)
     with StubbedProc() as ffp:
         # process not running
-        assert ffp.wait()
-        assert fake_wait_procs.call_count == 0
-        # process closed
         fake_wait_procs.return_value = ([], [])
         ffp.launch()
         assert ffp.wait()
@@ -240,8 +240,8 @@ def test_ffpuppet_07(tmp_path):
                 assert ffp.clone_log("stdout", target_file=str(logs)) == logs
                 assert logs.read_text().startswith(orig)
             finally:
-                if os.path.isfile(rnd_log):
-                    os.remove(rnd_log)
+                if rnd_log:
+                    rnd_log.unlink()
         ffp.clean_up()
         # verify clean_up() removed the logs
         assert ffp.clone_log("stdout", target_file=str(logs)) is None
@@ -341,7 +341,6 @@ def test_ffpuppet_12():
 
 def test_ffpuppet_13(mocker):
     """test launching under Xvfb"""
-    mocker.patch("ffpuppet.core.files_in_use", autospec=True)
     mocker.patch("ffpuppet.core.Popen", autospec=True)
     fake_bts = mocker.patch("ffpuppet.core.Bootstrapper", autospec=True)
     fake_bts.return_value.location = "http://test:123"
@@ -371,9 +370,8 @@ def test_ffpuppet_13(mocker):
     assert fake_xvfb.start.call_count == 0
 
 
-def test_ffpuppet_14(mocker, tmp_path):
+def test_ffpuppet_14(tmp_path):
     """test passing a file and a non existing file to launch() via location"""
-    mocker.patch("ffpuppet.core.files_in_use", autospec=True)
     with FFPuppet() as ffp:
         with raises(OSError, match="Cannot find"):
             ffp.launch(TESTFF_BIN, location="missing.file")
@@ -402,13 +400,22 @@ def test_ffpuppet_14(mocker, tmp_path):
         assert os.path.normpath(os.path.join("/", location)) == fname
 
 
-def test_ffpuppet_15(mocker, tmp_path):
-    """test launching with gdb"""
-    mocker.patch("ffpuppet.core.check_output", autospec=True)
+@mark.parametrize(
+    "debugger, dbg_bin, version",
+    [
+        (Debugger.GDB, b"gdb", b""),
+        (Debugger.PERNOSCO, b"rr", b""),
+        (Debugger.RR, b"rr", b""),
+        (Debugger.VALGRIND, b"valgrind", b"valgrind-99.0"),
+    ],
+)
+def test_ffpuppet_15(mocker, tmp_path, debugger, dbg_bin, version):
+    """test launching with debuggers"""
+    mocker.patch("ffpuppet.core.check_output", autospec=True, return_value=version)
     mocker.patch(
         "ffpuppet.core.get_processes",
         autospec=True,
-        return_value=(mocker.Mock(spec=Process),),
+        side_effect=([mocker.Mock(spec=Process, _create_time=0)], []),
     )
     mocker.patch("ffpuppet.core.system", autospec=True, return_value="Linux")
     fake_bts = mocker.patch("ffpuppet.core.Bootstrapper", autospec=True)
@@ -416,16 +423,16 @@ def test_ffpuppet_15(mocker, tmp_path):
     fake_proc = mocker.patch("ffpuppet.core.Popen", autospec=True)
     fake_proc.return_value.pid = 0xFFFF
     fake_proc.return_value.poll.return_value = None
-    with FFPuppet(debugger=Debugger.GDB) as ffp:
-        assert ffp._dbg == Debugger.GDB
+    with FFPuppet(debugger=debugger) as ffp:
+        assert ffp._dbg == debugger
         ffp.launch(TESTFF_BIN)
         ffp.close()
         assert ffp.reason == Reason.CLOSED
         logs = tmp_path / "logs"
         ffp.save_logs(logs)
-    log_data = (logs / "log_stderr.txt").read_bytes()
     # verify launch command was correct
-    assert b"gdb" in log_data
+    log_data = (logs / "log_stderr.txt").read_bytes()
+    assert dbg_bin in log_data
     assert b"[ffpuppet] Reason code:" in log_data
 
 
@@ -438,36 +445,7 @@ def test_ffpuppet_16(tmp_path):
                 ffp.save_logs(tmp_path / "logs")
 
 
-def test_ffpuppet_17(mocker, tmp_path):
-    """test launching with Valgrind"""
-    mocker.patch(
-        "ffpuppet.core.check_output", autospec=True, return_value=b"valgrind-99.0"
-    )
-    mocker.patch(
-        "ffpuppet.core.get_processes",
-        autospec=True,
-        return_value=(mocker.Mock(spec=Process),),
-    )
-    mocker.patch("ffpuppet.core.system", autospec=True, return_value="Linux")
-    fake_bts = mocker.patch("ffpuppet.core.Bootstrapper", autospec=True)
-    fake_bts.return_value.location = "http://test:123"
-    fake_proc = mocker.patch("ffpuppet.core.Popen", autospec=True)
-    fake_proc.return_value.pid = 0xFFFF
-    fake_proc.return_value.poll.return_value = None
-    with FFPuppet(debugger=Debugger.VALGRIND) as ffp:
-        assert ffp._dbg == Debugger.VALGRIND
-        ffp.launch(TESTFF_BIN)
-        ffp.close()
-        assert ffp.reason == Reason.CLOSED
-        logs = tmp_path / "logs"
-        ffp.save_logs(logs)
-    log_data = (logs / "log_stderr.txt").read_bytes()
-    # verify launch command was correct
-    assert b"valgrind -q" in log_data
-    assert b"[ffpuppet] Reason code:" in log_data
-
-
-def test_ffpuppet_18(tmp_path):
+def test_ffpuppet_17(tmp_path):
     """test detecting invalid prefs file"""
     prefs = tmp_path / "prefs.js"
     prefs.write_bytes(b"//fftest_invalid_js\n")
@@ -477,7 +455,7 @@ def test_ffpuppet_18(tmp_path):
                 ffp.launch(TESTFF_BIN, location=srv.get_addr(), prefs_js=prefs)
 
 
-def test_ffpuppet_19():
+def test_ffpuppet_18():
     """test log_length()"""
     with FFPuppet() as ffp:
         assert ffp.log_length("INVALID") is None
@@ -495,28 +473,24 @@ def test_ffpuppet_19():
         assert ffp.log_length("stderr") is None
 
 
-def test_ffpuppet_20():
+def test_ffpuppet_19():
     """test running multiple instances in parallel"""
-    ffps = []
-    try:
-        with HTTPTestServer() as srv:
-            # use test pool size of 10
-            for _ in range(10):
-                ffps.append(FFPuppet())
+    # use test pool size of 10
+    ffp_instances = list(FFPuppet() for _ in range(10))
+    with HTTPTestServer() as srv:
+        try:
+            for ffp in ffp_instances:
                 # NOTE: launching truly in parallel can DoS the test webserver
-                ffps[-1].launch(TESTFF_BIN, location=srv.get_addr())
-            # list of ffps needs to be reversed to deal with inheriting open
-            # file handles in Popen
-            # this is not a problem in production only in the test environment
-            for ffp in reversed(ffps):
+                ffp.launch(TESTFF_BIN, location=srv.get_addr())
+                assert ffp.is_running()
                 assert ffp.launches == 1
-                ffp.close()
-    finally:
-        for ffp in ffps:
-            ffp.clean_up()
+        finally:
+            # closing one instance will close all because they share a FFPUPPET_PID
+            for ffp in ffp_instances:
+                ffp.clean_up()
 
 
-def test_ffpuppet_21(tmp_path):
+def test_ffpuppet_20(tmp_path):
     """test hitting log size limit"""
     prefs = tmp_path / "prefs.js"
     prefs.write_bytes(b"//fftest_big_log\n")
@@ -540,9 +514,8 @@ def test_ffpuppet_21(tmp_path):
         )
 
 
-def test_ffpuppet_22(mocker, tmp_path):
+def test_ffpuppet_21(mocker, tmp_path):
     """test collecting and cleaning up ASan logs"""
-    mocker.patch("ffpuppet.core.files_in_use", autospec=True)
     mocker.patch("ffpuppet.core.wait_on_files", autospec=True)
     test_logs = []
     with FFPuppet() as ffp:
@@ -581,7 +554,8 @@ def test_ffpuppet_22(mocker, tmp_path):
         assert not ffp.is_healthy()
         assert ffp.is_running()
         # close fake browser process before calling close to avoid hang
-        Process(ffp.get_pid()).terminate()
+        for proc in get_processes():
+            proc.terminate()
         ffp.close()
         assert ffp.reason == Reason.ALERT
         logs = tmp_path / "logs"
@@ -602,14 +576,13 @@ def test_ffpuppet_22(mocker, tmp_path):
     assert not any(f.is_file() for f in test_logs)
 
 
-def test_ffpuppet_23(mocker, tmp_path):
+def test_ffpuppet_22(mocker, tmp_path):
     """test multiple minidumps"""
-    mocker.patch("ffpuppet.core.files_in_use", autospec=True)
     mocker.patch("ffpuppet.core.wait_on_files", autospec=True)
 
     # pylint: disable=unused-argument
     def _fake_process_minidumps(dmps, _, add_log, working_path=None):
-        for num, _ in enumerate(x for x in os.listdir(dmps) if x.endswith(".dmp")):
+        for num, _ in enumerate(Path(dmps).glob("*.dmp")):
             lfp = add_log(f"minidump_{num + 1:02}")
             lfp.write(b"test")
 
@@ -628,7 +601,8 @@ def test_ffpuppet_23(mocker, tmp_path):
         (md_path / "test3.dmp").write_text("3a\n3b")
         assert not ffp.is_healthy()
         # close fake browser process before calling close to avoid hang
-        Process(ffp.get_pid()).terminate()
+        for proc in get_processes():
+            proc.terminate()
         ffp.close()
         logs = tmp_path / "logs"
         ffp.save_logs(logs)
@@ -637,34 +611,7 @@ def test_ffpuppet_23(mocker, tmp_path):
         assert any(logs.glob("log_minidump_03.txt"))
 
 
-def test_ffpuppet_24(mocker, tmp_path):
-    """test launching with rr"""
-    mocker.patch("ffpuppet.core.check_output", autospec=True)
-    mocker.patch(
-        "ffpuppet.core.get_processes",
-        autospec=True,
-        return_value=(mocker.Mock(spec=Process),),
-    )
-    mocker.patch("ffpuppet.core.system", autospec=True, return_value="Linux")
-    fake_bts = mocker.patch("ffpuppet.core.Bootstrapper", autospec=True)
-    fake_bts.return_value.location = "http://test:123"
-    fake_proc = mocker.patch("ffpuppet.core.Popen", autospec=True)
-    fake_proc.return_value.pid = 0xFFFF
-    fake_proc.return_value.poll.return_value = None
-    with FFPuppet(debugger=Debugger.RR) as ffp:
-        assert ffp._dbg == Debugger.RR
-        ffp.launch(TESTFF_BIN)
-        ffp.close()
-        assert ffp.reason == Reason.CLOSED
-        logs = tmp_path / "logs"
-        ffp.save_logs(logs)
-    log_data = (logs / "log_stderr.txt").read_bytes()
-    # verify launch command was correct
-    assert b"rr record" in log_data
-    assert b"[ffpuppet] Reason code:" in log_data
-
-
-def test_ffpuppet_25(tmp_path):
+def test_ffpuppet_23(tmp_path):
     """test rmtree error handler"""
     # normal profile creation
     # - just create a puppet, write a readonly file in its profile, then call close()
@@ -692,7 +639,7 @@ def test_ffpuppet_25(tmp_path):
         assert not prof_path.is_dir()
 
 
-def test_ffpuppet_26(tmp_path):
+def test_ffpuppet_24(tmp_path):
     """test using a readonly prefs.js and extension"""
     prefs = tmp_path / "prefs.js"
     prefs.touch()
@@ -708,7 +655,7 @@ def test_ffpuppet_26(tmp_path):
         assert not prof_path.is_dir()
 
 
-def test_ffpuppet_27(mocker, tmp_path):
+def test_ffpuppet_25(mocker, tmp_path):
     """test _crashreports()"""
     mocker.patch(
         "ffpuppet.core.check_output", autospec=True, return_value=b"valgrind-99.0"
@@ -770,7 +717,7 @@ def test_ffpuppet_27(mocker, tmp_path):
             assert not ffp._logs.watching
 
 
-def test_ffpuppet_28(tmp_path):
+def test_ffpuppet_26(tmp_path):
     """test build_launch_cmd()"""
     with FFPuppet() as ffp:
         cmd = ffp.build_launch_cmd("bin_path", ["test"])
@@ -818,7 +765,7 @@ def test_ffpuppet_28(tmp_path):
             os.environ.pop("VALGRIND_SUP_PATH")
 
 
-def test_ffpuppet_29():
+def test_ffpuppet_27():
     """test cpu_usage()"""
     with FFPuppet() as ffp:
         assert not any(ffp.cpu_usage())
@@ -826,14 +773,13 @@ def test_ffpuppet_29():
             ffp.launch(TESTFF_BIN, location=srv.get_addr())
             usage = next(ffp.cpu_usage())
             assert usage
-            assert usage[0] == ffp.get_pid()
             assert usage[1] <= 100
             assert usage[1] >= 0
         ffp.close()
         assert ffp.wait(timeout=10)
 
 
-def test_ffpuppet_30(mocker):
+def test_ffpuppet_28(mocker):
     """test _dbg_sanity_check()"""
     fake_system = mocker.patch("ffpuppet.core.system", autospec=True)
     fake_chkout = mocker.patch("ffpuppet.core.check_output", autospec=True)
@@ -892,7 +838,7 @@ def test_ffpuppet_30(mocker):
         FFPuppet._dbg_sanity_check(Debugger.VALGRIND)
 
 
-def test_ffpuppet_31(mocker):
+def test_ffpuppet_29(mocker):
     """test _terminate()"""
     procs = [
         mocker.Mock(spec_set=Process, pid=123),
@@ -921,9 +867,8 @@ def test_ffpuppet_31(mocker):
     assert sum(x.kill.call_count for x in procs) == 2
 
 
-def test_ffpuppet_32(mocker, tmp_path):
+def test_ffpuppet_30(mocker, tmp_path):
     """test FFPuppet.close() setting reason"""
-    mocker.patch("ffpuppet.core.files_in_use", autospec=True)
 
     class StubbedProc(FFPuppet):
         # pylint: disable=arguments-differ
@@ -945,7 +890,7 @@ def test_ffpuppet_32(mocker, tmp_path):
     mocker.patch(
         "ffpuppet.core.get_processes",
         autospec=True,
-        return_value=(mocker.Mock(spec=Process),),
+        return_value=[mocker.Mock(spec=Process, _create_time=0)],
     )
     fake_reports = mocker.patch("ffpuppet.core.FFPuppet._crashreports", autospec=True)
     fake_reports.return_value = ()
@@ -1009,7 +954,7 @@ def test_ffpuppet_32(mocker, tmp_path):
         assert ffp.reason == Reason.ALERT
 
 
-def test_ffpuppet_33():
+def test_ffpuppet_31():
     """test ignoring benign sanitizer logs"""
     with FFPuppet() as ffp:
         ffp.launch(TESTFF_BIN)
@@ -1025,14 +970,6 @@ def test_ffpuppet_33():
         assert ffp.reason == Reason.CLOSED
 
 
-def test_ffpuppet_34(mocker):
-    """test secondary process lookup scan in close()"""
-    fake_get_proc = mocker.patch("ffpuppet.core.get_processes", return_value=())
-    with FFPuppet() as ffp:
-        ffp.launch(TESTFF_BIN)
-    assert fake_get_proc.call_count == 1
-
-
 @mark.parametrize(
     "bin_exists, expect_exc",
     [
@@ -1042,7 +979,7 @@ def test_ffpuppet_34(mocker):
         (False, FileNotFoundError),
     ],
 )
-def test_ffpuppet_35(mocker, tmp_path, bin_exists, expect_exc):
+def test_ffpuppet_32(mocker, tmp_path, bin_exists, expect_exc):
     """test Popen failure during launch"""
     bin_fake = tmp_path / "fake_bin"
     if bin_exists:
@@ -1060,9 +997,8 @@ def test_ffpuppet_35(mocker, tmp_path, bin_exists, expect_exc):
 
 
 @mark.skipif(system() != "Windows", reason="Only supported on Windows")
-def test_ffpuppet_36(mocker):
+def test_ffpuppet_33(mocker):
     """test FFPuppet.launch() config_job_object code path"""
-    mocker.patch("ffpuppet.core.files_in_use", autospec=True)
     fake_bts = mocker.patch("ffpuppet.core.Bootstrapper", autospec=True)
     fake_bts.return_value.location = ""
     fake_popen = mocker.patch("ffpuppet.core.Popen", autospec=True)

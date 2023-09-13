@@ -4,11 +4,11 @@
 # You can obtain one at http://mozilla.org/MPL/2.0/.
 """ffpuppet helpers tests"""
 
-from multiprocessing import Event, Process
 from os import getpid
 from pathlib import Path
 from subprocess import CalledProcessError
 
+from psutil import Process
 from pytest import mark, raises
 
 from .helpers import (
@@ -224,27 +224,24 @@ def test_helpers_04(mocker, tmp_path):
     assert fake_sleep.call_count == 0
 
 
-# this needs to be here in order to work correctly on Windows
-def _dummy_process(is_alive, is_done):
-    is_alive.set()
-    print(f"I'm process {getpid()}\n")
-    is_done.wait(30)
-
-
-def test_helpers_05():
+def test_helpers_05(mocker):
     """test get_processes()"""
-    assert len(list(get_processes(getpid(), recursive=False))) == 1
-    assert not any(get_processes(0xFFFFFF))
-    is_alive = Event()
-    is_done = Event()
-    proc = Process(target=_dummy_process, args=(is_alive, is_done))
-    proc.start()
-    try:
-        is_alive.wait(30)
-        assert len(list(get_processes(getpid()))) > 1
-    finally:
-        is_done.set()
-    proc.join()
+    process_iter = mocker.patch("ffpuppet.helpers.process_iter", autospec=True)
+
+    # no results
+    process_iter.side_effect = ([mocker.Mock(Process)],)
+    assert not any(get_processes())
+
+    # no matching results
+    proc = mocker.Mock(Process)
+    proc.environ.return_value = {"FFPUPPET_PID": "no_match"}
+    process_iter.side_effect = ([proc],)
+    assert not any(get_processes())
+
+    # matching results
+    proc.environ.return_value = {"FFPUPPET_PID": str(getpid())}
+    process_iter.side_effect = ([proc, mocker.Mock(Process)],)
+    assert any(get_processes())
 
 
 def test_helpers_06(tmp_path):
