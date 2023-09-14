@@ -23,7 +23,7 @@ try:
 except ImportError:
     pass
 
-from psutil import AccessDenied, NoSuchProcess, Process, wait_procs
+from psutil import AccessDenied, NoSuchProcess, wait_procs
 
 try:
     from xvfbwrapper import Xvfb
@@ -267,21 +267,33 @@ class FFPuppet:
             if not match or float(match.group("ver")) < cls.VALGRIND_MIN_VERSION:
                 raise OSError(f"Valgrind >= {cls.VALGRIND_MIN_VERSION:.2f} is required")
 
-    @staticmethod
-    def _terminate(
-        procs: List[Process], retry_delay: int = 30, use_kill: bool = False
-    ) -> None:
-        """Call terminate() on provided processes. If terminate() fails try kill().
+    def _terminate(self) -> None:
+        """Call terminate() on browser processes. If terminate() fails try kill().
 
         Args:
-            procs: Processes to terminate/kill.
-            retry_delay: Time in seconds to wait before next attempt.
-            use_kill: Initial mode.
+            None
 
         Returns:
             None
         """
-        while True:
+        procs = list(get_processes())
+        if not procs:
+            LOG.debug("no processes to terminate")
+            return
+
+        assert self._proc
+        # try terminating the parent process first, this should be all that is needed
+        if self._proc.poll() is None:
+            LOG.debug("attempting to terminate parent process")
+            try:
+                self._proc.terminate()
+                # wait for debugger (if in use) and child processes to close
+                procs = wait_procs(procs, timeout=10)[1]
+            except (AccessDenied, NoSuchProcess):  # pragma: no cover
+                pass
+
+        use_kill = False
+        while procs:
             LOG.debug(
                 "calling %s on %d running process(es)",
                 "kill()" if use_kill else "terminate()",
@@ -293,17 +305,17 @@ class FFPuppet:
                     proc.kill() if use_kill else proc.terminate()
                 except (AccessDenied, NoSuchProcess):  # pragma: no cover
                     pass
-            procs = wait_procs(procs, timeout=retry_delay)[1]
-            if not procs or use_kill:
+            # wait for processes to terminate
+            procs = wait_procs(procs, timeout=30)[1]
+            if use_kill:
                 break
             use_kill = True
 
         if procs:
+            LOG.warning("Processes still running: %d", len(procs))
             for proc in procs:
                 try:
-                    LOG.warning(
-                        "Failed to terminate process %d (%s)", proc.pid, proc.name()
-                    )
+                    LOG.warning("-> %d (%s)", proc.pid, proc.name())
                 except (AccessDenied, NoSuchProcess):  # pragma: no cover
                     pass
             raise TerminateError("Failed to terminate processes")
@@ -512,7 +524,7 @@ class FFPuppet:
             return
 
         assert self._proc is not None
-        procs = sorted(get_processes(), key=Process.create_time)
+        procs = list(get_processes())
         LOG.debug("processes found: %d", len(procs))
 
         # set reason code
@@ -560,24 +572,10 @@ class FFPuppet:
             r_code = Reason.EXITED
 
         # close processes
-        if procs:
-            # when running under a debugger close the debugger first
-            if self._dbg != Debugger.NONE and self.is_running():
-                LOG.debug("attempting to close debugger")
-                try:
-                    procs[0].terminate()
-                    # only wait if terminate() call does not fail
-                    procs = wait_procs(procs, timeout=10)[1]
-                except (AccessDenied, NoSuchProcess):  # pragma: no cover
-                    pass
-            self._terminate(procs)
+        self._terminate()
 
         # collect crash reports and logs
         if not force_close:
-            LOG.debug(
-                "all browser processes should be closed, found: %d",
-                len(tuple(get_processes())),
-            )
             if self._logs.closed:  # pragma: no cover
                 # This should not happen while everything is working as expected.
                 # This is here to prevent additional unexpected issues.

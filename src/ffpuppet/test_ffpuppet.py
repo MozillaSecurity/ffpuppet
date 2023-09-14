@@ -415,7 +415,7 @@ def test_ffpuppet_15(mocker, tmp_path, debugger, dbg_bin, version):
     mocker.patch(
         "ffpuppet.core.get_processes",
         autospec=True,
-        side_effect=([mocker.Mock(spec=Process, _create_time=0)], []),
+        side_effect=([mocker.Mock(spec=Process)], []),
     )
     mocker.patch("ffpuppet.core.system", autospec=True, return_value="Linux")
     fake_bts = mocker.patch("ffpuppet.core.Bootstrapper", autospec=True)
@@ -476,8 +476,8 @@ def test_ffpuppet_18():
 def test_ffpuppet_19():
     """test running multiple instances in parallel"""
     # use test pool size of 10
-    ffp_instances = list(FFPuppet() for _ in range(10))
     with HTTPTestServer() as srv:
+        ffp_instances = list(FFPuppet() for _ in range(10))
         try:
             for ffp in ffp_instances:
                 # NOTE: launching truly in parallel can DoS the test webserver
@@ -485,7 +485,10 @@ def test_ffpuppet_19():
                 assert ffp.is_running()
                 assert ffp.launches == 1
         finally:
-            # closing one instance will close all because they share a FFPUPPET_PID
+            # all instances share FFPUPPET_PID which causes issues during shutdown
+            # but this only affects the tests
+            for ffp in ffp_instances:
+                ffp._proc.terminate()
             for ffp in ffp_instances:
                 ffp.clean_up()
 
@@ -717,7 +720,7 @@ def test_ffpuppet_25(mocker, tmp_path):
             assert not ffp._logs.watching
 
 
-def test_ffpuppet_26(tmp_path):
+def test_ffpuppet_26(mocker, tmp_path):
     """test build_launch_cmd()"""
     with FFPuppet() as ffp:
         cmd = ffp.build_launch_cmd("bin_path", ["test"])
@@ -751,18 +754,15 @@ def test_ffpuppet_26(tmp_path):
         assert "--chaos" not in cmd
         # Valgrind
         ffp._dbg = Debugger.VALGRIND
-        try:
-            os.environ["VALGRIND_SUP_PATH"] = "blah"
-            with raises(OSError):
-                ffp.build_launch_cmd("bin_path")
-            supp = tmp_path / "suppressions.txt"
-            supp.touch()
-            os.environ["VALGRIND_SUP_PATH"] = str(supp)
-            cmd = ffp.build_launch_cmd("bin_path")
-            assert len(cmd) > 2
-            assert cmd[0] == "valgrind"
-        finally:
-            os.environ.pop("VALGRIND_SUP_PATH")
+        mocker.patch.dict(os.environ, {"VALGRIND_SUP_PATH": "blah"})
+        with raises(OSError):
+            ffp.build_launch_cmd("bin_path")
+        supp = tmp_path / "suppressions.txt"
+        supp.touch()
+        mocker.patch.dict(os.environ, {"VALGRIND_SUP_PATH": str(supp)})
+        cmd = ffp.build_launch_cmd("bin_path")
+        assert len(cmd) > 2
+        assert cmd[0] == "valgrind"
 
 
 def test_ffpuppet_27():
@@ -840,31 +840,87 @@ def test_ffpuppet_28(mocker):
 
 def test_ffpuppet_29(mocker):
     """test _terminate()"""
-    procs = [
-        mocker.Mock(spec_set=Process, pid=123),
-        mocker.Mock(spec_set=Process, pid=124),
-    ]
+    fake_get_processes = mocker.patch("ffpuppet.core.get_processes", autospec=True)
     fake_wait_procs = mocker.patch("ffpuppet.core.wait_procs", autospec=True)
-    # successful call to terminate
+
+    # not running
+    fake_get_processes.return_value = []
+    with FFPuppet() as ffp:
+        ffp._proc = mocker.Mock(spec=Popen)
+        ffp._terminate()
+        assert ffp._proc.poll.call_count == 0
+        ffp._proc = None
+
+    # running (close with parent)
+    fake_get_processes.side_effect = ([mocker.Mock(spec_set=Process)],)
     fake_wait_procs.side_effect = (([], []),)
-    FFPuppet._terminate(procs)
-    assert sum(x.terminate.call_count for x in procs) == 2
-    assert not sum(x.kill.call_count for x in procs)
-    for proc in procs:
-        proc.reset_mock()
-    # successful call to kill
-    fake_wait_procs.side_effect = (([], procs), ([], []))
-    FFPuppet._terminate(procs)
-    assert sum(x.terminate.call_count for x in procs) == 2
-    assert sum(x.kill.call_count for x in procs) == 2
-    for proc in procs:
-        proc.reset_mock()
-    # failed call to kill
-    fake_wait_procs.side_effect = (([], procs), ([], procs))
-    with raises(TerminateError):
-        FFPuppet._terminate(procs)
-    assert sum(x.terminate.call_count for x in procs) == 2
-    assert sum(x.kill.call_count for x in procs) == 2
+    with FFPuppet() as ffp:
+        ffp._proc = mocker.Mock(spec=Popen)
+        ffp._proc.poll.return_value = None
+        ffp._terminate()
+        assert ffp._proc.poll.call_count == 1
+        assert ffp._proc.terminate.call_count == 1
+        ffp._proc = None
+    assert fake_wait_procs.call_count == 1
+    fake_get_processes.reset_mock()
+    fake_wait_procs.reset_mock()
+
+    # running (terminate() all)
+    proc = mocker.Mock(spec_set=Process)
+    fake_get_processes.side_effect = ([proc],)
+    fake_wait_procs.side_effect = (
+        ([], [proc]),
+        ([], []),
+    )
+    with FFPuppet() as ffp:
+        ffp._proc = mocker.Mock(spec=Popen)
+        ffp._proc.poll.return_value = None
+        ffp._terminate()
+        assert ffp._proc.poll.call_count == 1
+        assert proc.terminate.call_count == 1
+        assert proc.kill.call_count == 0
+        ffp._proc = None
+    assert fake_wait_procs.call_count == 2
+    fake_get_processes.reset_mock()
+    fake_wait_procs.reset_mock()
+
+    # running (kill() all)
+    proc = mocker.Mock(spec_set=Process)
+    fake_get_processes.side_effect = ([proc],)
+    fake_wait_procs.side_effect = (
+        ([], [proc]),
+        ([], [proc]),
+        ([], []),
+    )
+    with FFPuppet() as ffp:
+        ffp._proc = mocker.Mock(spec=Popen)
+        ffp._proc.poll.return_value = None
+        ffp._terminate()
+        assert ffp._proc.poll.call_count == 1
+        assert proc.terminate.call_count == 1
+        assert proc.kill.call_count == 1
+        ffp._proc = None
+    assert fake_wait_procs.call_count == 3
+    fake_get_processes.reset_mock()
+    fake_wait_procs.reset_mock()
+
+    # fail to close
+    fake_get_processes.side_effect = ([mocker.Mock(spec_set=Process)],)
+    fake_wait_procs.side_effect = (
+        ([], [mocker.Mock(spec_set=Process)]),
+        ([], [mocker.Mock(spec_set=Process)]),
+        ([], [mocker.Mock(spec_set=Process, pid=123)]),
+    )
+    with FFPuppet() as ffp:
+        ffp._proc = mocker.Mock(spec=Popen)
+        ffp._proc.poll.return_value = None
+        with raises(TerminateError):
+            ffp._terminate()
+        assert ffp._proc.poll.call_count == 1
+        ffp._proc = None
+    assert fake_wait_procs.call_count == 3
+    fake_get_processes.reset_mock()
+    fake_wait_procs.reset_mock()
 
 
 def test_ffpuppet_30(mocker, tmp_path):
@@ -884,13 +940,13 @@ def test_ffpuppet_30(mocker, tmp_path):
             self.profile = Profile(working_path=profile)
 
         @staticmethod
-        def _terminate(_procs, _retry_delay=0, _use_kill=False):
+        def _terminate():
             pass
 
     mocker.patch(
         "ffpuppet.core.get_processes",
         autospec=True,
-        return_value=[mocker.Mock(spec=Process, _create_time=0)],
+        return_value=[mocker.Mock(spec_set=Process)],
     )
     fake_reports = mocker.patch("ffpuppet.core.FFPuppet._crashreports", autospec=True)
     fake_reports.return_value = ()
