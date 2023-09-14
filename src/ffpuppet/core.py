@@ -5,7 +5,7 @@
 
 from enum import Enum, unique
 from logging import getLogger
-from os import X_OK, access, getenv, getpid
+from os import X_OK, access, getenv
 from os.path import isfile, realpath
 from pathlib import Path
 from platform import system
@@ -16,6 +16,7 @@ from subprocess import Popen, check_output
 from sys import executable
 from typing import Any, Dict, Iterator, List, Optional, Pattern, Set, Tuple, Union
 from urllib.request import pathname2url
+from uuid import uuid4
 
 try:
     # pylint: disable=ungrouped-imports
@@ -23,7 +24,7 @@ try:
 except ImportError:
     pass
 
-from psutil import AccessDenied, NoSuchProcess, wait_procs
+from psutil import AccessDenied, NoSuchProcess, Process, process_iter, wait_procs
 
 try:
     from xvfbwrapper import Xvfb
@@ -33,7 +34,7 @@ except ImportError:
 from .bootstrapper import Bootstrapper
 from .checks import CheckLogContents, CheckLogSize, CheckMemoryUsage
 from .exceptions import BrowserExecutionError, InvalidPrefs, LaunchError, TerminateError
-from .helpers import get_processes, prepare_environment, wait_on_files
+from .helpers import prepare_environment, wait_on_files
 from .minidump_parser import process_minidumps
 from .profile import Profile
 from .puppet_logger import PuppetLogger
@@ -98,6 +99,7 @@ class FFPuppet:
         "_logs",
         "_proc",
         "_profile_template",
+        "_uid",
         "_xvfb",
         "_working_path",
         "profile",
@@ -123,6 +125,7 @@ class FFPuppet:
         self._logs = PuppetLogger(base_path=working_path)
         self._proc: Optional["Popen[bytes]"] = None
         self._profile_template = use_profile
+        self._uid = str(uuid4())
         self._xvfb: Optional[Xvfb] = None
         self._working_path = working_path
         self.profile: Optional[Profile] = None
@@ -276,7 +279,7 @@ class FFPuppet:
         Returns:
             None
         """
-        procs = list(get_processes())
+        procs = list(self.get_processes())
         if not procs:
             LOG.debug("no processes to terminate")
             return
@@ -524,7 +527,7 @@ class FFPuppet:
             return
 
         assert self._proc is not None
-        procs = list(get_processes())
+        procs = list(self.get_processes())
         LOG.debug("processes found: %d", len(procs))
 
         # set reason code
@@ -639,7 +642,7 @@ class FFPuppet:
         Yields:
             PID and the CPU usage as a percentage.
         """
-        for proc in get_processes():
+        for proc in self.get_processes():
             try:
                 yield proc.pid, proc.cpu_percent(interval=0.1)
             except (AccessDenied, NoSuchProcess):  # pragma: no cover
@@ -658,6 +661,22 @@ class FFPuppet:
             return self._proc.pid  # type: ignore[union-attr]
         except AttributeError:
             return None
+
+    def get_processes(self) -> Iterator[Process]:
+        """Get browser processes directly and indirectly launched by this instance.
+
+        Args:
+            None
+
+        Yields:
+            psutil.Process objects.
+        """
+        for proc in process_iter():
+            try:
+                if proc.environ().get("FFPUPPET_UID") == self._uid:
+                    yield proc
+            except (AccessDenied, NoSuchProcess):  # pragma: no cover
+                pass
 
     def is_healthy(self) -> bool:
         """Verify the browser is in a good state by performing a series
@@ -758,7 +777,7 @@ class FFPuppet:
         env_mod = env_mod or {}
 
         # set FFPUPPET_PID in the environment of the browser
-        env_mod["FFPUPPET_PID"] = str(getpid())
+        env_mod["FFPUPPET_UID"] = self._uid
 
         if self._dbg in (Debugger.PERNOSCO, Debugger.RR):
             env_mod["_RR_TRACE_DIR"] = str(self._logs.add_path(self._logs.PATH_RR))
@@ -873,7 +892,9 @@ class FFPuppet:
             # memory limit is enforced with config_job_object on Windows
             curr_pid = self.get_pid()
             assert curr_pid is not None
-            self._checks.append(CheckMemoryUsage(curr_pid, memory_limit))
+            self._checks.append(
+                CheckMemoryUsage(curr_pid, memory_limit, self.get_processes)
+            )
         if self._abort_tokens:
             self._checks.append(
                 CheckLogContents(
@@ -945,7 +966,7 @@ class FFPuppet:
             True if processes exit before timeout expires otherwise False.
         """
         assert timeout is None or timeout >= 0
-        if not wait_procs(list(get_processes()), timeout=timeout)[1]:
+        if not wait_procs(list(self.get_processes()), timeout=timeout)[1]:
             return True
         LOG.debug("wait(timeout=%0.2f) timed out", timeout)
         return False

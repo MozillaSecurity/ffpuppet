@@ -4,7 +4,7 @@
 """ffpuppet helper utilities"""
 
 from logging import getLogger
-from os import W_OK, access, chmod, environ, getpid
+from os import W_OK, access, chmod, environ
 from pathlib import Path
 from platform import system
 from stat import S_IWUSR
@@ -12,7 +12,7 @@ from subprocess import STDOUT, CalledProcessError, check_output
 from time import sleep, time
 from typing import Any, Callable, Dict, Iterable, Iterator, Optional, Tuple
 
-from psutil import AccessDenied, NoSuchProcess, Process, process_iter
+from psutil import Process, process_iter
 
 from .sanitizer_util import SanitizerOptions
 
@@ -28,7 +28,6 @@ __all__ = (
     "certutil_available",
     "certutil_find",
     "files_in_use",
-    "get_processes",
     "onerror",
     "prepare_environment",
     "wait_on_files",
@@ -230,24 +229,6 @@ def files_in_use(files: Iterable[Path]) -> Iterator[Tuple[Path, int, str]]:
                         except OSError:  # pragma: no cover
                             # samefile() can raise if either file cannot be accessed
                             pass
-
-
-def get_processes() -> Iterator[Process]:
-    """Get browser processes directly and indirectly launched by this instance.
-
-    Args:
-        None
-
-    Yields:
-        psutil.Process objects.
-    """
-    launcher_pid = str(getpid())
-    for proc in process_iter():
-        try:
-            if proc.environ().get("FFPUPPET_PID") == launcher_pid:
-                yield proc
-        except (AccessDenied, NoSuchProcess):  # pragma: no cover
-            pass
 
 
 def onerror(

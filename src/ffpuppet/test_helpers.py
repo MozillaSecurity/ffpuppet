@@ -4,11 +4,9 @@
 # You can obtain one at http://mozilla.org/MPL/2.0/.
 """ffpuppet helpers tests"""
 
-from os import getpid
 from pathlib import Path
 from subprocess import CalledProcessError
 
-from psutil import Process
 from pytest import mark, raises
 
 from .helpers import (
@@ -18,7 +16,6 @@ from .helpers import (
     certutil_available,
     certutil_find,
     files_in_use,
-    get_processes,
     prepare_environment,
     wait_on_files,
     warn_open,
@@ -222,26 +219,6 @@ def test_helpers_04(mocker, tmp_path):
     fake_time.side_effect = (1, 1)
     assert wait_on_files([])
     assert fake_sleep.call_count == 0
-
-
-def test_helpers_05(mocker):
-    """test get_processes()"""
-    process_iter = mocker.patch("ffpuppet.helpers.process_iter", autospec=True)
-
-    # no results
-    process_iter.side_effect = ([mocker.Mock(Process)],)
-    assert not any(get_processes())
-
-    # no matching results
-    proc = mocker.Mock(Process)
-    proc.environ.return_value = {"FFPUPPET_PID": "no_match"}
-    process_iter.side_effect = ([proc],)
-    assert not any(get_processes())
-
-    # matching results
-    proc.environ.return_value = {"FFPUPPET_PID": str(getpid())}
-    process_iter.side_effect = ([proc, mocker.Mock(Process)],)
-    assert any(get_processes())
 
 
 def test_helpers_06(tmp_path):
