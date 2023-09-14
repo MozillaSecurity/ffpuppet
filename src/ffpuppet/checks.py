@@ -6,11 +6,9 @@
 from abc import ABC, abstractmethod
 from os import SEEK_SET, stat
 from platform import system
-from typing import IO, Iterable, List, Optional, Pattern, Tuple
+from typing import IO, Callable, Iterable, Iterator, List, Optional, Pattern, Tuple
 
-from psutil import AccessDenied, NoSuchProcess
-
-from .helpers import get_processes
+from psutil import AccessDenied, NoSuchProcess, Process
 
 __author__ = "Tyson Smith"
 __credits__ = ["Tyson Smith"]
@@ -156,10 +154,13 @@ class CheckMemoryUsage(Check):
 
     name = "memory_usage"
 
-    __slots__ = ("_is_linux", "limit", "pid")
+    __slots__ = ("_get_procs", "_is_linux", "limit", "pid")
 
-    def __init__(self, pid: int, limit: int) -> None:
+    def __init__(
+        self, pid: int, limit: int, get_procs_cb: Callable[[], Iterator[Process]]
+    ) -> None:
         super().__init__()
+        self._get_procs = get_procs_cb
         self._is_linux = system() == "Linux"
         self.limit = limit
         self.pid = pid
@@ -177,7 +178,7 @@ class CheckMemoryUsage(Check):
         largest_shared = 0
         proc_info: List[Tuple[int, int]] = []
         total_usage = 0
-        for proc in get_processes():
+        for proc in self._get_procs():
             try:
                 mem_info = proc.memory_info()
             except (AccessDenied, NoSuchProcess):  # pragma: no cover

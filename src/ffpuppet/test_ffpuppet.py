@@ -27,7 +27,6 @@ from .exceptions import (
     LaunchError,
     TerminateError,
 )
-from .helpers import get_processes
 from .profile import Profile
 
 Bootstrapper.POLL_WAIT = 0.2
@@ -103,15 +102,17 @@ def test_ffpuppet_01():
             assert ffp.is_healthy()
             assert ffp.reason is None
             assert ffp.get_pid() is not None
-            assert str(os.getpid()) == Process(ffp.get_pid()).environ()["FFPUPPET_PID"]
-            assert any(get_processes())
+            procs = list(ffp.get_processes())
+            assert procs
+            for proc in procs:
+                assert proc.environ().get("FFPUPPET_UID") == ffp._uid
             ffp.close()
         assert ffp.reason == Reason.CLOSED
         assert ffp._proc is None
         assert not ffp.is_running()
         assert not ffp.is_healthy()
         assert ffp.wait(timeout=10)
-        assert not any(get_processes())
+        assert not any(ffp.get_processes())
 
 
 @mark.parametrize(
@@ -412,22 +413,14 @@ def test_ffpuppet_14(tmp_path):
 def test_ffpuppet_15(mocker, tmp_path, debugger, dbg_bin, version):
     """test launching with debuggers"""
     mocker.patch("ffpuppet.core.check_output", autospec=True, return_value=version)
-    mocker.patch(
-        "ffpuppet.core.get_processes",
-        autospec=True,
-        side_effect=([mocker.Mock(spec=Process)], []),
-    )
+    mocker.patch("ffpuppet.core.Popen", autospec=True)
     mocker.patch("ffpuppet.core.system", autospec=True, return_value="Linux")
     fake_bts = mocker.patch("ffpuppet.core.Bootstrapper", autospec=True)
     fake_bts.return_value.location = "http://test:123"
-    fake_proc = mocker.patch("ffpuppet.core.Popen", autospec=True)
-    fake_proc.return_value.pid = 0xFFFF
-    fake_proc.return_value.poll.return_value = None
     with FFPuppet(debugger=debugger) as ffp:
         assert ffp._dbg == debugger
         ffp.launch(TESTFF_BIN)
         ffp.close()
-        assert ffp.reason == Reason.CLOSED
         logs = tmp_path / "logs"
         ffp.save_logs(logs)
     # verify launch command was correct
@@ -485,10 +478,6 @@ def test_ffpuppet_19():
                 assert ffp.is_running()
                 assert ffp.launches == 1
         finally:
-            # all instances share FFPUPPET_PID which causes issues during shutdown
-            # but this only affects the tests
-            for ffp in ffp_instances:
-                ffp._proc.terminate()
             for ffp in ffp_instances:
                 ffp.clean_up()
 
@@ -557,7 +546,7 @@ def test_ffpuppet_21(mocker, tmp_path):
         assert not ffp.is_healthy()
         assert ffp.is_running()
         # close fake browser process before calling close to avoid hang
-        for proc in get_processes():
+        for proc in ffp.get_processes():
             proc.terminate()
         ffp.close()
         assert ffp.reason == Reason.ALERT
@@ -604,7 +593,7 @@ def test_ffpuppet_22(mocker, tmp_path):
         (md_path / "test3.dmp").write_text("3a\n3b")
         assert not ffp.is_healthy()
         # close fake browser process before calling close to avoid hang
-        for proc in get_processes():
+        for proc in ffp.get_processes():
             proc.terminate()
         ffp.close()
         logs = tmp_path / "logs"
@@ -840,11 +829,10 @@ def test_ffpuppet_28(mocker):
 
 def test_ffpuppet_29(mocker):
     """test _terminate()"""
-    fake_get_processes = mocker.patch("ffpuppet.core.get_processes", autospec=True)
     fake_wait_procs = mocker.patch("ffpuppet.core.wait_procs", autospec=True)
 
     # not running
-    fake_get_processes.return_value = []
+    mocker.patch.object(FFPuppet, "get_processes", return_value=[])
     with FFPuppet() as ffp:
         ffp._proc = mocker.Mock(spec=Popen)
         ffp._terminate()
@@ -852,7 +840,8 @@ def test_ffpuppet_29(mocker):
         ffp._proc = None
 
     # running (close with parent)
-    fake_get_processes.side_effect = ([mocker.Mock(spec_set=Process)],)
+    proc = mocker.Mock(spec_set=Process, pid=123)
+    mocker.patch.object(FFPuppet, "get_processes", side_effect=([proc],))
     fake_wait_procs.side_effect = (([], []),)
     with FFPuppet() as ffp:
         ffp._proc = mocker.Mock(spec=Popen)
@@ -862,12 +851,10 @@ def test_ffpuppet_29(mocker):
         assert ffp._proc.terminate.call_count == 1
         ffp._proc = None
     assert fake_wait_procs.call_count == 1
-    fake_get_processes.reset_mock()
     fake_wait_procs.reset_mock()
 
     # running (terminate() all)
-    proc = mocker.Mock(spec_set=Process)
-    fake_get_processes.side_effect = ([proc],)
+    mocker.patch.object(FFPuppet, "get_processes", side_effect=([proc],))
     fake_wait_procs.side_effect = (
         ([], [proc]),
         ([], []),
@@ -881,12 +868,11 @@ def test_ffpuppet_29(mocker):
         assert proc.kill.call_count == 0
         ffp._proc = None
     assert fake_wait_procs.call_count == 2
-    fake_get_processes.reset_mock()
     fake_wait_procs.reset_mock()
+    proc.reset_mock()
 
     # running (kill() all)
-    proc = mocker.Mock(spec_set=Process)
-    fake_get_processes.side_effect = ([proc],)
+    mocker.patch.object(FFPuppet, "get_processes", side_effect=([proc],))
     fake_wait_procs.side_effect = (
         ([], [proc]),
         ([], [proc]),
@@ -901,15 +887,15 @@ def test_ffpuppet_29(mocker):
         assert proc.kill.call_count == 1
         ffp._proc = None
     assert fake_wait_procs.call_count == 3
-    fake_get_processes.reset_mock()
     fake_wait_procs.reset_mock()
+    proc.reset_mock()
 
     # fail to close
-    fake_get_processes.side_effect = ([mocker.Mock(spec_set=Process)],)
+    mocker.patch.object(FFPuppet, "get_processes", side_effect=([proc],))
     fake_wait_procs.side_effect = (
-        ([], [mocker.Mock(spec_set=Process)]),
-        ([], [mocker.Mock(spec_set=Process)]),
-        ([], [mocker.Mock(spec_set=Process, pid=123)]),
+        ([], [proc]),
+        ([], [proc]),
+        ([], [proc]),
     )
     with FFPuppet() as ffp:
         ffp._proc = mocker.Mock(spec=Popen)
@@ -919,8 +905,8 @@ def test_ffpuppet_29(mocker):
         assert ffp._proc.poll.call_count == 1
         ffp._proc = None
     assert fake_wait_procs.call_count == 3
-    fake_get_processes.reset_mock()
     fake_wait_procs.reset_mock()
+    proc.reset_mock()
 
 
 def test_ffpuppet_30(mocker, tmp_path):
@@ -943,11 +929,9 @@ def test_ffpuppet_30(mocker, tmp_path):
         def _terminate():
             pass
 
-    mocker.patch(
-        "ffpuppet.core.get_processes",
-        autospec=True,
-        return_value=[mocker.Mock(spec_set=Process)],
-    )
+        def get_processes(self):
+            yield mocker.Mock(spec_set=Process)
+
     fake_reports = mocker.patch("ffpuppet.core.FFPuppet._crashreports", autospec=True)
     fake_reports.return_value = ()
     fake_wait_files = mocker.patch("ffpuppet.core.wait_on_files", autospec=True)
@@ -1064,3 +1048,26 @@ def test_ffpuppet_33(mocker):
         ffp.launch(TESTFF_BIN, memory_limit=456)
     assert config_job_object.call_count == 1
     assert config_job_object.mock_calls[0] == mocker.call(123, 456)
+
+
+def test_ffpuppet_34(mocker):
+    """test FFPuppet.get_processes()"""
+    process_iter = mocker.patch("ffpuppet.core.process_iter", autospec=True)
+
+    # no results
+    process_iter.side_effect = ([mocker.Mock(spec_set=Process)],)
+    with FFPuppet() as ffp:
+        assert not any(ffp.get_processes())
+
+    # no matching results
+    proc = mocker.Mock(spec_set=Process)
+    proc.environ.return_value = {"FFPUPPET_UID": "no_match"}
+    process_iter.side_effect = ([proc],)
+    with FFPuppet() as ffp:
+        assert not any(ffp.get_processes())
+
+    # matching results
+    with FFPuppet() as ffp:
+        proc.environ.return_value = {"FFPUPPET_UID": ffp._uid}
+        process_iter.side_effect = ([proc, mocker.Mock(spec_set=Process)],)
+        assert any(ffp.get_processes())
