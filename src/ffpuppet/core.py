@@ -529,6 +529,11 @@ class FFPuppet:
         assert self._proc is not None
         procs = list(self.get_processes())
         LOG.debug("processes found: %d", len(procs))
+        # avoid race (parent is closing, can't read environment)
+        if not procs and self._proc.poll() is None:
+            LOG.debug("parent should close immediately")
+            # this can raise but shouldn't, we want to know if a timeout happens
+            self._proc.wait(timeout=30)
 
         # set reason code
         exit_code: Optional[int] = None
@@ -556,9 +561,8 @@ class FFPuppet:
                 LOG.warning("Crash reports still open after %ds", report_wait)
             # get active processes after waiting for crash reports to close
             procs = wait_procs(procs, timeout=0)[1]
-        elif self.is_running():
+        elif self._proc.poll() is None:
             r_code = Reason.CLOSED
-            assert procs
         elif self._proc.poll() not in (0, -1, 1, -2, -9, 245):
             # Note: ignore 245 for now to avoid getting flooded with OOMs that don't
             # have a crash report... this should be revisited when time allows
