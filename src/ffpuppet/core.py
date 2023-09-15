@@ -958,7 +958,10 @@ class FFPuppet:
             True if processes exit before timeout expires otherwise False.
         """
         assert timeout is None or timeout >= 0
-        if not wait_procs(list(self.get_processes()), timeout=timeout)[1]:
+        procs = list(self.get_processes())
+        if not procs and self._proc and self._proc.poll() is None:
+            procs = [Process(self._proc.pid)]
+        if not wait_procs(procs, timeout=timeout)[1]:
             return True
         LOG.debug("wait(timeout=%0.2f) timed out", timeout)
         return False
