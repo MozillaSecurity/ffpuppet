@@ -535,8 +535,7 @@ class FFPuppet:
             # this can raise but shouldn't, we want to know if a timeout happens
             self._proc.wait(timeout=30)
 
-        # set reason code
-        exit_code: Optional[int] = None
+        # check state of browser processes and set the close reason
         if any(self._crashreports(skip_benign=True)):
             r_code = Reason.ALERT
             # Wait a moment for processes to exit automatically.
@@ -568,12 +567,11 @@ class FFPuppet:
             # have a crash report... this should be revisited when time allows
             # https://bugzil.la/1370520
             # Ignore -9 to avoid false positives due to system OOM killer
-            exit_code = self._proc.poll()
+            exit_code: Optional[int] = self._proc.poll()
+            assert exit_code is not None
             r_code = Reason.ALERT
             LOG.warning(
-                "Browser exit code: %r (%X), no crash reports found",
-                exit_code,
-                exit_code,
+                "No crash reports found, exit code: %d (%X)", exit_code, exit_code
             )
         else:
             r_code = Reason.EXITED
@@ -612,8 +610,7 @@ class FFPuppet:
                 )
             stderr_fp = self._logs.get_fp("stderr")
             if stderr_fp:
-                if exit_code is not None:
-                    stderr_fp.write(f"[ffpuppet] Exit code: {exit_code}\n".encode())
+                stderr_fp.write(f"[ffpuppet] Exit code: {self._proc.poll()}\n".encode())
                 stderr_fp.write(f"[ffpuppet] Reason code: {r_code.name}\n".encode())
 
         # reset remaining to closed state
