@@ -582,48 +582,39 @@ class FFPuppet:
         self._terminate()
 
         # collect crash reports and logs
-        if not force_close:
-            if self._logs.closed:  # pragma: no cover
-                # This should not happen while everything is working as expected.
-                # This is here to prevent additional unexpected issues.
-                # Since this should never happen in normal operation this assert
-                # will help verify that.
-                # If '_proc' is not None this is the first call to close()
-                # in this situation the PuppetLogger should still be available.
-                assert self._proc is None, "PuppetLogger is closed!"
-            else:
-                LOG.debug("reviewing %d check(s)", len(self._checks))
-                for check in self._checks:
-                    if check.message is not None:
-                        r_code = Reason.WORKER
-                        check.dump_log(
-                            dst_fp=self._logs.add_log(f"ffp_worker_{check.name}")
-                        )
-                # collect logs (excluding minidumps)
-                for log_path in self._crashreports(skip_md=True, skip_benign=False):
-                    self._logs.add_log(log_path.name, log_path.open("rb"))
-                assert self.profile is not None
-                assert self.profile.path is not None
-                assert self._bin_path is not None
-                # check for minidumps and process them if possible
-                md_path = self.profile.path / "minidumps"
-                if any(md_path.glob("*.dmp")):
-                    # check for local build symbols
-                    sym_path = self._bin_path.parent / "crashreporter-symbols"
-                    if not sym_path.is_dir():
-                        # use packaged symbols
-                        sym_path = self._bin_path / "symbols"
-                    process_minidumps(
-                        md_path,
-                        sym_path,
-                        self._logs.add_log,
-                        working_path=self._working_path,
+        if not force_close and not self._logs.closed:
+            LOG.debug("reviewing %d check(s)", len(self._checks))
+            for check in self._checks:
+                if check.message is not None:
+                    r_code = Reason.WORKER
+                    check.dump_log(
+                        dst_fp=self._logs.add_log(f"ffp_worker_{check.name}")
                     )
-                stderr_fp = self._logs.get_fp("stderr")
-                if stderr_fp:
-                    if exit_code is not None:
-                        stderr_fp.write(f"[ffpuppet] Exit code: {exit_code}\n".encode())
-                    stderr_fp.write(f"[ffpuppet] Reason code: {r_code.name}\n".encode())
+            # collect logs (excluding minidumps)
+            for log_path in self._crashreports(skip_md=True, skip_benign=False):
+                self._logs.add_log(log_path.name, log_path.open("rb"))
+            assert self.profile is not None
+            assert self.profile.path is not None
+            assert self._bin_path is not None
+            # check for minidumps and process them if possible
+            md_path = self.profile.path / "minidumps"
+            if any(md_path.glob("*.dmp")):
+                # check for local build symbols
+                sym_path = self._bin_path.parent / "crashreporter-symbols"
+                if not sym_path.is_dir():
+                    # use packaged symbols
+                    sym_path = self._bin_path / "symbols"
+                process_minidumps(
+                    md_path,
+                    sym_path,
+                    self._logs.add_log,
+                    working_path=self._working_path,
+                )
+            stderr_fp = self._logs.get_fp("stderr")
+            if stderr_fp:
+                if exit_code is not None:
+                    stderr_fp.write(f"[ffpuppet] Exit code: {exit_code}\n".encode())
+                stderr_fp.write(f"[ffpuppet] Reason code: {r_code.name}\n".encode())
 
         # reset remaining to closed state
         try:
