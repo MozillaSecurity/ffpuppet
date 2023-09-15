@@ -998,7 +998,7 @@ def test_ffpuppet_30(mocker, tmp_path):
     with StubbedProc() as ffp:
         ffp.launch()
         proc = ffp._proc
-        ffp._proc.poll.side_effect = (None, 0, 0)
+        ffp._proc.poll.side_effect = (None, 0, 0, 0)
         ffp.close()
         assert ffp._proc is None
         assert ffp._logs.closed
