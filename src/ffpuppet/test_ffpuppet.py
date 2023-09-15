@@ -194,9 +194,11 @@ def test_ffpuppet_06(mocker):
     class StubbedProc(FFPuppet):
         # pylint: disable=arguments-differ
         def close(self, **_):
+            self._proc = None
             self.reason = Reason.CLOSED
 
         def launch(self):
+            self._proc = mocker.Mock(spec=Popen, pid=os.getpid())
             self.reason = None
 
         def get_pid(self):
@@ -206,9 +208,14 @@ def test_ffpuppet_06(mocker):
 
     fake_wait_procs = mocker.patch("ffpuppet.core.wait_procs", autospec=True)
     with StubbedProc() as ffp:
+        ffp.launch()
         # process not running
         fake_wait_procs.return_value = ([], [])
-        ffp.launch()
+        assert ffp.wait()
+        assert fake_wait_procs.call_count == 1
+        fake_wait_procs.reset_mock()
+        # process is shutting down
+        ffp._proc.poll.return_value = None
         assert ffp.wait()
         assert fake_wait_procs.call_count == 1
         fake_wait_procs.reset_mock()
