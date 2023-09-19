@@ -4,73 +4,101 @@
 # You can obtain one at http://mozilla.org/MPL/2.0/.
 """ffpuppet minidump parser tests"""
 
-from json import JSONDecodeError
-from subprocess import CalledProcessError, CompletedProcess, TimeoutExpired
+from json import dumps
+from pathlib import Path
+from subprocess import CompletedProcess
+from sys import executable
 
-from pytest import mark, raises
+from pytest import mark
 
-from .minidump_parser import MinidumpParser, MinidumpStackwalkFailure, process_minidumps
+from .minidump_parser import MinidumpParser, process_minidumps
+
+MD_UNSYMBOLIZED = {
+    "crash_info": {
+        "address": "0x00007ffe4e09af8d",
+        "crashing_thread": 0,
+        "type": "EXCEPTION_BREAKPOINT",
+    },
+    "crashing_thread": {
+        "frame_count": 49,
+        "frames": [
+            {
+                "file": None,
+                "frame": 0,
+                "function": None,
+                "function_offset": None,
+                "line": None,
+                "module": "xul.dll",
+                "registers": {"r10": "0x0"},
+            },
+        ],
+    },
+    "system_info": {
+        "cpu_arch": "amd64",
+        "cpu_count": 8,
+        "cpu_info": "family 6 model 70 stepping 1",
+        "os": "Windows NT",
+        "os_ver": "10.0.19044",
+    },
+}
 
 
 @mark.parametrize(
-    "run_return, symbols, result",
+    "symbols",
     [
-        # succeeded - with symbols
-        (None, True, True),
-        # succeeded - without symbols
-        (None, False, True),
-        # failed - parse hung
-        ((TimeoutExpired(["test"], 0.0),), True, False),
-        # failed - json parse error
-        ((CalledProcessError(1, ["test"]),), True, False),
+        # use local path
+        True,
+        # use url
+        False,
     ],
 )
-def test_minidump_parser_01(mocker, tmp_path, run_return, symbols, result):
-    """test MinidumpParser.to_json()"""
-    mocker.patch(
-        "ffpuppet.minidump_parser.MinidumpParser.MDSW_BIN", "minidump_stackwalk"
-    )
-    mocker.patch("ffpuppet.minidump_parser.run", autospec=True, side_effect=run_return)
-    parser = MinidumpParser(symbols_path=tmp_path if symbols else None)
-    if result:
-        assert parser.to_json(tmp_path, str(tmp_path))
-    else:
-        with raises(MinidumpStackwalkFailure):
-            parser.to_json(tmp_path, str(tmp_path))
+def test_minidump_parser_01(mocker, tmp_path, symbols):
+    """test MinidumpParser._cmd()"""
+    mocker.patch.object(MinidumpParser, "MDSW_BIN", "minidump-stackwalk")
+    with MinidumpParser(symbols=tmp_path if symbols else None) as parser:
+        assert parser
+        # pylint: disable=protected-access
+        cmd = parser._cmd(tmp_path)
+        assert cmd
+        assert "minidump-stackwalk" in cmd
+        if symbols:
+            assert "--symbols-path" in cmd
+        else:
+            assert "--symbols-url" in cmd
 
 
-def test_minidump_parser_02(tmp_path):
-    """test MinidumpParser.format_output() - un-symbolized"""
-    data = {
-        "crash_info": {
-            "address": "0x00007ffe4e09af8d",
-            "crashing_thread": 0,
-            "type": "EXCEPTION_BREAKPOINT",
-        },
-        "crashing_thread": {
-            "frame_count": 49,
-            "frames": [
-                {
-                    "file": None,
-                    "frame": 0,
-                    "function": None,
-                    "function_offset": None,
-                    "line": None,
-                    "module": "xul.dll",
-                    "registers": {"r10": "0x0"},
-                },
-            ],
-        },
-        "system_info": {
-            "cpu_arch": "amd64",
-            "cpu_count": 8,
-            "cpu_info": "family 6 model 70 stepping 1",
-            "os": "Windows NT",
-            "os_ver": "10.0.19044",
-        },
-    }
+@mark.parametrize(
+    "code, token, timeout",
+    [
+        # success
+        (f"print('{dumps(MD_UNSYMBOLIZED)}')", "xul.dll", 60),
+        # mdsw failed
+        ("exit(1)", "minidump-stackwalk failed", 60),
+        # invalid json
+        ("print('bad,json')", "json decode error", 60),
+        # mdsw hang
+        ("import time;time.sleep(10)", "minidump-stackwalk timeout", 0),
+    ],
+)
+def test_minidump_parser_02(mocker, code, token, timeout):
+    """test MinidumpParser.create_log()"""
+    mocker.patch.object(MinidumpParser, "_cmd", return_value=[executable, "-c", code])
+    with MinidumpParser() as parser:
+        # pylint: disable=protected-access
+        assert parser._storage.is_dir()
+        output = parser.create_log(Path("foo.dmp"), "minidump_00.txt", timeout=timeout)
+        assert output
+        assert output.name == "minidump_00.txt"
+        assert output.is_file()
+        assert token in output.read_text()
+    assert not output.is_file()
+
+
+def test_minidump_parser_03(tmp_path):
+    """test MinidumpParser._fmt_output() - un-symbolized"""
     with (tmp_path / "out.txt").open("w+b") as ofp:
-        MinidumpParser.format_output(data, ofp, limit=2)
+        # pylint: disable=protected-access
+        MinidumpParser._fmt_output(MD_UNSYMBOLIZED, ofp, limit=2)
         ofp.seek(0)
         formatted = ofp.read().strip().decode().split("\n")
     assert len(formatted) == 5
@@ -81,8 +109,8 @@ def test_minidump_parser_02(tmp_path):
     assert formatted[4] == "0|0|xul.dll||||"
 
 
-def test_minidump_parser_03(tmp_path):
-    """test MinidumpParser.format_output() - symbolized"""
+def test_minidump_parser_04(tmp_path):
+    """test MinidumpParser._fmt_output() - symbolized"""
     data = {
         "crash_info": {
             "address": "0x00007ffe4e09af8d",
@@ -132,7 +160,8 @@ def test_minidump_parser_03(tmp_path):
         },
     }
     with (tmp_path / "out.txt").open("w+b") as ofp:
-        MinidumpParser.format_output(data, ofp, limit=2)
+        # pylint: disable=protected-access
+        MinidumpParser._fmt_output(data, ofp, limit=2)
         ofp.seek(0)
         formatted = ofp.read().strip().decode().split("\n")
     assert len(formatted) == 8
@@ -185,56 +214,33 @@ def test_minidump_parser_03(tmp_path):
         (None, None, False),
     ],
 )
-def test_minidump_parser_04(mocker, call_result, mdsw_bin, result):
+def test_minidump_parser_05(mocker, call_result, mdsw_bin, result):
     """test MinidumpParser.mdsw_available()"""
-    mocker.patch("ffpuppet.minidump_parser.MinidumpParser.MDSW_BIN", mdsw_bin)
     mocker.patch("ffpuppet.minidump_parser.run", side_effect=call_result)
+    mocker.patch.object(MinidumpParser, "MDSW_BIN", mdsw_bin)
     assert (
         MinidumpParser.mdsw_available(force_check=True, min_version="0.15.2") == result
     )
 
 
-@mark.parametrize(
-    "mdsw, syms, md_json_data, raised",
-    [
-        # loading minidump files - success
-        (True, True, ["{}"], False),
-        # loading minidump files - JSONDecodeError
-        (True, True, ["bad,json"], True),
-        # loading minidump files - zero byte minidumps
-        (True, True, ["", "{}", ""], False),
-        # symbols_path does not exist
-        (True, False, ["{}"], False),
-        # test minidump-stackwalk not available
-        (False, False, [], False),
-    ],
-)
-def test_process_minidumps_01(mocker, tmp_path, mdsw, syms, md_json_data, raised):
+def test_process_minidumps_01(mocker, tmp_path):
     """test process_minidumps()"""
     fake_mdp = mocker.patch("ffpuppet.minidump_parser.MinidumpParser", autospec=True)
-    fake_mdp.mdsw_available.return_value = mdsw
+    fake_mdp.mdsw_available.return_value = False
+    assert not any(process_minidumps(tmp_path, tmp_path))
 
-    to_json_results = []
-    for count, md_data in enumerate(md_json_data):
-        md_file = tmp_path / f"minidump{count:02d}.dmp"
-        md_file.write_text(md_data)
-        if md_data:
-            to_json_results.append(md_file)
-    fake_mdp.return_value.to_json.side_effect = to_json_results
 
-    try:
-        process_minidumps(
-            tmp_path,
-            tmp_path if syms else tmp_path / "missing",
-            mocker.Mock(),
-            working_path=str(tmp_path),
-        )
-    except JSONDecodeError:
-        assert raised
-    else:
-        assert not raised
-
-    assert fake_mdp.mdsw_available.call_count == 1
-    if mdsw:
-        assert fake_mdp.return_value.to_json.call_count == 1
-        assert fake_mdp.return_value.format_output.call_count == (0 if raised else 1)
+def test_process_minidumps_02(mocker, tmp_path):
+    """test process_minidumps()"""
+    mocker.patch(
+        "ffpuppet.minidump_parser.MinidumpParser.mdsw_available", autospec=True
+    )
+    mocker.patch(
+        "ffpuppet.minidump_parser.MinidumpParser.create_log",
+        autospec=True,
+        return_value=tmp_path / "minidump_00.txt",
+    )
+    (tmp_path / "foo.dmp").touch()
+    logs = list(process_minidumps(tmp_path, tmp_path / "syms"))
+    assert logs
+    assert logs[0].name == "minidump_00.txt"

@@ -575,11 +575,11 @@ def test_ffpuppet_21(tmp_path):
 def test_ffpuppet_22(mocker, tmp_path):
     """test multiple minidumps"""
 
-    # pylint: disable=unused-argument
-    def _fake_process_minidumps(dmps, _, add_log, working_path=None):
+    def _fake_process_minidumps(dmps, _):
         for num, _ in enumerate(Path(dmps).glob("*.dmp")):
-            lfp = add_log(f"minidump_{num + 1:02}")
-            lfp.write(b"test")
+            md_log = tmp_path / f"minidump_{num:02}.txt"
+            md_log.write_text("test")
+            yield md_log
 
     mocker.patch("ffpuppet.core.process_minidumps", side_effect=_fake_process_minidumps)
     profile = tmp_path / "profile"
@@ -600,9 +600,9 @@ def test_ffpuppet_22(mocker, tmp_path):
         ffp.close()
         logs = tmp_path / "logs"
         ffp.save_logs(logs)
+        assert any(logs.glob("log_minidump_00.txt"))
         assert any(logs.glob("log_minidump_01.txt"))
         assert any(logs.glob("log_minidump_02.txt"))
-        assert any(logs.glob("log_minidump_03.txt"))
 
 
 def test_ffpuppet_23(tmp_path):
