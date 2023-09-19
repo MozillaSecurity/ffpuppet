@@ -12,6 +12,7 @@ from platform import system
 from re import IGNORECASE
 from re import compile as re_compile
 from re import match as re_match
+from shutil import copyfileobj
 from subprocess import Popen, check_output
 from sys import executable
 from typing import Any, Dict, Iterator, List, Optional, Pattern, Set, Tuple, Union
@@ -602,12 +603,12 @@ class FFPuppet:
                 if not sym_path.is_dir():
                     # use packaged symbols
                     sym_path = self._bin_path / "symbols"
-                process_minidumps(
-                    md_path,
-                    sym_path,
-                    self._logs.add_log,
-                    working_path=self._working_path,
-                )
+                for md_txt in process_minidumps(md_path, sym_path):
+                    with md_txt.open("rb") as md_fp:
+                        copyfileobj(
+                            md_fp, self._logs.add_log(md_txt.stem)
+                        )  # type: ignore
+
             stderr_fp = self._logs.get_fp("stderr")
             if stderr_fp:
                 stderr_fp.write(f"[ffpuppet] Exit code: {self._proc.poll()}\n".encode())
