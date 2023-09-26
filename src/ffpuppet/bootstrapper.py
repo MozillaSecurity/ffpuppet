@@ -54,7 +54,7 @@ class Bootstrapper:  # pylint: disable=missing-docstring
             self._socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
             self._socket.settimeout(self.POLL_WAIT)
             try:
-                self._socket.bind(("127.0.0.1", port))
+                self._socket.bind(("localhost", port))
                 self._socket.listen(5)
             except (OSError, PermissionError) as exc:
                 LOG.debug("%s: %s", type(exc).__name__, exc)
@@ -91,7 +91,7 @@ class Bootstrapper:  # pylint: disable=missing-docstring
 
     @property
     def location(self) -> str:
-        """Location in the format of 'http://127.0.0.1:#'.
+        """Location in the format of 'http://localhost:#'.
 
         Args:
             None
@@ -100,7 +100,7 @@ class Bootstrapper:  # pylint: disable=missing-docstring
             Location.
         """
         assert self._socket is not None
-        return f"http://127.0.0.1:{self.port}"
+        return f"http://localhost:{self.port}"
 
     @property
     def port(self) -> int:

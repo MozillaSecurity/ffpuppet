@@ -45,7 +45,7 @@ class HTTPTestServer:
         self._handler = ReqHandler
         while True:
             try:
-                self._httpd = HTTPServer(("127.0.0.1", 0), self._handler)
+                self._httpd = HTTPServer(("localhost", 0), self._handler)
             except OSError as soc_e:
                 if soc_e.errno in (EADDRINUSE, 10013):
                     # Address already in use
@@ -62,7 +62,7 @@ class HTTPTestServer:
         self.shutdown()
 
     def get_addr(self):
-        return f"http://127.0.0.1:{self._httpd.server_address[1]}"
+        return f"http://localhost:{self._httpd.server_address[1]}"
 
     def shutdown(self):
         if self._httpd is not None:

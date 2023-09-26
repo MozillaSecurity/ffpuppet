@@ -19,7 +19,7 @@ def test_bootstrapper_01():
     """test simple Bootstrapper()"""
     with Bootstrapper() as bts:
         assert bts._socket is not None
-        assert bts.location.startswith("http://127.0.0.1:")
+        assert bts.location.startswith("http://localhost:")
         assert int(bts.location.split(":")[-1]) > 1024
         assert bts.port > 1024
         assert bts.port not in Bootstrapper.BLOCKED_PORTS
@@ -116,7 +116,7 @@ def test_bootstrapper_05(mocker):
         # normal startup
         (None, ("foo",), 1),
         # with a redirect url
-        ("http://127.0.0.1:9999/test.html", ("foo",), 1),
+        ("http://localhost:9999/test.html", ("foo",), 1),
         # request size matches buffer size
         (None, ("A" * Bootstrapper.BUF_SIZE, timeout), 1),
         # large request
@@ -151,7 +151,7 @@ def test_bootstrapper_07():
         # open connection
         for attempt in reversed(range(50)):
             try:
-                conn.connect(("127.0.0.1", port))
+                conn.connect(("localhost", port))
                 break
             except timeout:
                 if not attempt:
