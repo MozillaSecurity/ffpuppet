@@ -288,7 +288,7 @@ class FFPuppet:
         assert self._proc
         # try terminating the parent process first, this should be all that is needed
         if self._proc.poll() is None:
-            LOG.debug("attempting to terminate parent process")
+            LOG.debug("attempting to terminate parent process (%d)", self._proc.pid)
             try:
                 self._proc.terminate()
                 # wait for debugger (if in use) and child processes to close
@@ -555,10 +555,9 @@ class FFPuppet:
                 )
             crash_reports = set(self._crashreports(skip_benign=True))
             LOG.debug("%d crash report(s) found", len(crash_reports))
-            # wait until crash report files are closed
-            report_wait = 60 if self._dbg == Debugger.NONE else 300
-            if not wait_on_files(crash_reports, timeout=report_wait):
-                LOG.warning("Crash reports still open after %ds", report_wait)
+            # additional delay to allow crash reports to be completed/closed
+            if not wait_on_files(crash_reports, timeout=30):
+                LOG.warning("Crash reports still open after 30s")
             # get active processes after waiting for crash reports to close
             procs = wait_procs(procs, timeout=0)[1]
         elif self._proc.poll() is None:
