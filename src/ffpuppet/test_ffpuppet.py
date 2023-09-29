@@ -847,7 +847,7 @@ def test_ffpuppet_29(mocker):
     mocker.patch.object(FFPuppet, "get_processes", side_effect=([proc],))
     fake_wait_procs.side_effect = (([], []),)
     with FFPuppet() as ffp:
-        ffp._proc = mocker.Mock(spec=Popen)
+        ffp._proc = mocker.Mock(spec=Popen, pid=123)
         ffp._proc.poll.return_value = None
         ffp._terminate()
         assert ffp._proc.poll.call_count == 1
@@ -864,7 +864,7 @@ def test_ffpuppet_29(mocker):
         ([], []),
     )
     with FFPuppet() as ffp:
-        ffp._proc = mocker.Mock(spec=Popen)
+        ffp._proc = mocker.Mock(spec=Popen, pid=123)
         ffp._proc.poll.return_value = None
         ffp._terminate()
         assert ffp._proc.poll.call_count == 1
@@ -883,7 +883,7 @@ def test_ffpuppet_29(mocker):
         ([], []),
     )
     with FFPuppet() as ffp:
-        ffp._proc = mocker.Mock(spec=Popen)
+        ffp._proc = mocker.Mock(spec=Popen, pid=123)
         ffp._proc.poll.return_value = None
         ffp._terminate()
         assert ffp._proc.poll.call_count == 1
@@ -902,7 +902,7 @@ def test_ffpuppet_29(mocker):
         ([], [proc]),
     )
     with FFPuppet() as ffp:
-        ffp._proc = mocker.Mock(spec=Popen)
+        ffp._proc = mocker.Mock(spec=Popen, pid=123)
         ffp._proc.poll.return_value = None
         with raises(TerminateError):
             ffp._terminate()
