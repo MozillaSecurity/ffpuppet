@@ -271,6 +271,32 @@ class FFPuppet:
             if not match or float(match.group("ver")) < cls.VALGRIND_MIN_VERSION:
                 raise OSError(f"Valgrind >= {cls.VALGRIND_MIN_VERSION:.2f} is required")
 
+    @staticmethod
+    def _parent_proc(processes: List[Process]) -> Optional[Process]:
+        """Inspect given processes and select the browser parent process.
+        This assumes all processes are part of the same process tree.
+        This is needed because the process tree is different depending on the platform.
+        Windows:
+            python -> firefox (launcher) -> firefox (parent) -> firefox (content procs)
+
+        Linux and others:
+            python -> firefox (parent) -> firefox (content procs)
+
+        Args:
+            processes: Processes to inspect.
+
+        Returns:
+            The browser parent process if it still exists otherwise false.
+        """
+        for proc in processes:
+            try:
+                cmd = proc.cmdline()
+                if "-contentproc" not in cmd and "-no-deelevate" not in cmd:
+                    return proc
+            except (AccessDenied, NoSuchProcess):  # pragma: no cover
+                pass
+        return None
+
     def _terminate(self) -> None:
         """Call terminate() on browser processes. If terminate() fails try kill().
 
@@ -285,12 +311,12 @@ class FFPuppet:
             LOG.debug("no processes to terminate")
             return
 
-        assert self._proc
         # try terminating the parent process first, this should be all that is needed
-        if self._proc.poll() is None:
-            LOG.debug("attempting to terminate parent process (%d)", self._proc.pid)
+        parent = self._parent_proc(procs)
+        if parent:
             try:
-                self._proc.terminate()
+                LOG.debug("attempting to terminate parent process (%d)", parent.pid)
+                parent.terminate()
                 # wait for debugger (if in use) and child processes to close
                 procs = wait_procs(procs, timeout=10)[1]
             except (AccessDenied, NoSuchProcess):  # pragma: no cover
