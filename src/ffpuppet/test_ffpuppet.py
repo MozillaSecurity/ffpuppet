@@ -836,26 +836,20 @@ def test_ffpuppet_29(mocker):
     # not running
     mocker.patch.object(FFPuppet, "get_processes", return_value=[])
     with FFPuppet() as ffp:
-        ffp._proc = mocker.Mock(spec=Popen)
         ffp._terminate()
-        assert ffp._proc.poll.call_count == 0
-        assert ffp._proc.terminate.call_count == 0
-        ffp._proc = None
 
     proc = mocker.Mock(spec_set=Process, pid=123)
+    proc.cmdline.return_value = [""]
     # running (close with parent)
     mocker.patch.object(FFPuppet, "get_processes", side_effect=([proc],))
     fake_wait_procs.side_effect = (([], []),)
     with FFPuppet() as ffp:
-        ffp._proc = mocker.Mock(spec=Popen, pid=123)
-        ffp._proc.poll.return_value = None
         ffp._terminate()
-        assert ffp._proc.poll.call_count == 1
-        assert ffp._proc.terminate.call_count == 1
-        ffp._proc = None
-    assert proc.terminate.call_count == 0
+    assert proc.cmdline.call_count == 1
+    assert proc.terminate.call_count == 1
     assert fake_wait_procs.call_count == 1
     fake_wait_procs.reset_mock()
+    proc.reset_mock()
 
     # running (terminate() all)
     mocker.patch.object(FFPuppet, "get_processes", side_effect=([proc],))
@@ -864,12 +858,8 @@ def test_ffpuppet_29(mocker):
         ([], []),
     )
     with FFPuppet() as ffp:
-        ffp._proc = mocker.Mock(spec=Popen, pid=123)
-        ffp._proc.poll.return_value = None
         ffp._terminate()
-        assert ffp._proc.poll.call_count == 1
-        ffp._proc = None
-    assert proc.terminate.call_count == 1
+    assert proc.terminate.call_count == 2
     assert proc.kill.call_count == 0
     assert fake_wait_procs.call_count == 2
     fake_wait_procs.reset_mock()
@@ -883,12 +873,8 @@ def test_ffpuppet_29(mocker):
         ([], []),
     )
     with FFPuppet() as ffp:
-        ffp._proc = mocker.Mock(spec=Popen, pid=123)
-        ffp._proc.poll.return_value = None
         ffp._terminate()
-        assert ffp._proc.poll.call_count == 1
-        ffp._proc = None
-    assert proc.terminate.call_count == 1
+    assert proc.terminate.call_count == 2
     assert proc.kill.call_count == 1
     assert fake_wait_procs.call_count == 3
     fake_wait_procs.reset_mock()
@@ -902,12 +888,8 @@ def test_ffpuppet_29(mocker):
         ([], [proc]),
     )
     with FFPuppet() as ffp:
-        ffp._proc = mocker.Mock(spec=Popen, pid=123)
-        ffp._proc.poll.return_value = None
         with raises(TerminateError):
             ffp._terminate()
-        assert ffp._proc.poll.call_count == 1
-        ffp._proc = None
     assert fake_wait_procs.call_count == 3
     fake_wait_procs.reset_mock()
     proc.reset_mock()
@@ -1090,3 +1072,18 @@ def test_ffpuppet_34(mocker):
         proc.environ.return_value = {"FFPUPPET_UID": ffp._uid}
         process_iter.side_effect = ([proc, mocker.Mock(spec_set=Process)],)
         assert any(ffp.get_processes())
+
+
+@mark.parametrize("proc_count", [0, 1, 2])
+def test_ffpuppet_35(mocker, proc_count):
+    """test FFPuppet._parent_proc() setting reason"""
+    procs = []
+    for _ in range(proc_count):
+        procs.append(mocker.Mock(spec_set=Process))
+        procs[-1].cmdline.return_value = [""]
+    parent = FFPuppet._parent_proc(procs)
+    if proc_count:
+        assert parent
+        assert parent.cmdline.call_count == 1
+    else:
+        assert parent is None
