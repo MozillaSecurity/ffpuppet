@@ -480,7 +480,6 @@ class FFPuppet:
             ]
             if self._dbg == Debugger.PERNOSCO:
                 rr_cmd += [
-                    "--chaos",
                     "--disable-cpuid-features-ext",
                     "0xdc230000,0x2c42,0xc",
                 ]
