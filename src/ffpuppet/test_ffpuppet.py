@@ -736,12 +736,15 @@ def test_ffpuppet_26(mocker, tmp_path):
         cmd = ffp.build_launch_cmd("bin_path")
         assert len(cmd) > 2
         assert cmd[0] == "rr"
+        assert "--chaos" not in cmd
         assert "--disable-cpuid-features-ext" in cmd
         # RR
         ffp._dbg = Debugger.RR
+        mocker.patch.dict(os.environ, {"RR_CHAOS": "1"})
         cmd = ffp.build_launch_cmd("bin_path")
         assert len(cmd) > 2
         assert cmd[0] == "rr"
+        assert "--chaos" in cmd
         assert "--disable-cpuid-features-ext" not in cmd
         # Valgrind
         ffp._dbg = Debugger.VALGRIND

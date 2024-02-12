@@ -478,6 +478,8 @@ class FFPuppet:
                 "rr",
                 "record",
             ]
+            if getenv("RR_CHAOS") == "1":
+                rr_cmd.append("--chaos")
             if self._dbg == Debugger.PERNOSCO:
                 rr_cmd += [
                     "--disable-cpuid-features-ext",
