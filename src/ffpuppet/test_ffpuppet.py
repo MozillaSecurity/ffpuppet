@@ -1044,11 +1044,17 @@ def test_ffpuppet_33(mocker):
     fake_bts.return_value.location = ""
     fake_popen = mocker.patch("ffpuppet.core.Popen", autospec=True)
     fake_popen.return_value._handle = 123
+    fake_popen.return_value.pid = 789
     config_job_object = mocker.patch("ffpuppet.core.config_job_object", autospec=True)
+    resume_suspended = mocker.patch(
+        "ffpuppet.core.resume_suspended_process", autospec=True
+    )
     with FFPuppet() as ffp:
         ffp.launch(TESTFF_BIN, memory_limit=456)
     assert config_job_object.call_count == 1
     assert config_job_object.mock_calls[0] == mocker.call(123, 456)
+    assert resume_suspended.call_count == 1
+    assert resume_suspended.mock_calls[0] == mocker.call(789)
 
 
 def test_ffpuppet_34(mocker):

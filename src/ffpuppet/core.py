@@ -22,6 +22,8 @@ from uuid import uuid4
 try:
     # pylint: disable=ungrouped-imports
     from subprocess import CREATE_NEW_PROCESS_GROUP  # type: ignore[attr-defined]
+
+    CREATE_SUSPENDED = 0x00000004
 except ImportError:
     pass
 
@@ -42,7 +44,7 @@ from .puppet_logger import PuppetLogger
 
 if system() == "Windows":
     # config_job_object is only available on Windows
-    from .job_object import config_job_object
+    from .job_object import config_job_object, resume_suspended_process
 
 LOG = getLogger(__name__)
 
@@ -852,11 +854,16 @@ class FFPuppet:
             LOG.debug("launch timeout: %d", launch_timeout)
             LOG.debug("launch command: %r", " ".join(cmd))
             self.reason = None
+            creationflags = 0
+            if is_windows:
+                creationflags |= CREATE_NEW_PROCESS_GROUP
+                if memory_limit:
+                    creationflags |= CREATE_SUSPENDED
             # pylint: disable=consider-using-with
             self._proc = Popen(
                 cmd,
                 bufsize=0,  # unbuffered (for log scanners)
-                creationflags=CREATE_NEW_PROCESS_GROUP if is_windows else 0,
+                creationflags=creationflags,
                 env=prepare_environment(
                     self._bin_path,
                     self._logs.path / self._logs.PREFIX_SAN,
@@ -874,6 +881,9 @@ class FFPuppet:
                     self._proc._handle,  # type: ignore[attr-defined]
                     memory_limit,
                 )
+                curr_pid = self.get_pid()
+                assert curr_pid is not None
+                resume_suspended_process(curr_pid)
             bootstrapper.wait(self.is_healthy, timeout=launch_timeout, url=location)
         except FileNotFoundError as exc:
             if Path(exc.filename).exists():
