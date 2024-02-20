@@ -4,14 +4,21 @@
 """Windows Job Object management"""
 import ctypes
 import ctypes.wintypes
+from logging import getLogger
 from subprocess import Handle  # type: ignore[attr-defined]
+
+from psutil import Process
 
 JOB_OBJECT_EXTENDED_LIMIT_INFORMATION = 9
 JOB_OBJECT_LIMIT_JOB_MEMORY = 0x200
 JOB_OBJECT_LIMIT_PROCESS_MEMORY = 0x100
 
+THREAD_SUSPEND_RESUME = 0x0002
+
 __all__ = ("config_job_object",)
 __author__ = "Jesse Schwartzentruber"
+
+LOG = getLogger(__name__)
 
 
 class IOCounters(ctypes.Structure):
@@ -83,3 +90,23 @@ def config_job_object(handle: Handle, limit: int) -> None:
         )
     finally:
         job.Close()
+
+
+def resume_suspended_process(pid: int) -> None:
+    """Resume a possibly suspended Windows Process.
+
+    Args:
+        pid: Process ID.
+
+    Returns:
+        None
+    """
+    kernel32 = ctypes.windll.kernel32  # type: ignore[attr-defined]
+    for tinfo in Process(pid).threads():
+        thnd = Handle(kernel32.OpenThread(THREAD_SUSPEND_RESUME, False, tinfo.id))
+        try:
+            result = kernel32.ResumeThread(thnd)
+            LOG.debug("resuming thread %d returned %d", tinfo.id, result)
+            assert result >= 0, f"ResumeThread for tid={tinfo.id} returned {result}"
+        finally:
+            thnd.Close()
