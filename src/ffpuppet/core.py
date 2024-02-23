@@ -98,6 +98,7 @@ class FFPuppet:
         "_headless",
         "_launches",
         "_logs",
+        "_parent_proc",
         "_proc",
         "_profile_template",
         "_uid",
@@ -124,6 +125,7 @@ class FFPuppet:
         self._headless = headless
         self._launches = 0  # number of successful browser launches
         self._logs = PuppetLogger(base_path=working_path)
+        self._parent_proc: Optional[Process] = None
         self._proc: Optional["Popen[bytes]"] = None
         self._profile_template = use_profile
         self._uid = str(uuid4())
@@ -271,32 +273,6 @@ class FFPuppet:
             if not match or float(match.group("ver")) < cls.VALGRIND_MIN_VERSION:
                 raise OSError(f"Valgrind >= {cls.VALGRIND_MIN_VERSION:.2f} is required")
 
-    @staticmethod
-    def _parent_proc(processes: List[Process]) -> Optional[Process]:
-        """Inspect given processes and select the browser parent process.
-        This assumes all processes are part of the same process tree.
-        This is needed because the process tree is different depending on the platform.
-        Windows:
-            python -> firefox (launcher) -> firefox (parent) -> firefox (content procs)
-
-        Linux and others:
-            python -> firefox (parent) -> firefox (content procs)
-
-        Args:
-            processes: Processes to inspect.
-
-        Returns:
-            The browser parent process if it still exists otherwise false.
-        """
-        for proc in processes:
-            try:
-                cmd = proc.cmdline()
-                if "-contentproc" not in cmd and "-no-deelevate" not in cmd:
-                    return proc
-            except (AccessDenied, NoSuchProcess):  # pragma: no cover
-                pass
-        return None
-
     def _terminate(self) -> None:
         """Call terminate() on browser processes. If terminate() fails try kill().
 
@@ -312,15 +288,16 @@ class FFPuppet:
             return
 
         # try terminating the parent process first, this should be all that is needed
-        parent = self._parent_proc(procs)
-        if parent:
+        if self._parent_proc is not None:
             try:
-                LOG.debug("attempting to terminate parent process (%d)", parent.pid)
-                parent.terminate()
+                LOG.debug("terminating parent process (%d)", self._parent_proc.pid)
+                self._parent_proc.terminate()
                 # wait for debugger (if in use) and child processes to close
-                procs = wait_procs(procs, timeout=10)[1]
+                wait_procs(procs, timeout=10)
             except (AccessDenied, NoSuchProcess):  # pragma: no cover
                 pass
+            # attempt to get processes again (in case previous attempt was low memory)
+            procs = list(self.get_processes())
 
         use_kill = False
         while procs:
@@ -642,6 +619,7 @@ class FFPuppet:
 
         # reset remaining to closed state
         try:
+            self._parent_proc = None
             self._proc = None
             self._logs.close()
             self._checks = []
@@ -690,12 +668,19 @@ class FFPuppet:
         Yields:
             psutil.Process objects.
         """
-        for proc in process_iter():
-            try:
-                if proc.environ().get("FFPUPPET_UID") == self._uid:
-                    yield proc
-            except (AccessDenied, NoSuchProcess):  # pragma: no cover
-                pass
+        try:
+            for proc in process_iter():
+                try:
+                    # this frequently triggers a MemoryError
+                    # on Windows in low memory situations
+                    if proc.environ().get("FFPUPPET_UID") == self._uid:
+                        yield proc
+                except (AccessDenied, NoSuchProcess):  # pragma: no cover
+                    pass
+        except MemoryError:
+            # in this scenario yield the parent process to hopefully allow for cleanup
+            LOG.warning("Low system memory!")
+            yield self._parent_proc
 
     def is_healthy(self) -> bool:
         """Verify the browser is in a good state by performing a series
@@ -773,6 +758,7 @@ class FFPuppet:
         assert memory_limit >= 0
         if self._proc is not None:
             raise LaunchError("Process is already running")
+        assert self._parent_proc is None
 
         if not bin_path.is_file() or not access(bin_path, X_OK):
             raise OSError(f"{bin_path.resolve()} is not an executable")
@@ -891,6 +877,15 @@ class FFPuppet:
                 self.profile = None
                 self.reason = Reason.CLOSED
             bootstrapper.close()
+
+        # set parent proc
+        if is_windows:
+            # by default the parent process is the launcher process on Windows
+            child_procs = Process(self.get_pid()).children()
+            if len(child_procs) == 1 and "-childproc" not in child_procs[0].cmdline():
+                self._parent_proc = child_procs[0]
+        if self._parent_proc is None:
+            self._parent_proc = Process(self.get_pid())
 
         if prefs_js and self.profile.invalid_prefs:
             raise InvalidPrefs(f"'{prefs_js}' is invalid")
