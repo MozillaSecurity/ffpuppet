@@ -390,7 +390,9 @@ def test_ffpuppet_14(tmp_path):
         test_file.write_bytes(b"test")
         # needs realpath() for OSX & normcase() for Windows
         fname = os.path.normcase(os.path.realpath(str(test_file)))
-        ffp.launch(TESTFF_BIN, location=fname, prefs_js=prefs)
+        # use relative binary path to verify it is resolved
+        ffp.launch(TESTFF_BIN.relative_to(Path.cwd()), location=fname, prefs_js=prefs)
+        assert ffp._bin_path.is_absolute()
         ffp.wait(timeout=10)
         ffp.close()
         logs = tmp_path / "logs"
