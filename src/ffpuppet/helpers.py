@@ -186,7 +186,7 @@ def certutil_find(browser_bin: Optional[Path] = None) -> str:
     if browser_bin:
         path = browser_bin.parent / "bin" / CERTUTIL
         if path.is_file():
-            return str(path)
+            return str(path.resolve())
     return CERTUTIL
 
 

@@ -382,7 +382,7 @@ class FFPuppet:
         """Build a command that can be used to launch the browser.
 
         Args:
-            bin_path: Path to the browser binary.
+            bin_path: Absolute path to the browser binary.
             additional_args: Additional arguments to pass to the browser.
 
         Returns:
@@ -776,8 +776,10 @@ class FFPuppet:
         if self._proc is not None:
             raise LaunchError("Process is already running")
 
+        # resolve path to avoid path issues when casting to a string
+        bin_path = bin_path.resolve()
         if not bin_path.is_file() or not access(bin_path, X_OK):
-            raise OSError(f"{bin_path.resolve()} is not an executable")
+            raise OSError(f"{bin_path} is not an executable")
         # need the path to help find symbols
         self._bin_path = bin_path.parent
 
