@@ -11,7 +11,7 @@ from sys import executable
 
 from pytest import mark
 
-from .minidump_parser import MinidumpParser, process_minidumps
+from .minidump_parser import MinidumpParser
 
 MD_UNSYMBOLIZED = {
     "crash_info": {
@@ -218,29 +218,4 @@ def test_minidump_parser_05(mocker, call_result, mdsw_bin, result):
     """test MinidumpParser.mdsw_available()"""
     mocker.patch("ffpuppet.minidump_parser.run", side_effect=call_result)
     mocker.patch.object(MinidumpParser, "MDSW_BIN", mdsw_bin)
-    assert (
-        MinidumpParser.mdsw_available(force_check=True, min_version="0.15.2") == result
-    )
-
-
-def test_process_minidumps_01(mocker, tmp_path):
-    """test process_minidumps()"""
-    fake_mdp = mocker.patch("ffpuppet.minidump_parser.MinidumpParser", autospec=True)
-    fake_mdp.mdsw_available.return_value = False
-    assert not any(process_minidumps(tmp_path, tmp_path))
-
-
-def test_process_minidumps_02(mocker, tmp_path):
-    """test process_minidumps()"""
-    mocker.patch(
-        "ffpuppet.minidump_parser.MinidumpParser.mdsw_available", autospec=True
-    )
-    mocker.patch(
-        "ffpuppet.minidump_parser.MinidumpParser.create_log",
-        autospec=True,
-        return_value=tmp_path / "minidump_00.txt",
-    )
-    (tmp_path / "foo.dmp").touch()
-    logs = list(process_minidumps(tmp_path, tmp_path / "syms"))
-    assert logs
-    assert logs[0].name == "minidump_00.txt"
+    assert MinidumpParser.mdsw_available(min_version="0.15.2") == result
