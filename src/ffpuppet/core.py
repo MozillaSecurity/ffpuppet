@@ -5,7 +5,7 @@
 
 from enum import Enum, unique
 from logging import getLogger
-from os import X_OK, access, getenv
+from os import X_OK, access, getenv, getpid
 from os.path import isfile, realpath
 from pathlib import Path
 from platform import system
@@ -17,7 +17,6 @@ from subprocess import Popen, check_output
 from sys import executable
 from typing import Any, Dict, Iterator, List, Optional, Pattern, Set, Tuple, Union
 from urllib.request import pathname2url
-from uuid import uuid4
 
 try:
     # pylint: disable=ungrouped-imports
@@ -27,7 +26,7 @@ try:
 except ImportError:
     pass
 
-from psutil import AccessDenied, NoSuchProcess, Process, process_iter, wait_procs
+from psutil import AccessDenied, NoSuchProcess, Process, wait_procs
 
 try:
     from xvfbwrapper import Xvfb
@@ -102,7 +101,6 @@ class FFPuppet:
         "_logs",
         "_proc",
         "_profile_template",
-        "_uid",
         "_xvfb",
         "_working_path",
         "profile",
@@ -116,7 +114,7 @@ class FFPuppet:
         use_profile: Optional[Path] = None,
         use_xvfb: bool = False,
         working_path: Optional[str] = None,
-    ):
+    ) -> None:
         # tokens used to notify log scanner to kill the browser process
         self._abort_tokens: Set[Pattern[str]] = set()
         self._bin_path: Optional[Path] = None
@@ -128,7 +126,6 @@ class FFPuppet:
         self._logs = PuppetLogger(base_path=working_path)
         self._proc: Optional["Popen[bytes]"] = None
         self._profile_template = use_profile
-        self._uid = str(uuid4())
         self._xvfb: Optional[Xvfb] = None
         self._working_path = working_path
         self.profile: Optional[Profile] = None
@@ -308,7 +305,7 @@ class FFPuppet:
         Returns:
             None
         """
-        procs = list(self.get_processes())
+        procs = self.get_processes()
         if not procs:
             LOG.debug("no processes to terminate")
             return
@@ -557,14 +554,8 @@ class FFPuppet:
             return
 
         assert self._proc is not None
-        procs = list(self.get_processes())
+        procs = self.get_processes()
         LOG.debug("processes found: %d", len(procs))
-        # avoid race (parent is closing, can't read environment)
-        if not procs and self._proc.poll() is None:
-            LOG.debug("parent should close immediately")
-            # this can raise but shouldn't, we want to know if a timeout happens
-            self._proc.wait(timeout=30)
-
         # check state of browser processes and set the close reason
         if any(self._crashreports(skip_benign=True)):
             r_code = Reason.ALERT
@@ -591,7 +582,7 @@ class FFPuppet:
             procs = wait_procs(procs, timeout=0)[1]
         elif self._proc.poll() is None:
             r_code = Reason.CLOSED
-        elif self._proc.poll() not in (0, -1, 1, -2, -9, 245):
+        elif self._proc.poll() not in {0, -1, 1, -2, -9, 245}:
             # Note: ignore 245 for now to avoid getting flooded with OOMs that don't
             # have a crash report... this should be revisited when time allows
             # https://bugzil.la/1370520
@@ -699,7 +690,7 @@ class FFPuppet:
         except AttributeError:
             return None
 
-    def get_processes(self) -> Iterator[Process]:
+    def get_processes(self) -> List[Process]:
         """Get browser processes directly and indirectly launched by this instance.
 
         Args:
@@ -708,12 +699,11 @@ class FFPuppet:
         Yields:
             psutil.Process objects.
         """
-        for proc in process_iter():
-            try:
-                if proc.environ().get("FFPUPPET_UID") == self._uid:
-                    yield proc
-            except (AccessDenied, NoSuchProcess):  # pragma: no cover
-                pass
+        try:
+            procs: List[Process] = Process(getpid()).children(recursive=True)
+        except (AccessDenied, NoSuchProcess):  # pragma: no cover
+            procs = []
+        return procs
 
     def is_healthy(self) -> bool:
         """Verify the browser is in a good state by performing a series
@@ -814,9 +804,6 @@ class FFPuppet:
 
         # process environment
         env_mod = env_mod or {}
-
-        # set FFPUPPET_PID in the environment of the browser
-        env_mod["FFPUPPET_UID"] = self._uid
 
         if self._dbg in (Debugger.PERNOSCO, Debugger.RR):
             env_mod["_RR_TRACE_DIR"] = str(self._logs.add_path(self._logs.PATH_RR))
@@ -1013,9 +1000,7 @@ class FFPuppet:
             True if processes exit before timeout expires otherwise False.
         """
         assert timeout is None or timeout >= 0
-        procs = list(self.get_processes())
-        if not procs and self._proc and self._proc.poll() is None:
-            procs = [Process(self._proc.pid)]
+        procs = self.get_processes()
         if not wait_procs(procs, timeout=timeout)[1]:
             return True
         LOG.debug("wait(timeout=%0.2f) timed out", timeout)
