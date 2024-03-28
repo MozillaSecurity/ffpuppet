@@ -93,6 +93,7 @@ def test_ffpuppet_01():
         assert ffp.launches == 0
         assert ffp.reason == Reason.CLOSED
         assert not ffp.is_running()
+        assert not ffp.get_processes()
         with HTTPTestServer() as srv:
             ffp.launch(TESTFF_BIN, location=srv.get_addr())
             assert not ffp._checks
@@ -102,17 +103,14 @@ def test_ffpuppet_01():
             assert ffp.is_healthy()
             assert ffp.reason is None
             assert ffp.get_pid() is not None
-            procs = list(ffp.get_processes())
-            assert procs
-            for proc in procs:
-                assert proc.environ().get("FFPUPPET_UID") == ffp._uid
+            assert ffp.get_processes()
             ffp.close()
         assert ffp.reason == Reason.CLOSED
         assert ffp._proc is None
         assert not ffp.is_running()
         assert not ffp.is_healthy()
         assert ffp.wait(timeout=10)
-        assert not any(ffp.get_processes())
+        assert not ffp.get_processes()
 
 
 @mark.parametrize(
@@ -936,7 +934,7 @@ def test_ffpuppet_30(mocker, tmp_path):
             pass
 
         def get_processes(self):
-            yield mocker.Mock(spec_set=Process)
+            return [mocker.Mock(spec_set=Process)]
 
     fake_wait_files = mocker.patch("ffpuppet.core.wait_on_files", autospec=True)
     # process exited - no crash
@@ -996,18 +994,6 @@ def test_ffpuppet_30(mocker, tmp_path):
         assert ffp._proc is None
         assert ffp._logs.closed
         assert ffp.reason == Reason.ALERT
-    # process exited - environment look up race
-    mocker.patch.object(StubbedProc, "_crashreports", return_value=())
-    mocker.patch.object(StubbedProc, "get_processes", return_value=())
-    with StubbedProc() as ffp:
-        ffp.launch()
-        proc = ffp._proc
-        ffp._proc.poll.side_effect = (None, 0, 0, 0)
-        ffp.close()
-        assert ffp._proc is None
-        assert ffp._logs.closed
-        assert ffp.reason == Reason.EXITED
-    assert proc.wait.call_count == 1
 
 
 def test_ffpuppet_31():
@@ -1072,31 +1058,8 @@ def test_ffpuppet_33(mocker):
     assert resume_suspended.mock_calls[0] == mocker.call(789)
 
 
-def test_ffpuppet_34(mocker):
-    """test FFPuppet.get_processes()"""
-    process_iter = mocker.patch("ffpuppet.core.process_iter", autospec=True)
-
-    # no results
-    process_iter.side_effect = ([mocker.Mock(spec_set=Process)],)
-    with FFPuppet() as ffp:
-        assert not any(ffp.get_processes())
-
-    # no matching results
-    proc = mocker.Mock(spec_set=Process)
-    proc.environ.return_value = {"FFPUPPET_UID": "no_match"}
-    process_iter.side_effect = ([proc],)
-    with FFPuppet() as ffp:
-        assert not any(ffp.get_processes())
-
-    # matching results
-    with FFPuppet() as ffp:
-        proc.environ.return_value = {"FFPUPPET_UID": ffp._uid}
-        process_iter.side_effect = ([proc, mocker.Mock(spec_set=Process)],)
-        assert any(ffp.get_processes())
-
-
 @mark.parametrize("proc_count", [0, 1, 2])
-def test_ffpuppet_35(mocker, proc_count):
+def test_ffpuppet_34(mocker, proc_count):
     """test FFPuppet._parent_proc() setting reason"""
     procs = []
     for _ in range(proc_count):
