@@ -11,6 +11,8 @@ from tempfile import TemporaryFile, mkdtemp
 from typing import IO, Any, Dict, List, Optional
 
 LOG = getLogger(__name__)
+MDSW_URL = "https://lib.rs/crates/minidump-stackwalk"
+SYMS_URL = "https://symbols.mozilla.org/"
 
 __author__ = "Tyson Smith"
 __all__ = ("MinidumpParser",)
@@ -18,7 +20,6 @@ __all__ = ("MinidumpParser",)
 
 class MinidumpParser:
     """Parse minidump files via minidump-stackwalk.
-    https://lib.rs/crates/minidump-stackwalk
 
     Attributes:
         symbols: Path containing debug symbols.
@@ -28,7 +29,7 @@ class MinidumpParser:
 
     __slots__ = ("_storage", "_symbols")
 
-    def __init__(self, symbols: Optional[Path] = None):
+    def __init__(self, symbols: Optional[Path] = None) -> None:
         self._storage = Path(mkdtemp(prefix="md-parser-"))
         self._symbols = symbols
 
@@ -52,7 +53,7 @@ class MinidumpParser:
         if self._symbols:
             cmd.extend(["--symbols-path", str(self._symbols.resolve(strict=True))])
         else:
-            cmd.extend(["--symbols-url", "https://symbols.mozilla.org/"])
+            cmd.extend(["--symbols-url", SYMS_URL])
         cmd.append(str(src.resolve(strict=True)))
         return cmd
 
@@ -213,6 +214,7 @@ class MinidumpParser:
         except OSError:
             LOG.debug("minidump-stackwalk not available (%s)", cls.MDSW_BIN)
             return False
+        LOG.debug("using minidump-stackwalk (%s)", cls.MDSW_BIN)
         # expected output is 'minidump-stackwalk #.#.#'
         current_version = result.stdout.strip().split()[-1].decode()
         if current_version.count(".") != 2:
@@ -242,7 +244,12 @@ if __name__ == "__main__":
     parser = ArgumentParser()
     parser.add_argument("minidump", type=Path, help="Minidump to process.")
     parser.add_argument("--debug", action="store_true", help="Display debug output.")
-    parser.add_argument("--symbols", type=Path, help="Local symbols directory.")
+    parser.add_argument(
+        "--symbols",
+        type=Path,
+        help="Local symbols directory. "
+        f"If not provided attempt to download symbols from {SYMS_URL}",
+    )
     args = parser.parse_args()
 
     # set output verbosity
@@ -257,6 +264,5 @@ if __name__ == "__main__":
             LOG.info("Parsed %s\n%s", args.minidump.resolve(), log.read_text())
     else:
         LOG.error(
-            "Unable to process minidump, minidump-stackwalk is required. "
-            "https://lib.rs/crates/minidump-stackwalk"
+            "Unable to process minidump, minidump-stackwalk is required. %s", MDSW_URL
         )
