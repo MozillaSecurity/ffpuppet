@@ -29,7 +29,6 @@ class MinidumpParser:
     __slots__ = ("_storage", "_symbols")
 
     def __init__(self, symbols: Optional[Path] = None):
-        assert self.MDSW_BIN
         self._storage = Path(mkdtemp(prefix="md-parser-"))
         self._symbols = symbols
 
@@ -78,7 +77,7 @@ class MinidumpParser:
             # display three registers per line
             sep = "\t" if (len(reg_lines) + 1) % 3 else "\n"
             reg_lines.append(f"{reg:>3} = {value}{sep}")
-        out_fp.write("".join(reg_lines).strip().encode())
+        out_fp.write("".join(reg_lines).rstrip().encode())
         out_fp.write(b"\n")
 
         # generate OS information line
@@ -92,8 +91,8 @@ class MinidumpParser:
         line = "|".join(
             (
                 "CPU",
-                data["system_info"]["cpu_arch"],
-                data["system_info"]["cpu_info"],
+                data["system_info"]["cpu_arch"] or "unknown",
+                data["system_info"]["cpu_info"] or "",
                 str(data["system_info"]["cpu_count"]),
             )
         )
@@ -117,7 +116,7 @@ class MinidumpParser:
         for frame in frames[:limit]:
             if frame["function_offset"]:
                 # remove the padding zeros
-                func_offset = str(hex(int(frame["function_offset"], 16)))
+                func_offset = hex(int(frame["function_offset"], 16))
             else:
                 func_offset = ""
             line = "|".join(
@@ -149,13 +148,14 @@ class MinidumpParser:
         if self._storage.is_dir():
             rmtree(self._storage)
 
-    def create_log(self, src: Path, filename: str, timeout: int = 90) -> Path:
+    def create_log(self, src: Path, filename: str, timeout: int = 300) -> Path:
         """Create a human readable log from a minidump file.
 
         Args:
             src: Minidump file.
             filename: Name to use for output file.
-            timeout: Maximum runtime of minidump-stackwalk.
+            timeout: Maximum runtime of minidump-stackwalk. NOTE: Symbols may be
+                downloaded if not provided which can add overhead.
 
         Returns:
             Log file.
