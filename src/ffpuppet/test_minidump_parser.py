@@ -13,7 +13,7 @@ from pytest import mark
 
 from .minidump_parser import MinidumpParser
 
-MD_UNSYMBOLIZED = {
+MD_UNSYMBOLIZED_AMD64_WIN = {
     "crash_info": {
         "address": "0x00007ffe4e09af8d",
         "crashing_thread": 0,
@@ -39,6 +39,38 @@ MD_UNSYMBOLIZED = {
         "cpu_info": "family 6 model 70 stepping 1",
         "os": "Windows NT",
         "os_ver": "10.0.19044",
+    },
+}
+
+MD_UNSYMBOLIZED_ARM64_MAC = {
+    "crash_info": {
+        "address": "0x0000000000000000",
+        "crashing_thread": 0,
+        "type": "EXC_BAD_ACCESS / KERN_INVALID_ADDRESS",
+    },
+    "crashing_thread": {
+        "frame_count": 32,
+        "frames": [
+            {
+                "file": None,
+                "frame": 0,
+                "function": None,
+                "function_offset": None,
+                "line": None,
+                "module": "XUL",
+                "registers": {
+                    "x1": "0x0000000000000001",
+                    "x2": "0x0000000000000002",
+                },
+            },
+        ],
+    },
+    "system_info": {
+        "cpu_arch": "arm64",
+        "cpu_count": 8,
+        "cpu_info": None,
+        "os": "Mac OS X",
+        "os_ver": "13.0.1 22A400",
     },
 }
 
@@ -71,7 +103,7 @@ def test_minidump_parser_01(mocker, tmp_path, symbols):
     "code, token, timeout",
     [
         # success
-        (f"print('{dumps(MD_UNSYMBOLIZED)}')", "xul.dll", 60),
+        (f"print('{dumps(MD_UNSYMBOLIZED_AMD64_WIN)}')", "xul.dll", 60),
         # mdsw failed
         ("exit(1)", "minidump-stackwalk failed", 60),
         # invalid json
@@ -94,19 +126,42 @@ def test_minidump_parser_02(mocker, code, token, timeout):
     assert not output.is_file()
 
 
-def test_minidump_parser_03(tmp_path):
+@mark.parametrize(
+    "data, reg, operating_system, cpu, crash, frame",
+    [
+        # Windows - x86_64 / AMD64
+        (
+            MD_UNSYMBOLIZED_AMD64_WIN,
+            "r10 = 0x0",
+            "OS|Windows NT|10.0.19044",
+            "CPU|amd64|family 6 model 70 stepping 1|8",
+            "Crash|EXCEPTION_BREAKPOINT|0x00007ffe4e09af8d|0",
+            "0|0|xul.dll||||",
+        ),
+        # MacOS - ARM64
+        (
+            MD_UNSYMBOLIZED_ARM64_MAC,
+            " x1 = 0x0000000000000001\t x2 = 0x0000000000000002",
+            "OS|Mac OS X|13.0.1 22A400",
+            "CPU|arm64||8",
+            "Crash|EXC_BAD_ACCESS / KERN_INVALID_ADDRESS|0x0000000000000000|0",
+            "0|0|XUL||||",
+        ),
+    ],
+)
+def test_minidump_parser_03(tmp_path, data, reg, operating_system, cpu, crash, frame):
     """test MinidumpParser._fmt_output() - un-symbolized"""
     with (tmp_path / "out.txt").open("w+b") as ofp:
         # pylint: disable=protected-access
-        MinidumpParser._fmt_output(MD_UNSYMBOLIZED, ofp, limit=2)
+        MinidumpParser._fmt_output(data, ofp, limit=2)
         ofp.seek(0)
-        formatted = ofp.read().strip().decode().split("\n")
+        formatted = ofp.read().rstrip().decode().split("\n")
     assert len(formatted) == 5
-    assert formatted[0] == "r10 = 0x0"
-    assert formatted[1] == "OS|Windows NT|10.0.19044"
-    assert formatted[2] == "CPU|amd64|family 6 model 70 stepping 1|8"
-    assert formatted[3] == "Crash|EXCEPTION_BREAKPOINT|0x00007ffe4e09af8d|0"
-    assert formatted[4] == "0|0|xul.dll||||"
+    assert formatted[0] == reg
+    assert formatted[1] == operating_system
+    assert formatted[2] == cpu
+    assert formatted[3] == crash
+    assert formatted[4] == frame
 
 
 def test_minidump_parser_04(tmp_path):
@@ -163,7 +218,7 @@ def test_minidump_parser_04(tmp_path):
         # pylint: disable=protected-access
         MinidumpParser._fmt_output(data, ofp, limit=2)
         ofp.seek(0)
-        formatted = ofp.read().strip().decode().split("\n")
+        formatted = ofp.read().rstrip().decode().split("\n")
     assert len(formatted) == 8
     assert formatted[0] == "r10 = 0x12345678\tr11 = 0x0badf00d\tr12 = 0x00000000"
     assert formatted[1] == "r13 = 0x000000dceebfc2e8"
