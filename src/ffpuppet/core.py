@@ -38,7 +38,7 @@ from .bootstrapper import Bootstrapper
 from .checks import CheckLogContents, CheckLogSize, CheckMemoryUsage
 from .exceptions import BrowserExecutionError, InvalidPrefs, LaunchError, TerminateError
 from .helpers import prepare_environment, wait_on_files
-from .minidump_parser import MinidumpParser
+from .minidump_parser import MDSW_URL, MinidumpParser
 from .profile import Profile
 from .puppet_logger import PuppetLogger
 
@@ -631,8 +631,8 @@ class FFPuppet:
             )
             if dmp_files and not MinidumpParser.mdsw_available():
                 LOG.error(
-                    "Unable to process minidump, minidump-stackwalk is required. "
-                    "https://lib.rs/crates/minidump-stackwalk"
+                    "Unable to process minidump, minidump-stackwalk is required. %s",
+                    MDSW_URL,
                 )
             elif dmp_files:
                 # check for local build symbols
