@@ -15,9 +15,8 @@ from re import match as re_match
 from shutil import copyfileobj
 from subprocess import Popen, check_output
 from sys import executable
-from typing import Any, Dict, Iterator, List, Optional, Pattern, Set, Tuple, Union
+from typing import Any, Dict, Generator, List, Optional, Pattern, Set, Tuple, Union
 from urllib.request import pathname2url
-from uuid import uuid4
 
 try:
     # pylint: disable=ungrouped-imports
@@ -27,8 +26,6 @@ try:
 except ImportError:
     pass
 
-from psutil import AccessDenied, NoSuchProcess, Process, process_iter, wait_procs
-
 try:
     from xvfbwrapper import Xvfb
 except ImportError:
@@ -36,9 +33,10 @@ except ImportError:
 
 from .bootstrapper import Bootstrapper
 from .checks import CheckLogContents, CheckLogSize, CheckMemoryUsage
-from .exceptions import BrowserExecutionError, InvalidPrefs, LaunchError, TerminateError
+from .exceptions import BrowserExecutionError, InvalidPrefs, LaunchError
 from .helpers import prepare_environment, wait_on_files
 from .minidump_parser import MDSW_URL, MinidumpParser
+from .process_tree import ProcessTree
 from .profile import Profile
 from .puppet_logger import PuppetLogger
 
@@ -100,9 +98,8 @@ class FFPuppet:
         "_headless",
         "_launches",
         "_logs",
-        "_proc",
+        "_proc_tree",
         "_profile_template",
-        "_uid",
         "_xvfb",
         "_working_path",
         "profile",
@@ -116,7 +113,7 @@ class FFPuppet:
         use_profile: Optional[Path] = None,
         use_xvfb: bool = False,
         working_path: Optional[str] = None,
-    ):
+    ) -> None:
         # tokens used to notify log scanner to kill the browser process
         self._abort_tokens: Set[Pattern[str]] = set()
         self._bin_path: Optional[Path] = None
@@ -126,9 +123,8 @@ class FFPuppet:
         self._headless = headless
         self._launches = 0  # number of successful browser launches
         self._logs = PuppetLogger(base_path=working_path)
-        self._proc: Optional["Popen[bytes]"] = None
+        self._proc_tree: Optional[ProcessTree] = None
         self._profile_template = use_profile
-        self._uid = str(uuid4())
         self._xvfb: Optional[Xvfb] = None
         self._working_path = working_path
         self.profile: Optional[Profile] = None
@@ -207,7 +203,7 @@ class FFPuppet:
 
     def _crashreports(
         self, skip_md: bool = False, skip_benign: bool = True
-    ) -> Iterator[Path]:
+    ) -> Generator[Path, None, None]:
         """Collect crash logs/reports.
 
         Args:
@@ -272,85 +268,6 @@ class FFPuppet:
                 raise OSError("Please install Valgrind") from None
             if not match or float(match.group("ver")) < cls.VALGRIND_MIN_VERSION:
                 raise OSError(f"Valgrind >= {cls.VALGRIND_MIN_VERSION:.2f} is required")
-
-    @staticmethod
-    def _parent_proc(processes: List[Process]) -> Optional[Process]:
-        """Inspect given processes and select the browser parent process.
-        This assumes all processes are part of the same process tree.
-        This is needed because the process tree is different depending on the platform.
-        Windows:
-            python -> firefox (launcher) -> firefox (parent) -> firefox (content procs)
-
-        Linux and others:
-            python -> firefox (parent) -> firefox (content procs)
-
-        Args:
-            processes: Processes to inspect.
-
-        Returns:
-            The browser parent process if it still exists otherwise false.
-        """
-        for proc in processes:
-            try:
-                cmd = proc.cmdline()
-                if "-contentproc" not in cmd and "-no-deelevate" not in cmd:
-                    return proc
-            except (AccessDenied, NoSuchProcess):  # pragma: no cover
-                pass
-        return None
-
-    def _terminate(self) -> None:
-        """Call terminate() on browser processes. If terminate() fails try kill().
-
-        Args:
-            None
-
-        Returns:
-            None
-        """
-        procs = list(self.get_processes())
-        if not procs:
-            LOG.debug("no processes to terminate")
-            return
-
-        # try terminating the parent process first, this should be all that is needed
-        parent = self._parent_proc(procs)
-        if parent:
-            try:
-                LOG.debug("attempting to terminate parent process (%d)", parent.pid)
-                parent.terminate()
-                # wait for debugger (if in use) and child processes to close
-                procs = wait_procs(procs, timeout=10)[1]
-            except (AccessDenied, NoSuchProcess):  # pragma: no cover
-                pass
-
-        use_kill = False
-        while procs:
-            LOG.debug(
-                "calling %s on %d running process(es)",
-                "kill()" if use_kill else "terminate()",
-                len(procs),
-            )
-            # iterate over processes and call terminate()/kill()
-            for proc in procs:
-                try:
-                    proc.kill() if use_kill else proc.terminate()
-                except (AccessDenied, NoSuchProcess):  # pragma: no cover
-                    pass
-            # wait for processes to terminate
-            procs = wait_procs(procs, timeout=30)[1]
-            if use_kill:
-                break
-            use_kill = True
-
-        if procs:
-            LOG.warning("Processes still running: %d", len(procs))
-            for proc in procs:
-                try:
-                    LOG.warning("-> %d (%s)", proc.pid, proc.name())
-                except (AccessDenied, NoSuchProcess):  # pragma: no cover
-                    pass
-            raise TerminateError("Failed to terminate processes")
 
     def add_abort_token(self, token: str) -> None:
         """Add a token that when present in the browser log will have the
@@ -516,7 +433,7 @@ class FFPuppet:
         # at this point everything should be cleaned up
         assert self.reason is not None
         assert self._logs.closed
-        assert self._proc is None
+        assert self._proc_tree is None
         assert self.profile is None
         # negative 'self._launches' indicates clean_up() has been called
         self._launches = -1
@@ -556,15 +473,8 @@ class FFPuppet:
             self._logs.close()
             return
 
-        assert self._proc is not None
-        procs = list(self.get_processes())
-        LOG.debug("processes found: %d", len(procs))
-        # avoid race (parent is closing, can't read environment)
-        if not procs and self._proc.poll() is None:
-            LOG.debug("parent should close immediately")
-            # this can raise but shouldn't, we want to know if a timeout happens
-            self._proc.wait(timeout=30)
-
+        assert self._proc_tree is not None
+        LOG.debug("processes found: %d", self._proc_tree.wait_procs())
         # check state of browser processes and set the close reason
         if any(self._crashreports(skip_benign=True)):
             r_code = Reason.ALERT
@@ -573,31 +483,27 @@ class FFPuppet:
             # This assumes a crash report is written and all processes exit
             # when an issue is detected.
             # Be sure MOZ_CRASHREPORTER_SHUTDOWN=1 to avoid delays.
-            procs = wait_procs(
-                procs,
-                timeout=15 if self._dbg == Debugger.NONE else 30,
-            )[1]
-            if procs:
+            proc_count = self._proc_tree.wait_procs(
+                timeout=15 if self._dbg == Debugger.NONE else 30
+            )
+            if proc_count > 0:
                 LOG.warning(
                     "Slow shutdown detected, %d process(es) still running",
-                    len(procs),
+                    proc_count,
                 )
             crash_reports = set(self._crashreports(skip_benign=True))
             LOG.debug("%d crash report(s) found", len(crash_reports))
             # additional delay to allow crash reports to be completed/closed
             if not wait_on_files(crash_reports, timeout=30):
                 LOG.warning("Crash reports still open after 30s")
-            # get active processes after waiting for crash reports to close
-            procs = wait_procs(procs, timeout=0)[1]
-        elif self._proc.poll() is None:
+        elif self._proc_tree.is_running():
             r_code = Reason.CLOSED
-        elif self._proc.poll() not in (0, -1, 1, -2, -9, 245):
+        elif self._proc_tree.wait() not in {0, -1, 1, -2, -9, 245}:
             # Note: ignore 245 for now to avoid getting flooded with OOMs that don't
             # have a crash report... this should be revisited when time allows
             # https://bugzil.la/1370520
             # Ignore -9 to avoid false positives due to system OOM killer
-            exit_code: Optional[int] = self._proc.poll()
-            assert exit_code is not None
+            exit_code = self._proc_tree.wait()
             r_code = Reason.ALERT
             LOG.warning(
                 "No crash reports found, exit code: %d (%X)", exit_code, exit_code
@@ -605,8 +511,8 @@ class FFPuppet:
         else:
             r_code = Reason.EXITED
 
-        # close processes
-        self._terminate()
+        # close browser
+        self._proc_tree.terminate()
 
         # collect crash reports and logs
         if not force_close and not self._logs.closed:
@@ -655,12 +561,14 @@ class FFPuppet:
 
             stderr_fp = self._logs.get_fp("stderr")
             if stderr_fp:
-                stderr_fp.write(f"[ffpuppet] Exit code: {self._proc.poll()}\n".encode())
+                stderr_fp.write(
+                    f"[ffpuppet] Exit code: {self._proc_tree.wait()}\n".encode()
+                )
                 stderr_fp.write(f"[ffpuppet] Reason code: {r_code.name}\n".encode())
 
         # reset remaining to closed state
         try:
-            self._proc = None
+            self._proc_tree = None
             self._logs.close()
             self._checks = []
             assert self.profile
@@ -670,7 +578,7 @@ class FFPuppet:
             LOG.debug("reason code: %s", r_code.name)
             self.reason = r_code
 
-    def cpu_usage(self) -> Iterator[Tuple[int, float]]:
+    def cpu_usage(self) -> Generator[Tuple[int, float], None, None]:
         """Collect percentage of CPU usage per process.
 
         Args:
@@ -679,11 +587,8 @@ class FFPuppet:
         Yields:
             PID and the CPU usage as a percentage.
         """
-        for proc in self.get_processes():
-            try:
-                yield proc.pid, proc.cpu_percent(interval=0.1)
-            except (AccessDenied, NoSuchProcess):  # pragma: no cover
-                continue
+        if self._proc_tree is not None:
+            yield from self._proc_tree.cpu_usage()
 
     def get_pid(self) -> Optional[int]:
         """Get the browser process ID.
@@ -694,30 +599,13 @@ class FFPuppet:
         Returns:
             Browser PID.
         """
-        try:
-            return self._proc.pid  # type: ignore[union-attr]
-        except AttributeError:
-            return None
-
-    def get_processes(self) -> Iterator[Process]:
-        """Get browser processes directly and indirectly launched by this instance.
-
-        Args:
-            None
-
-        Yields:
-            psutil.Process objects.
-        """
-        for proc in process_iter():
-            try:
-                if proc.environ().get("FFPUPPET_UID") == self._uid:
-                    yield proc
-            except (AccessDenied, NoSuchProcess):  # pragma: no cover
-                pass
+        pid: Optional[int] = None
+        if self._proc_tree is not None:
+            pid = self._proc_tree.parent.pid
+        return pid
 
     def is_healthy(self) -> bool:
-        """Verify the browser is in a good state by performing a series
-        of checks.
+        """Verify the browser is in a good state by performing a series of checks.
 
         Args:
             None
@@ -729,8 +617,8 @@ class FFPuppet:
         if self.reason is not None:
             LOG.debug("reason is set to %r", self.reason.name)
             return False
-        if not self.is_running():
-            LOG.debug("is_running() returned False")
+        if self._proc_tree is None or not self._proc_tree.is_running():
+            LOG.debug("ProcessTree.is_running() returned False")
             return False
         if any(self._crashreports()):
             LOG.debug("crash report found")
@@ -742,18 +630,15 @@ class FFPuppet:
         return True
 
     def is_running(self) -> bool:
-        """Check if the browser process is running.
+        """Check if the browser is running.
 
         Args:
             None
 
         Returns:
-            True if the process is running otherwise False.
+            True if the browser is running otherwise False.
         """
-        try:
-            return self._proc.poll() is None  # type: ignore[union-attr]
-        except AttributeError:
-            return False
+        return self._proc_tree is not None and self._proc_tree.is_running()
 
     def launch(
         self,
@@ -789,7 +674,7 @@ class FFPuppet:
         assert self._launches > -1, "clean_up() has been called"
         assert log_limit >= 0
         assert memory_limit >= 0
-        if self._proc is not None:
+        if self._proc_tree is not None:
             raise LaunchError("Process is already running")
 
         # resolve path to avoid path issues when casting to a string
@@ -814,9 +699,6 @@ class FFPuppet:
 
         # process environment
         env_mod = env_mod or {}
-
-        # set FFPUPPET_PID in the environment of the browser
-        env_mod["FFPUPPET_UID"] = self._uid
 
         if self._dbg in (Debugger.PERNOSCO, Debugger.RR):
             env_mod["_RR_TRACE_DIR"] = str(self._logs.add_path(self._logs.PATH_RR))
@@ -880,7 +762,7 @@ class FFPuppet:
                 if memory_limit:
                     creationflags |= CREATE_SUSPENDED
             # pylint: disable=consider-using-with
-            self._proc = Popen(
+            proc = Popen(
                 cmd,
                 bufsize=0,  # unbuffered (for log scanners)
                 creationflags=creationflags,
@@ -893,18 +775,21 @@ class FFPuppet:
                 stderr=stderr,
                 stdout=self._logs.get_fp("stdout"),
             )
-            LOG.debug("launched process %r", self.get_pid())
+            self._proc_tree = ProcessTree(proc)
             if memory_limit and is_windows:
                 LOG.debug("configuring job object")
                 # pylint: disable=no-member,protected-access
                 config_job_object(
-                    self._proc._handle,  # type: ignore[attr-defined]
+                    proc._handle,  # type: ignore[attr-defined]
                     memory_limit,
                 )
-                curr_pid = self.get_pid()
-                assert curr_pid is not None
-                resume_suspended_process(curr_pid)
+                resume_suspended_process(proc.pid)
             bootstrapper.wait(self.is_healthy, timeout=launch_timeout, url=location)
+            # check if launcher process is in use
+            if self._proc_tree.launcher is not None:
+                LOG.debug("browser launcher pid %d", self._proc_tree.launcher.pid)
+            LOG.debug("browser parent pid %d", self._proc_tree.parent.pid)
+
         except FileNotFoundError as exc:
             if Path(exc.filename).exists():
                 # this is known to happen when attempting to launch 32-bit binaries
@@ -912,7 +797,7 @@ class FFPuppet:
                 raise BrowserExecutionError("Cannot execute binary") from None
             raise
         finally:
-            if self._proc is None:
+            if self._proc_tree is None:
                 # only clean up here if a launch was not attempted or Popen failed
                 LOG.debug("process not launched")
                 self.profile.remove()
@@ -920,8 +805,8 @@ class FFPuppet:
                 self.reason = Reason.CLOSED
             bootstrapper.close()
 
-        if prefs_js and self.profile.invalid_prefs:
-            raise InvalidPrefs(f"'{prefs_js}' is invalid")
+        if prefs_js and self.profile and self.profile.invalid_prefs:
+            raise InvalidPrefs(f"'{prefs_js.resolve()}' is invalid")
 
         logs_fp_stderr = self._logs.get_fp("stderr")
         assert logs_fp_stderr is not None
@@ -929,18 +814,12 @@ class FFPuppet:
         assert logs_fp_stdout is not None
         if log_limit:
             self._checks.append(
-                CheckLogSize(
-                    log_limit,
-                    logs_fp_stderr.name,
-                    logs_fp_stdout.name,
-                )
+                CheckLogSize(log_limit, logs_fp_stderr.name, logs_fp_stdout.name)
             )
         if memory_limit and not is_windows:
             # memory limit is enforced with config_job_object on Windows
-            curr_pid = self.get_pid()
-            assert curr_pid is not None
             self._checks.append(
-                CheckMemoryUsage(curr_pid, memory_limit, self.get_processes)
+                CheckMemoryUsage(proc.pid, memory_limit, self._proc_tree.processes)
             )
         if self._abort_tokens:
             self._checks.append(
@@ -1013,10 +892,8 @@ class FFPuppet:
             True if processes exit before timeout expires otherwise False.
         """
         assert timeout is None or timeout >= 0
-        procs = list(self.get_processes())
-        if not procs and self._proc and self._proc.poll() is None:
-            procs = [Process(self._proc.pid)]
-        if not wait_procs(procs, timeout=timeout)[1]:
-            return True
-        LOG.debug("wait(timeout=%0.2f) timed out", timeout)
-        return False
+        if self._proc_tree:
+            if self._proc_tree.wait_procs(timeout=timeout) > 0:
+                LOG.debug("wait(timeout=%0.2f) timed out", timeout)
+                return False
+        return True

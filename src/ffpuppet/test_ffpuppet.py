@@ -11,7 +11,6 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 from platform import system
 from stat import S_IREAD, S_IWRITE
-from subprocess import Popen
 from threading import Thread
 from time import sleep
 
@@ -19,13 +18,12 @@ from psutil import Process
 from pytest import mark, raises
 
 from .bootstrapper import Bootstrapper
-from .core import Debugger, FFPuppet, Reason
+from .core import Debugger, FFPuppet, ProcessTree, Reason
 from .exceptions import (
     BrowserExecutionError,
     BrowserTerminatedError,
     BrowserTimeoutError,
     LaunchError,
-    TerminateError,
 )
 from .profile import Profile
 
@@ -95,6 +93,7 @@ def test_ffpuppet_01():
         assert not ffp.is_running()
         with HTTPTestServer() as srv:
             ffp.launch(TESTFF_BIN, location=srv.get_addr())
+            assert ffp._proc_tree is not None
             assert not ffp._checks
             assert ffp.launches == 1
             assert not ffp.wait(timeout=0)
@@ -102,17 +101,12 @@ def test_ffpuppet_01():
             assert ffp.is_healthy()
             assert ffp.reason is None
             assert ffp.get_pid() is not None
-            procs = list(ffp.get_processes())
-            assert procs
-            for proc in procs:
-                assert proc.environ().get("FFPUPPET_UID") == ffp._uid
             ffp.close()
         assert ffp.reason == Reason.CLOSED
-        assert ffp._proc is None
+        assert ffp._proc_tree is None
         assert not ffp.is_running()
         assert not ffp.is_healthy()
         assert ffp.wait(timeout=10)
-        assert not any(ffp.get_processes())
 
 
 @mark.parametrize(
@@ -127,13 +121,13 @@ def test_ffpuppet_01():
 def test_ffpuppet_02(mocker, exc_type):
     """test launch failures"""
     mocker.patch("ffpuppet.core.Popen", autospec=True)
+    mocker.patch("ffpuppet.core.ProcessTree", autospec=True)
     fake_bts = mocker.patch("ffpuppet.core.Bootstrapper", autospec=True)
-    fake_bts.return_value.location = ""
+    fake_bts.return_value.location = "http://fake.location"
     fake_bts.return_value.wait.side_effect = exc_type("test")
     with FFPuppet() as ffp:
         with raises(exc_type, match="test"):
             ffp.launch(TESTFF_BIN)
-        assert not ffp.is_healthy()
         assert ffp.launches == 0
 
 
@@ -169,60 +163,40 @@ def test_ffpuppet_04(mocker):
     """test get_pid()"""
     with FFPuppet() as ffp:
         assert ffp.get_pid() is None
-        ffp._proc = mocker.Mock(pid=123)
+        ffp._proc_tree = mocker.Mock(spec_set=ProcessTree)
+        ffp._proc_tree.parent = mocker.Mock(spec_set=Process, pid=123)
         assert ffp.get_pid() == 123
-        ffp._proc = None
+        ffp._proc_tree = None
 
 
 def test_ffpuppet_05(mocker):
     """test is_running()"""
     with FFPuppet() as ffp:
         assert not ffp.is_running()
-        ffp._proc = mocker.Mock(pid=123)
-        assert ffp._proc is not None
-        ffp._proc.poll.return_value = None
+        ffp._proc_tree = mocker.Mock(spec_set=ProcessTree)
+        ffp._proc_tree.is_running.side_effect = (True, False)
         assert ffp.is_running()
-        ffp._proc.poll.return_value = 0
         assert not ffp.is_running()
-        ffp._proc = None
-        assert not ffp.is_running()
+        ffp._proc_tree = None
 
 
 def test_ffpuppet_06(mocker):
     """test wait()"""
-
-    class StubbedProc(FFPuppet):
-        # pylint: disable=arguments-differ
-        def close(self, **_):
-            self._proc = None
-            self.reason = Reason.CLOSED
-
-        def launch(self):
-            self._proc = mocker.Mock(spec=Popen, pid=os.getpid())
-            self.reason = None
-
-        def get_pid(self):
-            if self.reason is None:
-                return 123
-            return None
-
-    fake_wait_procs = mocker.patch("ffpuppet.core.wait_procs", autospec=True)
-    with StubbedProc() as ffp:
-        ffp.launch()
+    with FFPuppet() as ffp:
         # process not running
-        fake_wait_procs.return_value = ([], [])
+        assert ffp._proc_tree is None
         assert ffp.wait()
-        assert fake_wait_procs.call_count == 1
-        fake_wait_procs.reset_mock()
         # process is shutting down
-        ffp._proc.poll.return_value = None
+        ffp._proc_tree = mocker.Mock(spec_set=ProcessTree)
+        ffp._proc_tree.wait_procs.return_value = 0
         assert ffp.wait()
-        assert fake_wait_procs.call_count == 1
-        fake_wait_procs.reset_mock()
+        assert ffp._proc_tree.wait_procs.call_count == 1
+        ffp._proc_tree.wait_procs.reset_mock()
         # process did not close
-        fake_wait_procs.return_value = ([], [mocker.Mock(spec_set=Process)])
+        ffp._proc_tree.wait_procs.return_value = 1
         assert not ffp.wait(timeout=10)
-        assert fake_wait_procs.call_count == 1
+        assert ffp._proc_tree.wait_procs.call_count == 1
+        ffp._proc_tree = None
 
 
 def test_ffpuppet_07(tmp_path):
@@ -350,6 +324,7 @@ def test_ffpuppet_12():
 def test_ffpuppet_13(mocker):
     """test launching under Xvfb"""
     mocker.patch("ffpuppet.core.Popen", autospec=True)
+    mocker.patch("ffpuppet.core.ProcessTree", autospec=True)
     fake_bts = mocker.patch("ffpuppet.core.Bootstrapper", autospec=True)
     fake_bts.return_value.location = "http://test:123"
     fake_system = mocker.patch("ffpuppet.core.system", autospec=True)
@@ -423,6 +398,7 @@ def test_ffpuppet_15(mocker, tmp_path, debugger, dbg_bin, version):
     """test launching with debuggers"""
     mocker.patch("ffpuppet.core.check_output", autospec=True, return_value=version)
     mocker.patch("ffpuppet.core.Popen", autospec=True)
+    mocker.patch("ffpuppet.core.ProcessTree", autospec=True)
     mocker.patch("ffpuppet.core.system", autospec=True, return_value="Linux")
     fake_bts = mocker.patch("ffpuppet.core.Bootstrapper", autospec=True)
     fake_bts.return_value.location = "http://test:123"
@@ -553,7 +529,7 @@ def test_ffpuppet_21(tmp_path):
         assert not ffp.is_healthy()
         assert ffp.is_running()
         # close fake browser process before calling close to avoid hang
-        ffp._terminate()
+        ffp._proc_tree.terminate()
         ffp.close()
         assert ffp.reason == Reason.ALERT
         logs = tmp_path / "logs"
@@ -603,7 +579,7 @@ def test_ffpuppet_22(mocker, tmp_path, mdsw_available):
         (md_path / "test3.dmp").write_text("3a\n3b")
         assert not ffp.is_healthy()
         # close fake browser process before calling close to avoid hang
-        ffp._terminate()
+        ffp._proc_tree.terminate()
         ffp.close()
         logs = tmp_path / "logs"
         ffp.save_logs(logs)
@@ -844,79 +820,8 @@ def test_ffpuppet_28(mocker):
         FFPuppet._dbg_sanity_check(Debugger.VALGRIND)
 
 
-def test_ffpuppet_29(mocker):
-    """test FFPuppet._terminate()"""
-    fake_wait_procs = mocker.patch("ffpuppet.core.wait_procs", autospec=True)
-
-    # not running
-    mocker.patch.object(FFPuppet, "get_processes", return_value=[])
-    with FFPuppet() as ffp:
-        ffp._terminate()
-
-    proc = mocker.Mock(spec_set=Process, pid=123)
-    proc.cmdline.return_value = [""]
-    # running (close with parent)
-    mocker.patch.object(FFPuppet, "get_processes", side_effect=([proc],))
-    fake_wait_procs.side_effect = (([], []),)
-    with FFPuppet() as ffp:
-        ffp._terminate()
-    assert proc.cmdline.call_count == 1
-    assert proc.terminate.call_count == 1
-    assert fake_wait_procs.call_count == 1
-    fake_wait_procs.reset_mock()
-    proc.reset_mock()
-
-    # running (terminate() all)
-    mocker.patch.object(FFPuppet, "get_processes", side_effect=([proc],))
-    fake_wait_procs.side_effect = (
-        ([], [proc]),
-        ([], []),
-    )
-    with FFPuppet() as ffp:
-        ffp._terminate()
-    assert proc.terminate.call_count == 2
-    assert proc.kill.call_count == 0
-    assert fake_wait_procs.call_count == 2
-    fake_wait_procs.reset_mock()
-    proc.reset_mock()
-
-    # running (kill() all)
-    mocker.patch.object(FFPuppet, "get_processes", side_effect=([proc],))
-    fake_wait_procs.side_effect = (
-        ([], [proc]),
-        ([], [proc]),
-        ([], []),
-    )
-    with FFPuppet() as ffp:
-        ffp._terminate()
-    assert proc.terminate.call_count == 2
-    assert proc.kill.call_count == 1
-    assert fake_wait_procs.call_count == 3
-    fake_wait_procs.reset_mock()
-    proc.reset_mock()
-
-    # fail to close
-    mocker.patch.object(FFPuppet, "get_processes", side_effect=([proc],))
-    fake_wait_procs.side_effect = (
-        ([], [proc]),
-        ([], [proc]),
-        ([], [proc]),
-    )
-    with FFPuppet() as ffp:
-        with raises(TerminateError):
-            ffp._terminate()
-    assert fake_wait_procs.call_count == 3
-    fake_wait_procs.reset_mock()
-    proc.reset_mock()
-
-
-def test_ffpuppet_30(mocker, tmp_path):
+def test_ffpuppet_29(mocker, tmp_path):
     """test FFPuppet.close() setting reason"""
-    mocker.patch(
-        "ffpuppet.core.wait_procs",
-        autospec=True,
-        return_value=([], [mocker.Mock(spec_set=Process)]),
-    )
 
     class StubbedProc(FFPuppet):
         # pylint: disable=arguments-differ
@@ -925,43 +830,42 @@ def test_ffpuppet_30(mocker, tmp_path):
             self._bin_path = tmp_path
             self._logs.reset()
             self._logs.add_log("stderr")
-            self._proc = mocker.Mock(spec=Popen, pid=123)
-            self._proc.poll.return_value = None
+            self._proc_tree = mocker.Mock(spec_set=ProcessTree)
+            self._proc_tree.wait_procs.return_value = 1
             profile = tmp_path / "profile"
             profile.mkdir(exist_ok=True)
             self.profile = Profile(working_path=profile)
-
-        @staticmethod
-        def _terminate():
-            pass
-
-        def get_processes(self):
-            yield mocker.Mock(spec_set=Process)
 
     fake_wait_files = mocker.patch("ffpuppet.core.wait_on_files", autospec=True)
     # process exited - no crash
     mocker.patch.object(StubbedProc, "_crashreports", return_value=())
     with StubbedProc() as ffp:
         ffp.launch()
-        ffp._proc.poll.return_value = 0
+        ffp._proc_tree.wait.return_value = 0
+        ffp._proc_tree.is_running.return_value = False
+        assert not ffp.is_healthy()
         ffp.close()
-        assert ffp._proc is None
+        assert ffp._proc_tree is None
         assert ffp._logs.closed
         assert ffp.reason == Reason.EXITED
     # process exited - exit code - crash
     with StubbedProc() as ffp:
         ffp.launch()
-        ffp._proc.poll.return_value = -11
+        ffp._proc_tree.is_running.return_value = False
+        ffp._proc_tree.wait.return_value = -11
+        assert not ffp.is_healthy()
         ffp.close()
-        assert ffp._proc is None
+        assert ffp._proc_tree is None
         assert ffp._logs.closed
         assert ffp.reason == Reason.ALERT
     # process running - no crash reports
     with StubbedProc() as ffp:
         ffp.launch()
-        ffp._proc.poll.return_value = None
+        ffp._proc_tree.is_running.return_value = True
+        ffp._proc_tree.wait.return_value = None
+        assert ffp.is_healthy()
         ffp.close()
-        assert ffp._proc is None
+        assert ffp._proc_tree is None
         assert ffp._logs.closed
         assert ffp.reason == Reason.CLOSED
     # process running - with crash reports, hang waiting to close
@@ -971,10 +875,10 @@ def test_ffpuppet_30(mocker, tmp_path):
     )
     with StubbedProc() as ffp:
         ffp.launch()
-        ffp._proc.poll.return_value = None
         fake_wait_files.return_value = False
+        assert not ffp.is_healthy()
         ffp.close()
-        assert ffp._proc is None
+        assert ffp._proc_tree is None
         assert ffp._logs.closed
         assert ffp.reason == Reason.ALERT
     # process running - with crash reports, multiple logs
@@ -990,27 +894,14 @@ def test_ffpuppet_30(mocker, tmp_path):
     )
     with StubbedProc() as ffp:
         ffp.launch()
-        ffp._proc.poll.return_value = None
         fake_wait_files.return_value = True
         ffp.close()
-        assert ffp._proc is None
+        assert ffp._proc_tree is None
         assert ffp._logs.closed
         assert ffp.reason == Reason.ALERT
-    # process exited - environment look up race
-    mocker.patch.object(StubbedProc, "_crashreports", return_value=())
-    mocker.patch.object(StubbedProc, "get_processes", return_value=())
-    with StubbedProc() as ffp:
-        ffp.launch()
-        proc = ffp._proc
-        ffp._proc.poll.side_effect = (None, 0, 0, 0)
-        ffp.close()
-        assert ffp._proc is None
-        assert ffp._logs.closed
-        assert ffp.reason == Reason.EXITED
-    assert proc.wait.call_count == 1
 
 
-def test_ffpuppet_31():
+def test_ffpuppet_30():
     """test ignoring benign sanitizer logs"""
     with FFPuppet() as ffp:
         ffp.launch(TESTFF_BIN)
@@ -1035,7 +926,7 @@ def test_ffpuppet_31():
         (False, FileNotFoundError),
     ],
 )
-def test_ffpuppet_32(mocker, tmp_path, bin_exists, expect_exc):
+def test_ffpuppet_31(mocker, tmp_path, bin_exists, expect_exc):
     """test Popen failure during launch"""
     bin_fake = tmp_path / "fake_bin"
     if bin_exists:
@@ -1053,8 +944,9 @@ def test_ffpuppet_32(mocker, tmp_path, bin_exists, expect_exc):
 
 
 @mark.skipif(system() != "Windows", reason="Only supported on Windows")
-def test_ffpuppet_33(mocker):
+def test_ffpuppet_32(mocker):
     """test FFPuppet.launch() config_job_object code path"""
+    mocker.patch("ffpuppet.core.ProcessTree", autospec=True)
     fake_bts = mocker.patch("ffpuppet.core.Bootstrapper", autospec=True)
     fake_bts.return_value.location = ""
     fake_popen = mocker.patch("ffpuppet.core.Popen", autospec=True)
@@ -1070,41 +962,3 @@ def test_ffpuppet_33(mocker):
     assert config_job_object.mock_calls[0] == mocker.call(123, 456)
     assert resume_suspended.call_count == 1
     assert resume_suspended.mock_calls[0] == mocker.call(789)
-
-
-def test_ffpuppet_34(mocker):
-    """test FFPuppet.get_processes()"""
-    process_iter = mocker.patch("ffpuppet.core.process_iter", autospec=True)
-
-    # no results
-    process_iter.side_effect = ([mocker.Mock(spec_set=Process)],)
-    with FFPuppet() as ffp:
-        assert not any(ffp.get_processes())
-
-    # no matching results
-    proc = mocker.Mock(spec_set=Process)
-    proc.environ.return_value = {"FFPUPPET_UID": "no_match"}
-    process_iter.side_effect = ([proc],)
-    with FFPuppet() as ffp:
-        assert not any(ffp.get_processes())
-
-    # matching results
-    with FFPuppet() as ffp:
-        proc.environ.return_value = {"FFPUPPET_UID": ffp._uid}
-        process_iter.side_effect = ([proc, mocker.Mock(spec_set=Process)],)
-        assert any(ffp.get_processes())
-
-
-@mark.parametrize("proc_count", [0, 1, 2])
-def test_ffpuppet_35(mocker, proc_count):
-    """test FFPuppet._parent_proc() setting reason"""
-    procs = []
-    for _ in range(proc_count):
-        procs.append(mocker.Mock(spec_set=Process))
-        procs[-1].cmdline.return_value = [""]
-    parent = FFPuppet._parent_proc(procs)
-    if proc_count:
-        assert parent
-        assert parent.cmdline.call_count == 1
-    else:
-        assert parent is None
