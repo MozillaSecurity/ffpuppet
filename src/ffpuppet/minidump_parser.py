@@ -3,19 +3,17 @@
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
 """ffpuppet minidump parsing module"""
 from json import JSONDecodeError, load
-from logging import getLogger
+from logging import DEBUG, INFO, basicConfig, getLogger
 from pathlib import Path
 from shutil import rmtree, which
 from subprocess import CalledProcessError, TimeoutExpired, run
 from tempfile import TemporaryFile, mkdtemp
-from typing import IO, Any, Dict, Iterator, List, Optional
+from typing import IO, Any, Dict, List, Optional
 
 LOG = getLogger(__name__)
 
-MDSW_AVAILABLE = False
-
 __author__ = "Tyson Smith"
-__all__ = ("process_minidumps",)
+__all__ = ("MinidumpParser",)
 
 
 class MinidumpParser:
@@ -31,6 +29,7 @@ class MinidumpParser:
     __slots__ = ("_storage", "_symbols")
 
     def __init__(self, symbols: Optional[Path] = None):
+        assert self.MDSW_BIN
         self._storage = Path(mkdtemp(prefix="md-parser-"))
         self._symbols = symbols
 
@@ -50,12 +49,12 @@ class MinidumpParser:
             Command line.
         """
         assert self.MDSW_BIN
-        cmd = [self.MDSW_BIN, "--no-color", "--json"]
+        cmd = [self.MDSW_BIN, "--no-color", "--no-interactive", "--json"]
         if self._symbols:
-            cmd.extend(["--symbols-path", str(self._symbols)])
+            cmd.extend(["--symbols-path", str(self._symbols.resolve(strict=True))])
         else:
             cmd.extend(["--symbols-url", "https://symbols.mozilla.org/"])
-        cmd.append(str(src))
+        cmd.append(str(src.resolve(strict=True)))
         return cmd
 
     @staticmethod
@@ -150,13 +149,13 @@ class MinidumpParser:
         if self._storage.is_dir():
             rmtree(self._storage)
 
-    def create_log(self, src: Path, filename: str, timeout: int = 60) -> Path:
+    def create_log(self, src: Path, filename: str, timeout: int = 90) -> Path:
         """Create a human readable log from a minidump file.
 
         Args:
-            src:
-            filename:
-            timeout:
+            src: Minidump file.
+            filename: Name to use for output file.
+            timeout: Maximum runtime of minidump-stackwalk.
 
         Returns:
             Log file.
@@ -195,78 +194,69 @@ class MinidumpParser:
         return dst
 
     @classmethod
-    def mdsw_available(
-        cls, force_check: bool = False, min_version: str = "0.15.2"
-    ) -> bool:
+    def mdsw_available(cls, min_version: str = "0.15.2") -> bool:
         """Check if minidump-stackwalk binary is available.
 
         Args:
-            force_check: Always perform a check.
             min_version: Minimum supported minidump-stackwalk version.
 
         Returns:
             True if binary is available otherwise False.
         """
+        assert min_version.count(".") == 2
+
         if not cls.MDSW_BIN:
             LOG.debug("minidump-stackwalk not found")
             return False
-        global MDSW_AVAILABLE  # pylint: disable=global-statement
-        if not MDSW_AVAILABLE or force_check:
-            assert len(min_version.split(".")) == 3
-            try:
-                result = run(
-                    [cls.MDSW_BIN, "--version"], check=False, capture_output=True
-                )
-            except OSError:
-                LOG.debug("minidump-stackwalk not available (%s)", cls.MDSW_BIN)
-                return False
-            # expected output is 'minidump-stackwalk #.#.#'
-            current_version = result.stdout.strip().split()[-1].decode()
-            if len(current_version.split(".")) != 3:
+        try:
+            result = run([cls.MDSW_BIN, "--version"], check=False, capture_output=True)
+        except OSError:
+            LOG.debug("minidump-stackwalk not available (%s)", cls.MDSW_BIN)
+            return False
+        # expected output is 'minidump-stackwalk #.#.#'
+        current_version = result.stdout.strip().split()[-1].decode()
+        if current_version.count(".") != 2:
+            LOG.error(
+                "Unknown minidump-stackwalk version: %r",
+                result.stdout.decode(errors="ignore"),
+            )
+            return False
+        # version check
+        for cver, mver in zip(current_version.split("."), min_version.split(".")):
+            if int(cver) > int(mver):
+                break
+            if int(cver) < int(mver):
                 LOG.error(
-                    "Unknown minidump-stackwalk version: %r",
-                    result.stdout.decode(errors="ignore"),
+                    "minidump-stackwalk %r is unsupported (minimum %r)",
+                    current_version,
+                    min_version,
                 )
                 return False
-            # version check
-            for cver, mver in zip(current_version.split("."), min_version.split(".")):
-                if int(cver) > int(mver):
-                    break
-                if int(cver) < int(mver):
-                    LOG.error(
-                        "minidump-stackwalk %r is unsupported (minimum %r)",
-                        current_version,
-                        min_version,
-                    )
-                    return False
-            MDSW_AVAILABLE = True
+        LOG.debug("detected minidump-stackwalk version %r", current_version)
         return True
 
 
-def process_minidumps(path: Path, symbols: Path) -> Iterator[Path]:
-    """Scan for minidump (.dmp) files in path and a log is yielded for each.
+if __name__ == "__main__":
+    from argparse import ArgumentParser
 
-    Args:
-        path: Path to scan for minidump files.
-        symbols: Directory containing symbols for the target binary.
+    parser = ArgumentParser()
+    parser.add_argument("minidump", type=Path, help="Minidump to process.")
+    parser.add_argument("--debug", action="store_true", help="Display debug output.")
+    parser.add_argument("--symbols", type=Path, help="Local symbols directory.")
+    args = parser.parse_args()
 
-    Yields:
-        Formatted minidump logs.
-    """
-    if not MinidumpParser.mdsw_available():
+    # set output verbosity
+    if args.debug:
+        basicConfig(format="[%(levelname).1s] %(message)s", level=DEBUG)
+    else:
+        basicConfig(format="%(message)s", level=INFO)
+
+    if MinidumpParser.mdsw_available():
+        with MinidumpParser(symbols=args.symbols) as md_parser:
+            log = md_parser.create_log(args.minidump, "minidump_tmp.txt")
+            LOG.info("Parsed %s\n%s", args.minidump.resolve(), log.read_text())
+    else:
         LOG.error(
-            "Unable to process minidump."
-            " See README.md for details on obtaining the latest minidump-stackwalk."
+            "Unable to process minidump, minidump-stackwalk is required. "
+            "https://lib.rs/crates/minidump-stackwalk"
         )
-        return
-    assert path.is_dir(), f"missing minidump scan path '{path!s}'"
-    local_symbols = True
-    if not symbols.is_dir():
-        LOG.warning("Local packaged symbols not found: '%s'", symbols)
-        local_symbols = False
-
-    with MinidumpParser(symbols=symbols if local_symbols else None) as md_parser:
-        # order by last modified date hopefully the oldest log is the cause of the issue
-        dmp_files = sorted(path.glob("*.dmp"), key=lambda x: x.stat().st_mtime)
-        for count, dmp_file in enumerate(dmp_files):
-            yield md_parser.create_log(dmp_file, f"minidump_{count:02}.txt")

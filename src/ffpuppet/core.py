@@ -38,7 +38,7 @@ from .bootstrapper import Bootstrapper
 from .checks import CheckLogContents, CheckLogSize, CheckMemoryUsage
 from .exceptions import BrowserExecutionError, InvalidPrefs, LaunchError, TerminateError
 from .helpers import prepare_environment, wait_on_files
-from .minidump_parser import process_minidumps
+from .minidump_parser import MinidumpParser
 from .profile import Profile
 from .puppet_logger import PuppetLogger
 
@@ -623,19 +623,35 @@ class FFPuppet:
             assert self.profile is not None
             assert self.profile.path is not None
             assert self._bin_path is not None
-            # check for minidumps and process them if possible
-            md_path = self.profile.path / "minidumps"
-            if any(md_path.glob("*.dmp")):
+            # check for minidumps and order by last modified date
+            # hopefully the oldest log is the cause of the issue
+            dmp_files = sorted(
+                (self.profile.path / "minidumps").glob("*.dmp"),
+                key=lambda x: x.stat().st_mtime,
+            )
+            if dmp_files and not MinidumpParser.mdsw_available():
+                LOG.error(
+                    "Unable to process minidump, minidump-stackwalk is required. "
+                    "https://lib.rs/crates/minidump-stackwalk"
+                )
+            elif dmp_files:
                 # check for local build symbols
-                sym_path = self._bin_path.parent / "crashreporter-symbols"
-                if not sym_path.is_dir():
-                    # use packaged symbols
+                if (self._bin_path.parent / "crashreporter-symbols").is_dir():
+                    sym_path = self._bin_path.parent / "crashreporter-symbols"
+                # use packaged symbols
+                elif (self._bin_path / "symbols").is_dir():
                     sym_path = self._bin_path / "symbols"
-                for md_txt in process_minidumps(md_path, sym_path):
-                    with md_txt.open("rb") as md_fp:
-                        copyfileobj(
-                            md_fp, self._logs.add_log(md_txt.stem)
-                        )  # type: ignore
+                # no symbols path detected
+                else:
+                    sym_path = None
+
+                with MinidumpParser(symbols=sym_path) as parser:
+                    for count, dmp_file in enumerate(dmp_files):
+                        md_txt = parser.create_log(dmp_file, f"minidump_{count:02}.txt")
+                        with md_txt.open("rb") as md_fp:
+                            copyfileobj(
+                                md_fp, self._logs.add_log(md_txt.stem)
+                            )  # type: ignore
 
             stderr_fp = self._logs.get_fp("stderr")
             if stderr_fp:

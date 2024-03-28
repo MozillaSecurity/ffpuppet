@@ -574,16 +574,21 @@ def test_ffpuppet_21(tmp_path):
     assert not any(f.is_file() for f in test_logs)
 
 
-def test_ffpuppet_22(mocker, tmp_path):
+@mark.parametrize("mdsw_available", [True, False])
+def test_ffpuppet_22(mocker, tmp_path, mdsw_available):
     """test multiple minidumps"""
 
-    def _fake_process_minidumps(dmps, _):
-        for num, _ in enumerate(Path(dmps).glob("*.dmp")):
-            md_log = tmp_path / f"minidump_{num:02}.txt"
-            md_log.write_text("test")
-            yield md_log
+    def _fake_create_log(src, filename, _timeout: int = 90):
+        dst = tmp_path / "md_parser_working_path"
+        dst.mkdir(exist_ok=True)
+        (dst / filename).write_text(src.read_text())
+        return dst / filename
 
-    mocker.patch("ffpuppet.core.process_minidumps", side_effect=_fake_process_minidumps)
+    md_parser = mocker.patch("ffpuppet.core.MinidumpParser")
+    md_parser.mdsw_available.return_value = mdsw_available
+    md_parser.return_value.__enter__.return_value.create_log.side_effect = (
+        _fake_create_log
+    )
     profile = tmp_path / "profile"
     profile.mkdir()
     (profile / "minidumps").mkdir()
@@ -602,9 +607,14 @@ def test_ffpuppet_22(mocker, tmp_path):
         ffp.close()
         logs = tmp_path / "logs"
         ffp.save_logs(logs)
-        assert any(logs.glob("log_minidump_00.txt"))
-        assert any(logs.glob("log_minidump_01.txt"))
-        assert any(logs.glob("log_minidump_02.txt"))
+        assert md_parser.mdsw_available.call_count == 1
+        if mdsw_available:
+            assert md_parser.call_count == 1
+            assert any(logs.glob("log_minidump_00.txt"))
+            assert any(logs.glob("log_minidump_01.txt"))
+            assert any(logs.glob("log_minidump_02.txt"))
+        else:
+            assert md_parser.call_count == 0
 
 
 def test_ffpuppet_23(tmp_path):
