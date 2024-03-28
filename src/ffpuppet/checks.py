@@ -6,7 +6,7 @@
 from abc import ABC, abstractmethod
 from os import SEEK_SET, stat
 from platform import system
-from typing import IO, Callable, Iterable, Iterator, List, Optional, Pattern, Tuple
+from typing import IO, Callable, Iterable, List, Optional, Pattern, Tuple
 
 from psutil import AccessDenied, NoSuchProcess, Process
 
@@ -157,7 +157,7 @@ class CheckMemoryUsage(Check):
     __slots__ = ("_get_procs", "_is_linux", "limit", "pid")
 
     def __init__(
-        self, pid: int, limit: int, get_procs_cb: Callable[[], Iterator[Process]]
+        self, pid: int, limit: int, get_procs_cb: Callable[[], List[Process]]
     ) -> None:
         super().__init__()
         self._get_procs = get_procs_cb
