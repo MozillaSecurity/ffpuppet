@@ -5,8 +5,12 @@
 """ffpuppet bootstrapper tests"""
 # pylint: disable=protected-access
 
+# as of python 3.10 socket.timeout was made an alias of TimeoutError
+# pylint: disable=ungrouped-imports
+from socket import timeout as socket_timeout  # isort: skip
+
 from itertools import repeat
-from socket import socket, timeout
+from socket import socket
 from threading import Thread
 
 from pytest import mark, raises
@@ -30,8 +34,8 @@ def test_bootstrapper_01():
 def test_bootstrapper_02(mocker):
     """test Bootstrapper.wait() failure waiting for initial connection"""
     fake_sock = mocker.MagicMock(spec_set=socket)
-    fake_sock.accept.side_effect = timeout
-    mocker.patch("ffpuppet.bootstrapper.socket.socket", return_value=fake_sock)
+    fake_sock.accept.side_effect = socket_timeout
+    mocker.patch("ffpuppet.bootstrapper.socket", return_value=fake_sock)
     with Bootstrapper() as bts:
         # test failure
         with raises(
@@ -54,9 +58,9 @@ def test_bootstrapper_03(mocker):
     """test Bootstrapper.wait() failure waiting for request"""
     fake_sock = mocker.MagicMock(spec_set=socket)
     fake_conn = mocker.Mock(spec_set=socket)
-    fake_conn.recv.side_effect = timeout
+    fake_conn.recv.side_effect = socket_timeout
     fake_sock.accept.return_value = (fake_conn, None)
-    mocker.patch("ffpuppet.bootstrapper.socket.socket", return_value=fake_sock)
+    mocker.patch("ffpuppet.bootstrapper.socket", return_value=fake_sock)
     with Bootstrapper() as bts:
         # test failure
         with raises(BrowserTerminatedError, match="Failure waiting for request"):
@@ -78,9 +82,9 @@ def test_bootstrapper_04(mocker):
     fake_sock = mocker.MagicMock(spec_set=socket)
     fake_conn = mocker.Mock(spec_set=socket)
     fake_conn.recv.return_value = "A"
-    fake_conn.sendall.side_effect = timeout
+    fake_conn.sendall.side_effect = socket_timeout
     fake_sock.accept.return_value = (fake_conn, None)
-    mocker.patch("ffpuppet.bootstrapper.socket.socket", return_value=fake_sock)
+    mocker.patch("ffpuppet.bootstrapper.socket", return_value=fake_sock)
     with Bootstrapper() as bts:
         # test timeout
         with raises(BrowserTimeoutError, match="Timeout sending response"):
@@ -103,7 +107,7 @@ def test_bootstrapper_05(mocker):
     fake_conn = mocker.Mock(spec_set=socket)
     fake_conn.recv.return_value = "foo"
     fake_sock.accept.return_value = (fake_conn, None)
-    mocker.patch("ffpuppet.bootstrapper.socket.socket", return_value=fake_sock)
+    mocker.patch("ffpuppet.bootstrapper.socket", return_value=fake_sock)
     with Bootstrapper() as bts:
         with raises(BrowserTerminatedError, match="Failure during browser startup"):
             bts.wait(lambda: False)
@@ -118,13 +122,13 @@ def test_bootstrapper_05(mocker):
         # with a redirect url
         ("http://127.0.0.1:9999/test.html", ("foo",), 1),
         # request size matches buffer size
-        (None, ("A" * Bootstrapper.BUF_SIZE, timeout), 1),
+        (None, ("A" * Bootstrapper.BUF_SIZE, socket_timeout), 1),
         # large request
         (None, ("A" * Bootstrapper.BUF_SIZE, "foo"), 1),
         # slow startup
-        (None, (timeout, timeout, "foo"), 1),
+        (None, (socket_timeout, socket_timeout, "foo"), 1),
         # slow failed startup with retry
-        (None, (timeout, "", "foo"), 2),
+        (None, (socket_timeout, "", "foo"), 2),
     ],
 )
 def test_bootstrapper_06(mocker, redirect, recv, closed):
@@ -133,7 +137,7 @@ def test_bootstrapper_06(mocker, redirect, recv, closed):
     fake_conn = mocker.Mock(spec_set=socket)
     fake_conn.recv.side_effect = recv
     fake_sock.accept.return_value = (fake_conn, None)
-    mocker.patch("ffpuppet.bootstrapper.socket.socket", return_value=fake_sock)
+    mocker.patch("ffpuppet.bootstrapper.socket", return_value=fake_sock)
     with Bootstrapper() as bts:
         bts.wait(lambda: True, url=redirect)
     assert fake_conn.close.call_count == closed
@@ -153,7 +157,7 @@ def test_bootstrapper_07():
             try:
                 conn.connect(("127.0.0.1", port))
                 break
-            except timeout:
+            except socket_timeout:
                 if not attempt:
                     raise
         # send request and receive response
@@ -188,7 +192,7 @@ def test_bootstrapper_08(mocker, bind, attempts, raised):
     mocker.patch("ffpuppet.bootstrapper.sleep", autospec=True)
     fake_sock = mocker.MagicMock(spec_set=socket)
     fake_sock.bind.side_effect = bind
-    mocker.patch("ffpuppet.bootstrapper.socket.socket", return_value=fake_sock)
+    mocker.patch("ffpuppet.bootstrapper.socket", return_value=fake_sock)
     with raises(raised):
         with Bootstrapper(attempts=attempts):
             pass
@@ -203,7 +207,7 @@ def test_bootstrapper_09(mocker):
         (None, Bootstrapper.BLOCKED_PORTS[0]),
         (None, 12345),
     )
-    mocker.patch("ffpuppet.bootstrapper.socket.socket", return_value=fake_sock)
+    mocker.patch("ffpuppet.bootstrapper.socket", return_value=fake_sock)
     with Bootstrapper(attempts=2):
         pass
     assert fake_sock.close.call_count == 2
