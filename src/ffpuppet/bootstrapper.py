@@ -2,8 +2,13 @@
 # License, v. 2.0. If a copy of the MPL was not distributed with this
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
 """ffpuppet bootstrapper module"""
-import socket
+
+# as of python 3.10 socket.timeout was made an alias of TimeoutError
+# pylint: disable=ungrouped-imports
+from socket import timeout as socket_timeout  # isort: skip
+
 from logging import getLogger
+from socket import SO_REUSEADDR, SOL_SOCKET, socket
 from time import sleep, time
 from typing import Any, Callable, Optional
 
@@ -50,8 +55,8 @@ class Bootstrapper:  # pylint: disable=missing-docstring
         assert attempts > 0
         assert port >= 0
         for _ in range(attempts):
-            self._socket: Optional[socket.socket] = socket.socket()
-            self._socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            self._socket: Optional[socket] = socket()
+            self._socket.setsockopt(SOL_SOCKET, SO_REUSEADDR, 1)
             self._socket.settimeout(self.POLL_WAIT)
             try:
                 self._socket.bind(("127.0.0.1", port))
@@ -136,14 +141,14 @@ class Bootstrapper:  # pylint: disable=missing-docstring
         assert timeout >= 0
         start_time = time()
         time_limit = start_time + timeout
-        conn: Optional[socket.socket] = None
+        conn: Optional[socket] = None
         try:
             while conn is None:
                 LOG.debug("waiting for browser connection...")
                 while conn is None:
                     try:
                         conn, _ = self._socket.accept()
-                    except socket.timeout:
+                    except socket_timeout:
                         if not cb_continue():
                             raise BrowserTerminatedError(
                                 "Failure waiting for browser connection"
@@ -161,7 +166,7 @@ class Bootstrapper:  # pylint: disable=missing-docstring
                     try:
                         count_recv = len(conn.recv(self.BUF_SIZE))
                         total_recv += count_recv
-                    except socket.timeout:
+                    except socket_timeout:
                         # use -1 to indicate timeout
                         count_recv = -1
                     if count_recv == self.BUF_SIZE:
@@ -193,7 +198,7 @@ class Bootstrapper:  # pylint: disable=missing-docstring
             LOG.debug("sending response (redirect %r)", url)
             try:
                 conn.sendall(resp.encode("ascii"))
-            except socket.timeout:
+            except socket_timeout:
                 resp_timeout = True
             else:
                 resp_timeout = False
