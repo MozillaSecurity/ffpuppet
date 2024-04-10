@@ -20,23 +20,21 @@ from .exceptions import BrowserTerminatedError, BrowserTimeoutError, LaunchError
 
 
 def test_bootstrapper_01():
-    """test simple Bootstrapper()"""
-    with Bootstrapper() as bts:
+    """test Bootstrapper.create()"""
+    with Bootstrapper.create() as bts:
         assert bts._socket is not None
         assert bts.location.startswith("http://127.0.0.1:")
-        assert int(bts.location.split(":")[-1]) > 1024
-        assert bts.port > 1024
+        assert int(bts.location.split(":")[-1]) >= 1024
+        assert bts.port >= 1024
         assert bts.port not in Bootstrapper.BLOCKED_PORTS
         bts.close()
-        assert bts._socket is None
 
 
 def test_bootstrapper_02(mocker):
     """test Bootstrapper.wait() failure waiting for initial connection"""
     fake_sock = mocker.MagicMock(spec_set=socket)
     fake_sock.accept.side_effect = socket_timeout
-    mocker.patch("ffpuppet.bootstrapper.socket", return_value=fake_sock)
-    with Bootstrapper() as bts:
+    with Bootstrapper(fake_sock) as bts:
         # test failure
         with raises(
             BrowserTerminatedError, match="Failure waiting for browser connection"
@@ -60,8 +58,7 @@ def test_bootstrapper_03(mocker):
     fake_conn = mocker.Mock(spec_set=socket)
     fake_conn.recv.side_effect = socket_timeout
     fake_sock.accept.return_value = (fake_conn, None)
-    mocker.patch("ffpuppet.bootstrapper.socket", return_value=fake_sock)
-    with Bootstrapper() as bts:
+    with Bootstrapper(fake_sock) as bts:
         # test failure
         with raises(BrowserTerminatedError, match="Failure waiting for request"):
             bts.wait(lambda: False)
@@ -84,8 +81,7 @@ def test_bootstrapper_04(mocker):
     fake_conn.recv.return_value = "A"
     fake_conn.sendall.side_effect = socket_timeout
     fake_sock.accept.return_value = (fake_conn, None)
-    mocker.patch("ffpuppet.bootstrapper.socket", return_value=fake_sock)
-    with Bootstrapper() as bts:
+    with Bootstrapper(fake_sock) as bts:
         # test timeout
         with raises(BrowserTimeoutError, match="Timeout sending response"):
             bts.wait(lambda: True)
@@ -107,8 +103,7 @@ def test_bootstrapper_05(mocker):
     fake_conn = mocker.Mock(spec_set=socket)
     fake_conn.recv.return_value = "foo"
     fake_sock.accept.return_value = (fake_conn, None)
-    mocker.patch("ffpuppet.bootstrapper.socket", return_value=fake_sock)
-    with Bootstrapper() as bts:
+    with Bootstrapper(fake_sock) as bts:
         with raises(BrowserTerminatedError, match="Failure during browser startup"):
             bts.wait(lambda: False)
     assert fake_conn.close.call_count == 1
@@ -137,8 +132,7 @@ def test_bootstrapper_06(mocker, redirect, recv, closed):
     fake_conn = mocker.Mock(spec_set=socket)
     fake_conn.recv.side_effect = recv
     fake_sock.accept.return_value = (fake_conn, None)
-    mocker.patch("ffpuppet.bootstrapper.socket", return_value=fake_sock)
-    with Bootstrapper() as bts:
+    with Bootstrapper(fake_sock) as bts:
         bts.wait(lambda: True, url=redirect)
     assert fake_conn.close.call_count == closed
     assert fake_conn.recv.call_count == len(recv)
@@ -169,7 +163,7 @@ def test_bootstrapper_07():
         finally:
             conn.close()
 
-    with Bootstrapper() as bts:
+    with Bootstrapper.create() as bts:
         browser_thread = Thread(target=_fake_browser, args=(bts.port,))
         try:
             browser_thread.start()
@@ -188,13 +182,13 @@ def test_bootstrapper_07():
     ],
 )
 def test_bootstrapper_08(mocker, bind, attempts, raised):
-    """test Bootstrapper() - failures"""
+    """test Bootstrapper.create() - failures"""
     mocker.patch("ffpuppet.bootstrapper.sleep", autospec=True)
     fake_sock = mocker.MagicMock(spec_set=socket)
     fake_sock.bind.side_effect = bind
     mocker.patch("ffpuppet.bootstrapper.socket", return_value=fake_sock)
     with raises(raised):
-        with Bootstrapper(attempts=attempts):
+        with Bootstrapper.create(attempts=attempts):
             pass
     assert fake_sock.bind.call_count == attempts
     assert fake_sock.close.call_count == attempts
@@ -204,10 +198,10 @@ def test_bootstrapper_09(mocker):
     """test Bootstrapper() - blocked ports"""
     fake_sock = mocker.MagicMock(spec_set=socket)
     fake_sock.getsockname.side_effect = (
-        (None, Bootstrapper.BLOCKED_PORTS[0]),
+        (None, next(iter(Bootstrapper.BLOCKED_PORTS))),
         (None, 12345),
     )
     mocker.patch("ffpuppet.bootstrapper.socket", return_value=fake_sock)
-    with Bootstrapper(attempts=2):
+    with Bootstrapper.create(attempts=2):
         pass
     assert fake_sock.close.call_count == 2

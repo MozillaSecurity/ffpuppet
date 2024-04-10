@@ -722,7 +722,7 @@ class FFPuppet:
 
         # performing the bootstrap helps guarantee that the browser
         # will be loaded and ready to accept input when launch() returns
-        bootstrapper = Bootstrapper()
+        bootstrapper = Bootstrapper.create()
         try:
             # added `network.proxy.failover_direct` and `network.proxy.allow_bypass`
             # to workaround default prefs.js packaged with Grizzly test cases.

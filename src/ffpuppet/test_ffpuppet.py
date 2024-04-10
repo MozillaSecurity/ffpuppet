@@ -123,8 +123,8 @@ def test_ffpuppet_02(mocker, exc_type):
     mocker.patch("ffpuppet.core.Popen", autospec=True)
     mocker.patch("ffpuppet.core.ProcessTree", autospec=True)
     fake_bts = mocker.patch("ffpuppet.core.Bootstrapper", autospec=True)
-    fake_bts.return_value.location = "http://fake.location"
-    fake_bts.return_value.wait.side_effect = exc_type("test")
+    fake_bts.create.return_value.location = "http://fake.location"
+    fake_bts.create.return_value.wait.side_effect = exc_type("test")
     with FFPuppet() as ffp:
         with raises(exc_type, match="test"):
             ffp.launch(TESTFF_BIN)
@@ -326,7 +326,7 @@ def test_ffpuppet_13(mocker):
     mocker.patch("ffpuppet.core.Popen", autospec=True)
     mocker.patch("ffpuppet.core.ProcessTree", autospec=True)
     fake_bts = mocker.patch("ffpuppet.core.Bootstrapper", autospec=True)
-    fake_bts.return_value.location = "http://test:123"
+    fake_bts.create.return_value.location = "http://test:123"
     fake_system = mocker.patch("ffpuppet.core.system", autospec=True)
     is_linux = system() == "Linux"
     fake_xvfb = mocker.patch(
@@ -401,7 +401,7 @@ def test_ffpuppet_15(mocker, tmp_path, debugger, dbg_bin, version):
     mocker.patch("ffpuppet.core.ProcessTree", autospec=True)
     mocker.patch("ffpuppet.core.system", autospec=True, return_value="Linux")
     fake_bts = mocker.patch("ffpuppet.core.Bootstrapper", autospec=True)
-    fake_bts.return_value.location = "http://test:123"
+    fake_bts.create.return_value.location = "http://test:123"
     with FFPuppet(debugger=debugger) as ffp:
         assert ffp._dbg == debugger
         ffp.launch(TESTFF_BIN)
@@ -935,7 +935,7 @@ def test_ffpuppet_31(mocker, tmp_path, bin_exists, expect_exc):
     exc.filename = bin_fake
     mocker.patch("ffpuppet.core.Popen", autospec=True, side_effect=exc)
     fake_bts = mocker.patch("ffpuppet.core.Bootstrapper", autospec=True)
-    fake_bts.return_value.location = ""
+    fake_bts.create.return_value.location = ""
     with FFPuppet() as ffp:
         with raises(expect_exc):
             ffp.launch(TESTFF_BIN)
@@ -948,7 +948,7 @@ def test_ffpuppet_32(mocker):
     """test FFPuppet.launch() config_job_object code path"""
     mocker.patch("ffpuppet.core.ProcessTree", autospec=True)
     fake_bts = mocker.patch("ffpuppet.core.Bootstrapper", autospec=True)
-    fake_bts.return_value.location = ""
+    fake_bts.create.return_value.location = ""
     fake_popen = mocker.patch("ffpuppet.core.Popen", autospec=True)
     fake_popen.return_value._handle = 123
     fake_popen.return_value.pid = 789

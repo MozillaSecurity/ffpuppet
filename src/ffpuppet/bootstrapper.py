@@ -22,8 +22,8 @@ __all__ = ("Bootstrapper",)
 
 class Bootstrapper:  # pylint: disable=missing-docstring
     # see: searchfox.org/mozilla-central/source/netwerk/base/nsIOService.cpp
-    # include ports above 1024
-    BLOCKED_PORTS = (
+    # include ports above 1023
+    BLOCKED_PORTS = {
         1719,
         1720,
         1723,
@@ -41,39 +41,16 @@ class Bootstrapper:  # pylint: disable=missing-docstring
         6669,
         6697,
         10080,
-    )
+    }
     # receive buffer size
     BUF_SIZE = 4096
     # duration of initial blocking socket operations
-    POLL_WAIT: float = 1
-    # number of attempts to find an available port
-    PORT_ATTEMPTS = 50
+    POLL_WAIT = 1.0
 
     __slots__ = ("_socket",)
 
-    def __init__(self, attempts: int = PORT_ATTEMPTS, port: int = 0) -> None:
-        assert attempts > 0
-        assert port >= 0
-        for _ in range(attempts):
-            self._socket: Optional[socket] = socket()
-            self._socket.setsockopt(SOL_SOCKET, SO_REUSEADDR, 1)
-            self._socket.settimeout(self.POLL_WAIT)
-            try:
-                self._socket.bind(("127.0.0.1", port))
-                self._socket.listen(5)
-            except (OSError, PermissionError) as exc:
-                LOG.debug("%s: %s", type(exc).__name__, exc)
-                self._socket.close()
-                sleep(0.1)
-                continue
-            # avoid blocked ports
-            if port == 0 and self._socket.getsockname()[1] in self.BLOCKED_PORTS:
-                LOG.debug("bound to blocked port, retrying...")
-                self._socket.close()
-                continue
-            break
-        else:
-            raise LaunchError("Could not find available port")
+    def __init__(self, sock: socket) -> None:
+        self._socket = sock
 
     def __enter__(self) -> "Bootstrapper":
         return self
@@ -90,9 +67,42 @@ class Bootstrapper:  # pylint: disable=missing-docstring
         Returns:
             None
         """
-        if self._socket is not None:
-            self._socket.close()
-            self._socket = None
+        self._socket.close()
+
+    @classmethod
+    def create(cls, attempts: int = 50, port: int = 0) -> "Bootstrapper":
+        """Create a Bootstrapper.
+
+        Args:
+            attempts: Number of times to attempt to bind.
+            port: Port to use. Use 0 for system select.
+
+        Returns:
+            Bootstrapper.
+        """
+        assert attempts > 0
+        assert port == 0 or 1024 <= port <= 65535
+        assert port not in cls.BLOCKED_PORTS
+        for _ in range(attempts):
+            sock = socket()
+            sock.setsockopt(SOL_SOCKET, SO_REUSEADDR, 1)
+            try:
+                sock.bind(("127.0.0.1", port))
+                sock.listen()
+            except (OSError, PermissionError) as exc:
+                LOG.debug("%s: %s", type(exc).__name__, exc)
+                sock.close()
+                sleep(0.1)
+                continue
+            # avoid blocked ports
+            if sock.getsockname()[1] in cls.BLOCKED_PORTS:
+                LOG.debug("bound to blocked port, retrying...")
+                sock.close()
+                continue
+            break
+        else:
+            raise LaunchError("Could not find available port")
+        return cls(sock)
 
     @property
     def location(self) -> str:
@@ -104,7 +114,6 @@ class Bootstrapper:  # pylint: disable=missing-docstring
         Returns:
             Location.
         """
-        assert self._socket is not None
         return f"http://127.0.0.1:{self.port}"
 
     @property
@@ -117,7 +126,6 @@ class Bootstrapper:  # pylint: disable=missing-docstring
         Returns:
             Port number.
         """
-        assert self._socket is not None
         return int(self._socket.getsockname()[1])
 
     def wait(
@@ -129,20 +137,19 @@ class Bootstrapper:  # pylint: disable=missing-docstring
         """Wait for browser connection, read request and send response.
 
         Args:
-            cb_continue: Callback that return True if the browser
-                         process is healthy otherwise False.
+            cb_continue: Callback that communicates browser process health.
             timeout: Amount of time wait before raising BrowserTimeoutError.
             url: Location to redirect to.
 
         Returns:
             None
         """
-        assert self._socket is not None
         assert timeout >= 0
         start_time = time()
         time_limit = start_time + timeout
         conn: Optional[socket] = None
         try:
+            self._socket.settimeout(self.POLL_WAIT)
             while conn is None:
                 LOG.debug("waiting for browser connection...")
                 while conn is None:
