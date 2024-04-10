@@ -498,7 +498,7 @@ class FFPuppet:
                 LOG.warning("Crash reports still open after 30s")
         elif self._proc_tree.is_running():
             r_code = Reason.CLOSED
-        elif self._proc_tree.wait() not in {0, -1, 1, -2, -9, 245}:
+        elif abs(self._proc_tree.wait()) not in {0, 1, 2, 9, 15, 245}:
             # Note: ignore 245 for now to avoid getting flooded with OOMs that don't
             # have a crash report... this should be revisited when time allows
             # https://bugzil.la/1370520
