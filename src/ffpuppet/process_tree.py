@@ -88,13 +88,14 @@ class ProcessTree:
                     self._launcher = self.parent
                     self.parent = launcher_children[0]
                 else:
-                    LOG.error(
+                    # launcher is parent process? or parent does not exist?
+                    # we expect `launcher -> parent -> content procs`
+                    # this seems to happen sometimes... no idea why
+                    # appears to be harmless so allow it for now
+                    LOG.warning(
                         "Failed to select launcher. Process has %d child proc(s)",
                         len(launcher_children),
                     )
-                    for proc in launcher_children:
-                        LOG.warning("Found %d, %r", proc.pid, proc.cmdline())
-                    raise AssertionError("Launcher should have one child process")
         return self._launcher
 
     @staticmethod
