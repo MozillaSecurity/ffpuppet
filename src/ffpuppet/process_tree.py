@@ -83,9 +83,18 @@ class ProcessTree:
             elif "-no-deelevate" in cmd:
                 LOG.debug("launcher process detected")
                 launcher_children = self.parent.children(recursive=False)
-                assert len(launcher_children) <= 1
-                self._launcher = self.parent
-                self.parent = launcher_children[0]
+                # launcher should only have one child process
+                if len(launcher_children) == 1:
+                    self._launcher = self.parent
+                    self.parent = launcher_children[0]
+                else:
+                    LOG.error(
+                        "Failed to select launcher. Process has %d child proc(s)",
+                        len(launcher_children),
+                    )
+                    for proc in launcher_children:
+                        LOG.warning("Found %d, %r", proc.pid, proc.cmdline())
+                    raise AssertionError("Launcher should have one child process")
         return self._launcher
 
     @staticmethod
