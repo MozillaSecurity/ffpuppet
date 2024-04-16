@@ -13,7 +13,7 @@ from tempfile import mkdtemp
 from time import sleep, strftime
 from typing import List, Optional
 
-from .core import Debugger, FFPuppet, Reason
+from .core import FFPuppet, Reason
 from .exceptions import BrowserExecutionError
 from .helpers import certutil_available, certutil_find
 from .profile import Profile
@@ -209,7 +209,7 @@ def parse_args(argv: Optional[List[str]] = None) -> Namespace:
         " By default logs are saved only when an issue is detected.",
     )
 
-    parser.set_defaults(debugger=Debugger.NONE)
+    parser.set_defaults(debugger=None)
     if system() == "Linux":
         dbg_group = parser.add_argument_group("Available Debuggers")
         # Add the mutually exclusive group to a regular group
@@ -218,28 +218,28 @@ def parse_args(argv: Optional[List[str]] = None) -> Namespace:
         dbg_group.add_argument(
             "--gdb",
             action="store_const",
-            const=Debugger.GDB,
+            const="gdb",
             dest="debugger",
             help="Use GDB.",
         )
         dbg_group.add_argument(
             "--pernosco",
             action="store_const",
-            const=Debugger.PERNOSCO,
+            const="rr",
             dest="debugger",
             help="Use rr. Trace intended to be submitted to Pernosco.",
         )
         dbg_group.add_argument(
             "--rr",
             action="store_const",
-            const=Debugger.RR,
+            const="rr",
             dest="debugger",
             help="Use rr.",
         )
         dbg_group.add_argument(
             "--valgrind",
             action="store_const",
-            const=Debugger.VALGRIND,
+            const="valgrind",
             dest="debugger",
             help="Use Valgrind.",
         )
@@ -259,7 +259,7 @@ def parse_args(argv: Optional[List[str]] = None) -> Namespace:
         for ext in args.extension:
             if not ext.exists():
                 parser.error(f"Extension '{ext}' does not exist")
-    if args.debugger in (Debugger.PERNOSCO, Debugger.RR):
+    if args.debugger == "rr":
         # rr is only supported on Linux
         if not which("rr"):
             parser.error("rr is not installed")
