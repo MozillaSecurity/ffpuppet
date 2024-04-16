@@ -17,8 +17,18 @@ from .process_tree import ProcessTree
 TREE = Path(__file__).parent / "resources" / "tree.py"
 
 
-@mark.parametrize("enable_launcher", [True, False])
-def test_process_tree_01(tmp_path, enable_launcher):
+@mark.parametrize(
+    "enable_launcher, launcher_is_parent",
+    [
+        # no launcher
+        (False, False),
+        # use launcher
+        (True, False),
+        # launcher disabled (browser.launcherProcess.enabled=false)
+        (True, True),
+    ],
+)
+def test_process_tree_01(tmp_path, enable_launcher, launcher_is_parent):
     """test ProcessTree() with actual processes"""
     content_procs = 3
     flag = tmp_path / "running"
@@ -28,8 +38,14 @@ def test_process_tree_01(tmp_path, enable_launcher):
     # parent + content + launcher
     expected_procs = 1 + content_procs
     if enable_launcher:
-        expected_procs += 1
+        if launcher_is_parent:
+            cmd.append("--launcher-is-parent")
+        else:
+            expected_procs += 1
         cmd.append("-no-deelevate")
+    else:
+        # make sure the test is not broken
+        assert not launcher_is_parent, "launcher_is_parent requires launcher!"
 
     # pylint: disable=consider-using-with
     proc = Popen(cmd)
@@ -48,7 +64,7 @@ def test_process_tree_01(tmp_path, enable_launcher):
         # pylint: disable=protected-access
         tree._launcher_check = enable_launcher
         assert tree.parent
-        if enable_launcher:
+        if enable_launcher and not launcher_is_parent:
             assert tree.launcher is not None
             assert tree.launcher.pid == proc.pid
         else:

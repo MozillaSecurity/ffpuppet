@@ -48,7 +48,7 @@ def main(args: Namespace) -> int:
             "--duration",
             str(args.duration),
         ]
-        if args.no_deelevate:
+        if args.no_deelevate and not args.launcher_is_parent:
             assert not args.contentproc, f"-contentproc not expected! ({pid})"
             LOG.info("Launcher process")
             # pylint: disable=consider-using-with
@@ -61,6 +61,7 @@ def main(args: Namespace) -> int:
                 conn.settimeout(SOCKET_TIMEOUT)
                 conn.sendall(str(pid).encode())
         else:
+            assert not args.no_deelevate or args.launcher_is_parent
             LOG.info("Parent process (ppid: %r)", args.parent_pid)
             with socket(AF_INET, SOCK_STREAM) as srv:
                 srv.settimeout(SOCKET_TIMEOUT)
@@ -109,6 +110,7 @@ if __name__ == "__main__":
     parser.add_argument("procs", type=int, help="number of content processes")
     parser.add_argument("sync", type=Path, help="used to indicate tree readiness")
     parser.add_argument("--duration", type=int, default=60)
+    parser.add_argument("--launcher-is-parent", action="store_true")
     parser.add_argument("--parent-pid", type=int)
     parser.add_argument("--port", type=int)
     parser.add_argument("-contentproc", action="store_true", help="fake browser arg")
