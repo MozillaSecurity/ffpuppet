@@ -16,8 +16,9 @@ from re import IGNORECASE, Pattern
 from re import compile as re_compile
 from re import match as re_match
 from shutil import copy, copyfileobj
-from subprocess import Popen, check_output
+from subprocess import Popen
 from sys import executable
+from typing import TYPE_CHECKING
 from urllib.request import pathname2url
 
 with suppress(ImportError):
@@ -26,10 +27,9 @@ with suppress(ImportError):
 
     CREATE_SUSPENDED = 0x00000004
 
-from typing import TYPE_CHECKING
-
 from .bootstrapper import Bootstrapper
 from .checks import CheckLogContents, CheckLogSize, CheckMemoryUsage
+from .debugger import ValgrindDebugger, load_debugger
 from .display import DISPLAYS, DisplayMode
 from .exceptions import BrowserExecutionError, InvalidPrefs, LaunchError
 from .helpers import prepare_environment, wait_on_files
@@ -54,18 +54,7 @@ BENIGN_EXIT_CODES = frozenset((0, 1, 2, 9, 15, 245))
 LOG = getLogger(__name__)
 
 __author__ = "Tyson Smith"
-__all__ = ("Debugger", "FFPuppet", "Reason")
-
-
-@unique
-class Debugger(IntEnum):
-    """Available debuggers to run the browser with"""
-
-    NONE = 0
-    GDB = 1
-    PERNOSCO = 2
-    RR = 3
-    VALGRIND = 4
+__all__ = ("FFPuppet", "Reason")
 
 
 @unique
@@ -87,8 +76,8 @@ class FFPuppet:
     This includes setting up the environment, collecting logs and some debugger support.
     """
 
-    LAUNCH_TIMEOUT_MIN = 10  # minimum amount of time to wait for the browser to launch
-    VALGRIND_MIN_VERSION = 3.14  # minimum allowed version of Valgrind
+    # minimum amount of time to wait for the browser to launch
+    LAUNCH_TIMEOUT_MIN = 10
 
     __slots__ = (
         "_abort_tokens",
@@ -108,7 +97,7 @@ class FFPuppet:
 
     def __init__(
         self,
-        debugger: Debugger = Debugger.NONE,
+        debugger: str | None = None,
         display_mode: DisplayMode = DisplayMode.DEFAULT,
         use_profile: Path | None = None,
         working_path: str | None = None,
@@ -124,8 +113,7 @@ class FFPuppet:
         self._abort_tokens: set[Pattern[str]] = set()
         self._bin_path: Path | None = None
         self._checks: list[CheckLogContents | CheckLogSize | CheckMemoryUsage] = []
-        self._dbg = debugger
-        self._dbg_sanity_check(self._dbg)
+        self._dbg = load_debugger(debugger) if debugger is not None else None
         self._display = DISPLAYS[display_mode]()
         # number of successful browser launches
         self._launches = 0
@@ -213,7 +201,7 @@ class FFPuppet:
                 continue
             yield entry.resolve()
         # scan for Valgrind logs
-        if self._dbg == Debugger.VALGRIND:
+        if isinstance(self._dbg, ValgrindDebugger):
             for entry in self._logs.path.glob(f"{self._logs.PREFIX_VALGRIND}*"):
                 if entry.stat().st_size:
                     yield entry.resolve()
@@ -223,44 +211,6 @@ class FFPuppet:
             assert self.profile.path is not None
             for entry in (self.profile.path / "minidumps").glob("*.dmp"):
                 yield entry.resolve()
-
-    @classmethod
-    def _dbg_sanity_check(cls, dbg: Debugger) -> None:
-        """Check requested debugger is supported and available.
-
-        Args:
-            dbg: Debugger to sanity check.
-
-        Returns:
-            None
-        """
-        LOG.debug("checking %s support", dbg)
-        if dbg == Debugger.GDB:
-            if system() != "Linux":
-                raise OSError("GDB is only supported on Linux")
-            try:
-                check_output(["gdb", "--version"])
-            except OSError:
-                raise OSError("Please install GDB") from None
-        elif dbg in (Debugger.PERNOSCO, Debugger.RR):
-            if system() != "Linux":
-                raise OSError("rr is only supported on Linux")
-            try:
-                check_output(["rr", "--version"])
-            except OSError:
-                raise OSError("Please install rr") from None
-        elif dbg == Debugger.VALGRIND:
-            if system() != "Linux":
-                raise OSError("Valgrind is only supported on Linux")
-            try:
-                match = re_match(
-                    b"valgrind-(?P<ver>\\d+\\.\\d+)",
-                    check_output(["valgrind", "--version"]),
-                )
-            except OSError:
-                raise OSError("Please install Valgrind") from None
-            if not match or float(match.group("ver")) < cls.VALGRIND_MIN_VERSION:
-                raise OSError(f"Valgrind >= {cls.VALGRIND_MIN_VERSION:.2f} is required")
 
     def add_abort_token(self, token: str) -> None:
         """Add a token that when present in the browser log will have the
@@ -311,98 +261,8 @@ class FFPuppet:
         if additional_args:
             cmd.extend(additional_args)
 
-        if self._dbg == Debugger.VALGRIND:
-            assert self._logs.path is not None
-            valgrind_cmd = [
-                "valgrind",
-                "-q",
-                "--error-exitcode=99",
-                "--exit-on-first-error=yes",
-                "--expensive-definedness-checks=yes",
-                "--fair-sched=yes",
-                "--gen-suppressions=all",
-                "--leak-check=no",
-                f"--log-file={self._logs.path / self._logs.PREFIX_VALGRIND}.%p",
-                "--num-transtab-sectors=48",
-                "--read-inline-info=yes",
-                "--show-mismatched-frees=no",
-                "--show-possibly-lost=no",
-                "--smc-check=all-non-file",
-                "--trace-children=yes",
-                "--trace-children-skip=python*,*/lsb_release",
-                # track-origins=no is much faster and best used to discover issues
-                (
-                    "--track-origins=yes"
-                    if getenv("VALGRIND_TRACK_ORIGINS") == "1"
-                    else "--track-origins=no"
-                ),
-                "--vex-iropt-register-updates=allregs-at-mem-access",
-                "--vgdb=no",
-            ]
-
-            sup_file = getenv("VALGRIND_SUP_PATH")
-            if sup_file:
-                if not isfile(sup_file):
-                    raise OSError(f"Missing Valgrind suppressions {sup_file!r}")
-                LOG.debug("using Valgrind suppressions: %r", sup_file)
-                valgrind_cmd.append(f"--suppressions={sup_file}")
-
-            cmd = valgrind_cmd + cmd
-
-        elif self._dbg == Debugger.GDB:
-            cmd = [
-                "gdb",
-                "-nx",
-                "-x",
-                str((Path(__file__).parent / "cmds.gdb").resolve()),
-                "-ex",
-                "run",
-                "-ex",
-                "print $_siginfo",
-                "-ex",
-                "info locals",
-                "-ex",
-                "info registers",
-                "-ex",
-                "backtrace full",
-                "-ex",
-                "disassemble",
-                "-ex",
-                "symbol-file",
-                # "-ex", "symbol-file %s",
-                "-ex",
-                "sharedlibrary",
-                "-ex",
-                "info proc mappings",
-                "-ex",
-                "info threads",
-                "-ex",
-                "shared",
-                "-ex",
-                "info sharedlibrary",
-                # "-ex", "init-if-undefined $_exitcode = -1", # windows
-                # "-ex", "quit $_exitcode", # windows
-                "-ex",
-                "quit_with_code",
-                "-return-child-result",
-                "-batch",
-                "--args",
-                *cmd,
-            ]
-
-        elif self._dbg in (Debugger.PERNOSCO, Debugger.RR):
-            rr_cmd = [
-                "rr",
-                "record",
-            ]
-            if getenv("RR_CHAOS") == "1":
-                rr_cmd.append("--chaos")
-            if self._dbg == Debugger.PERNOSCO:
-                rr_cmd += [
-                    "--disable-cpuid-features-ext",
-                    "0xdc230000,0x2c42,0xc",
-                ]
-            cmd = rr_cmd + cmd
+        if self._dbg is not None:
+            cmd = self._dbg.args() + cmd
 
         return cmd
 
@@ -481,7 +341,7 @@ class FFPuppet:
             # when an issue is detected.
             # Be sure MOZ_CRASHREPORTER_SHUTDOWN=1 to avoid delays.
             proc_count = self._proc_tree.wait_procs(
-                timeout=15 if self._dbg == Debugger.NONE else 30
+                timeout=15 if self._dbg is None else 30
             )
             if proc_count > 0:
                 LOG.warning(
@@ -492,7 +352,7 @@ class FFPuppet:
             LOG.debug("%d crash report(s) found", len(crash_reports))
             if crash_reports:
                 # additional delay to allow crash reports to be completed/closed
-                report_wait = 30 if self._dbg == Debugger.NONE else 60
+                report_wait = 30 if self._dbg is None else 60
                 if not wait_on_files(crash_reports, timeout=report_wait):
                     LOG.warning("Crash reports still open after %ds", report_wait)
             else:
@@ -710,13 +570,8 @@ class FFPuppet:
 
         # process environment
         env_mod = env_mod or {}
-
-        if self._dbg in (Debugger.PERNOSCO, Debugger.RR):
-            env_mod["_RR_TRACE_DIR"] = str(self._logs.add_path(self._logs.PATH_RR))
-        elif self._dbg == Debugger.VALGRIND:
-            # https://developer.gimp.org/api/2.0/glib/glib-running.html#G_DEBUG
-            env_mod["G_DEBUG"] = "gc-friendly"
-            env_mod["MOZ_CRASHREPORTER_DISABLE"] = "1"
+        if self._dbg is not None:
+            env_mod.update(self._dbg.env())
         env_mod.update(self._display.env)
 
         # create a profile
@@ -779,8 +634,7 @@ class FFPuppet:
             stderr.flush()
             # launch the browser
             launch_timeout = max(launch_timeout, self.LAUNCH_TIMEOUT_MIN)
-            LOG.debug("launch timeout: %d", launch_timeout)
-            LOG.debug("launch command: %r", " ".join(cmd))
+            LOG.debug("launch (%ds): %r", launch_timeout, " ".join(cmd))
             self.reason = None
             creationflags = 0
             if is_windows:
