@@ -75,27 +75,23 @@ class ProcessTree:
             except (AccessDenied, NoSuchProcess):  # pragma: no cover
                 LOG.debug("call to self.parent.cmdline() failed")
                 cmd = []
-            # disable during testing with testff.py
-            if "testff.py" in "".join(cmd):
-                self._launcher_check = False
-                LOG.debug("testff.py in use launcher_check disabled")
             # check if launcher process is in use
-            elif "-no-deelevate" in cmd:
-                LOG.debug("launcher process detected")
+            if "-no-deelevate" in cmd:
                 launcher_children = self.parent.children(recursive=False)
                 # launcher should only have one child process
                 if len(launcher_children) == 1:
+                    LOG.debug("launcher process detected")
                     self._launcher = self.parent
                     self.parent = launcher_children[0]
                 else:
-                    # launcher is parent process? or parent does not exist?
-                    # we expect `launcher -> parent -> content procs`
-                    # this seems to happen sometimes... no idea why
-                    # appears to be harmless so allow it for now
-                    LOG.warning(
-                        "Failed to select launcher. Process has %d child proc(s)",
+                    # this is expected behaviour when setting:
+                    # - `browser.launcherProcess.enabled=false`
+                    # it can also happen for unknown reasons...
+                    LOG.debug(
+                        "using launcher as parent, %d child proc(s) detected",
                         len(launcher_children),
                     )
+                self._launcher_check = False
         return self._launcher
 
     @staticmethod
