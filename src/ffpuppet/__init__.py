@@ -3,7 +3,7 @@
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
 """FFPuppet module"""
 
-from .core import Debugger, FFPuppet, Reason
+from .core import FFPuppet, Reason
 from .display import DisplayMode
 from .exceptions import (
     BrowserExecutionError,
@@ -17,7 +17,6 @@ __all__ = (
     "BrowserExecutionError",
     "BrowserTerminatedError",
     "BrowserTimeoutError",
-    "Debugger",
     "DisplayMode",
     "FFPuppet",
     "LaunchError",

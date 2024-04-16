@@ -17,7 +17,8 @@ from psutil import Process
 from pytest import mark, raises
 
 from .bootstrapper import Bootstrapper
-from .core import Debugger, FFPuppet, ProcessTree, Reason
+from .core import FFPuppet, ProcessTree, Reason
+from .debugger import Debugger
 from .exceptions import (
     BrowserExecutionError,
     BrowserTerminatedError,
@@ -86,7 +87,7 @@ def test_ffpuppet_00(tmp_path):
 def test_ffpuppet_01():
     """test basic launch and close"""
     with FFPuppet() as ffp:
-        assert ffp._dbg == Debugger.NONE
+        assert ffp._dbg is None
         assert ffp.launches == 0
         assert ffp.reason == Reason.CLOSED
         assert not ffp.is_running()
@@ -352,35 +353,7 @@ def test_ffpuppet_13(tmp_path):
         assert os.path.normpath(os.path.join("/", location)) == fname
 
 
-@mark.parametrize(
-    "debugger, dbg_bin, version",
-    [
-        (Debugger.GDB, b"gdb", b""),
-        (Debugger.PERNOSCO, b"rr", b""),
-        (Debugger.RR, b"rr", b""),
-        (Debugger.VALGRIND, b"valgrind", b"valgrind-99.0"),
-    ],
-)
-def test_ffpuppet_14(mocker, tmp_path, debugger, dbg_bin, version):
-    """test launching with debuggers"""
-    mocker.patch("ffpuppet.core.check_output", autospec=True, return_value=version)
-    mocker.patch("ffpuppet.core.Popen", autospec=True)
-    mocker.patch("ffpuppet.core.ProcessTree", autospec=True)
-    mocker.patch("ffpuppet.core.system", autospec=True, return_value="Linux")
-    fake_bts = mocker.patch("ffpuppet.core.Bootstrapper", autospec=True)
-    fake_bts.create.return_value.location = "http://test:123"
-    with FFPuppet(debugger=debugger) as ffp:
-        assert ffp._dbg == debugger
-        ffp.launch(TESTFF_BIN)
-        ffp.close()
-        ffp.save_logs(tmp_path / "logs")
-    # verify launch command was correct
-    log_data = (tmp_path / "logs" / "log_stderr.txt").read_bytes()
-    assert dbg_bin in log_data
-    assert b"[ffpuppet] Reason code:" in log_data
-
-
-def test_ffpuppet_15(tmp_path):
+def test_ffpuppet_14(tmp_path):
     """test calling save_logs() before close()"""
     with FFPuppet() as ffp, HTTPTestServer() as srv:
         ffp.launch(TESTFF_BIN, location=srv.get_addr())
@@ -388,7 +361,7 @@ def test_ffpuppet_15(tmp_path):
             ffp.save_logs(tmp_path / "logs")
 
 
-def test_ffpuppet_16(tmp_path):
+def test_ffpuppet_15(tmp_path):
     """test detecting invalid prefs file"""
     prefs = tmp_path / "prefs.js"
     prefs.write_bytes(b"//fftest_invalid_js\n")
@@ -400,7 +373,7 @@ def test_ffpuppet_16(tmp_path):
         ffp.launch(TESTFF_BIN, location=srv.get_addr(), prefs_js=prefs)
 
 
-def test_ffpuppet_17():
+def test_ffpuppet_16():
     """test log_length()"""
     with FFPuppet() as ffp:
         assert ffp.log_length("INVALID") is None
@@ -418,7 +391,7 @@ def test_ffpuppet_17():
         assert ffp.log_length("stderr") is None
 
 
-def test_ffpuppet_18():
+def test_ffpuppet_17():
     """test running multiple instances in parallel"""
     # use test pool size of 10
     with HTTPTestServer() as srv:
@@ -434,7 +407,7 @@ def test_ffpuppet_18():
                 ffp.clean_up()
 
 
-def test_ffpuppet_19(tmp_path):
+def test_ffpuppet_18(tmp_path):
     """test hitting log size limit"""
     prefs = tmp_path / "prefs.js"
     prefs.write_bytes(b"//fftest_big_log\n")
@@ -458,7 +431,7 @@ def test_ffpuppet_19(tmp_path):
         )
 
 
-def test_ffpuppet_20(tmp_path):
+def test_ffpuppet_19(tmp_path):
     """test collecting and cleaning up ASan logs"""
     with FFPuppet() as ffp:
         ffp.launch(TESTFF_BIN)
@@ -517,7 +490,7 @@ def test_ffpuppet_20(tmp_path):
 
 
 @mark.parametrize("mdsw_available", [True, False])
-def test_ffpuppet_21(mocker, tmp_path, mdsw_available):
+def test_ffpuppet_20(mocker, tmp_path, mdsw_available):
     """test multiple minidumps"""
 
     def _fake_create_log(src, filename, _timeout: int = 90):
@@ -557,7 +530,7 @@ def test_ffpuppet_21(mocker, tmp_path, mdsw_available):
             assert not any(logs.glob("log_minidump_*"))
 
 
-def test_ffpuppet_22(tmp_path):
+def test_ffpuppet_21(tmp_path):
     """test using a readonly prefs.js and extension"""
     prefs = tmp_path / "prefs.js"
     prefs.touch()
@@ -573,11 +546,9 @@ def test_ffpuppet_22(tmp_path):
         assert not prof_path.is_dir()
 
 
-def test_ffpuppet_23(mocker, tmp_path):
+def test_ffpuppet_22(mocker, tmp_path):
     """test _crashreports()"""
-    mocker.patch(
-        "ffpuppet.core.check_output", autospec=True, return_value=b"valgrind-99.0"
-    )
+    mocker.patch("ffpuppet.debugger.check_output", return_value=b"valgrind-99.0")
 
     class StubbedLaunch(FFPuppet):
         # pylint: disable=arguments-differ
@@ -592,9 +563,8 @@ def test_ffpuppet_23(mocker, tmp_path):
 
     is_linux = system() == "Linux"
     # only check Valgrind logs on Linux
-    debugger = Debugger.VALGRIND if is_linux else Debugger.NONE
+    debugger = "valgrind" if is_linux else None
     with StubbedLaunch(debugger=debugger) as ffp:
-        assert ffp._dbg == debugger
         ffp.launch()
         assert not any(ffp._crashreports())
         # benign sanitizer warnings
@@ -635,47 +605,24 @@ def test_ffpuppet_23(mocker, tmp_path):
             assert not ffp._logs.watching
 
 
-def test_ffpuppet_24(mocker, tmp_path):
+def test_ffpuppet_23(mocker):
     """test build_launch_cmd()"""
     with FFPuppet() as ffp:
         cmd = ffp.build_launch_cmd("bin_path", ["test"])
         assert len(cmd) == 3
         assert cmd[0] == "bin_path"
         assert cmd[-1] == "test"
-        # GDB
-        ffp._dbg = Debugger.GDB
-        cmd = ffp.build_launch_cmd("bin_path")
-        assert len(cmd) > 2
-        assert cmd[0] == "gdb"
-        # Pernosco
-        ffp._dbg = Debugger.PERNOSCO
-        cmd = ffp.build_launch_cmd("bin_path")
-        assert len(cmd) > 2
-        assert cmd[0] == "rr"
-        assert "--chaos" not in cmd
-        assert "--disable-cpuid-features-ext" in cmd
-        # RR
-        ffp._dbg = Debugger.RR
-        mocker.patch.dict(os.environ, {"RR_CHAOS": "1"})
-        cmd = ffp.build_launch_cmd("bin_path")
-        assert len(cmd) > 2
-        assert cmd[0] == "rr"
-        assert "--chaos" in cmd
-        assert "--disable-cpuid-features-ext" not in cmd
-        # Valgrind
-        ffp._dbg = Debugger.VALGRIND
-        mocker.patch.dict(os.environ, {"VALGRIND_SUP_PATH": "blah"})
-        with raises(OSError):
-            ffp.build_launch_cmd("bin_path")
-        supp = tmp_path / "suppressions.txt"
-        supp.touch()
-        mocker.patch.dict(os.environ, {"VALGRIND_SUP_PATH": str(supp)})
-        cmd = ffp.build_launch_cmd("bin_path")
-        assert len(cmd) > 2
-        assert cmd[0] == "valgrind"
+        assert "-headless" not in cmd
+        # debugger
+        ffp._dbg = mocker.Mock(spec_set=Debugger)
+        ffp._dbg.args.return_value = ["fake-debugger"]
+        cmd = ffp.build_launch_cmd("bin_path", ["test"])
+        assert len(cmd) == 4
+        assert cmd[0] == "fake-debugger"
+        assert cmd[-1] == "test"
 
 
-def test_ffpuppet_25():
+def test_ffpuppet_24():
     """test cpu_usage()"""
     with FFPuppet() as ffp:
         assert not any(ffp.cpu_usage())
@@ -688,66 +635,7 @@ def test_ffpuppet_25():
         assert ffp.wait(timeout=10)
 
 
-def test_ffpuppet_26(mocker):
-    """test _dbg_sanity_check()"""
-    fake_system = mocker.patch("ffpuppet.core.system", autospec=True)
-    fake_chkout = mocker.patch("ffpuppet.core.check_output", autospec=True)
-    # gdb - success
-    fake_system.return_value = "Linux"
-    FFPuppet._dbg_sanity_check(Debugger.GDB)
-    assert fake_chkout.call_count == 1
-    fake_chkout.reset_mock()
-    # gdb - not installed
-    fake_chkout.side_effect = OSError
-    with raises(OSError, match="Please install GDB"):
-        FFPuppet._dbg_sanity_check(Debugger.GDB)
-    fake_chkout.reset_mock()
-    fake_chkout.side_effect = None
-    # gdb - unsupported OS
-    fake_system.return_value = "Windows"
-    with raises(OSError, match="GDB is only supported on Linux"):
-        FFPuppet._dbg_sanity_check(Debugger.GDB)
-    # rr - success
-    fake_system.return_value = "Linux"
-    FFPuppet._dbg_sanity_check(Debugger.RR)
-    assert fake_chkout.call_count == 1
-    fake_chkout.reset_mock()
-    # rr - not installed
-    fake_chkout.side_effect = OSError
-    with raises(OSError, match="Please install rr"):
-        FFPuppet._dbg_sanity_check(Debugger.RR)
-    fake_chkout.reset_mock()
-    fake_chkout.side_effect = None
-    # rr - unsupported OS
-    fake_system.return_value = "Windows"
-    with raises(OSError, match="rr is only supported on Linux"):
-        FFPuppet._dbg_sanity_check(Debugger.RR)
-    # valgrind - success
-    fake_system.return_value = "Linux"
-    fake_chkout.return_value = f"valgrind-{FFPuppet.VALGRIND_MIN_VERSION:.2f}".encode()
-    FFPuppet._dbg_sanity_check(Debugger.VALGRIND)
-    assert fake_chkout.call_count == 1
-    fake_chkout.reset_mock()
-    # valgrind - old version
-    fake_system.return_value = "Linux"
-    fake_chkout.return_value = b"valgrind-0.1"
-    with raises(OSError, match=r"Valgrind >= \d+\.\d+ is required"):
-        FFPuppet._dbg_sanity_check(Debugger.VALGRIND)
-    assert fake_chkout.call_count == 1
-    fake_chkout.reset_mock()
-    # valgrind - not installed
-    fake_chkout.side_effect = OSError
-    with raises(OSError, match="Please install Valgrind"):
-        FFPuppet._dbg_sanity_check(Debugger.VALGRIND)
-    fake_chkout.reset_mock()
-    fake_chkout.side_effect = None
-    # valgrind - unsupported OS
-    fake_system.return_value = "Windows"
-    with raises(OSError, match="Valgrind is only supported on Linux"):
-        FFPuppet._dbg_sanity_check(Debugger.VALGRIND)
-
-
-def test_ffpuppet_27(mocker, tmp_path):
+def test_ffpuppet_25(mocker, tmp_path):
     """test FFPuppet.close() setting reason"""
 
     class StubbedProc(FFPuppet):
@@ -846,7 +734,7 @@ def test_ffpuppet_27(mocker, tmp_path):
         assert fake_wait_files.call_count == 0
 
 
-def test_ffpuppet_28():
+def test_ffpuppet_26():
     """test ignoring benign sanitizer logs"""
     with FFPuppet() as ffp:
         ffp.launch(TESTFF_BIN)
@@ -871,7 +759,7 @@ def test_ffpuppet_28():
         (False, FileNotFoundError),
     ],
 )
-def test_ffpuppet_29(mocker, tmp_path, bin_exists, expect_exc):
+def test_ffpuppet_27(mocker, tmp_path, bin_exists, expect_exc):
     """test Popen failure during launch"""
     bin_fake = tmp_path / "fake_bin"
     if bin_exists:
@@ -889,7 +777,7 @@ def test_ffpuppet_29(mocker, tmp_path, bin_exists, expect_exc):
 
 
 @mark.skipif(system() != "Windows", reason="Only supported on Windows")
-def test_ffpuppet_30(mocker):
+def test_ffpuppet_28(mocker):
     """test FFPuppet.launch() config_job_object code path"""
     mocker.patch("ffpuppet.core.ProcessTree", autospec=True)
     fake_bts = mocker.patch("ffpuppet.core.Bootstrapper", autospec=True)
@@ -909,7 +797,7 @@ def test_ffpuppet_30(mocker):
     assert resume_suspended.mock_calls[0] == mocker.call(789)
 
 
-def test_ffpuppet_31(mocker):
+def test_ffpuppet_29(mocker):
     """test FFPuppet.dump_coverage()"""
     with FFPuppet() as ffp:
         ffp._proc_tree = mocker.Mock(spec_set=ProcessTree)
@@ -925,7 +813,7 @@ def test_ffpuppet_31(mocker):
         ffp._proc_tree = None
 
 
-def test_ffpuppet_32():
+def test_ffpuppet_30():
     """test FFPuppet.launch() with marionette"""
     with FFPuppet() as ffp, HTTPTestServer() as srv:
         assert ffp.marionette is None
@@ -936,7 +824,7 @@ def test_ffpuppet_32():
 
 
 @mark.parametrize("port", [0, 123])
-def test_ffpuppet_33(mocker, port):
+def test_ffpuppet_31(mocker, port):
     """test FFPuppet.launch() with marionette failure"""
     fake_bts = mocker.patch("ffpuppet.core.Bootstrapper", autospec=True)
     fake_bts.create.return_value.location = ""
@@ -945,3 +833,13 @@ def test_ffpuppet_33(mocker, port):
         with raises(LaunchError):
             ffp.launch(TESTFF_BIN, marionette=port, location=srv.get_addr())
         assert ffp.marionette is None
+
+
+def test_ffpuppet_32(mocker):
+    """test FFPuppet.launch() with a debugger"""
+    with FFPuppet() as ffp:
+        ffp._dbg = mocker.Mock(spec_set=Debugger)
+        ffp._dbg.args.return_value = []
+        ffp._dbg.env.return_value = {"DGB_TEST": "123"}
+        ffp.launch(TESTFF_BIN)
+        assert ffp._dbg.env.call_count == 1
