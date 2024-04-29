@@ -52,10 +52,7 @@ def test_main_01(mocker, tmp_path, reason, launch, is_healthy, extra_args):
     else:
         assert fake_ffp.return_value.add_abort_token.call_count == 0
     assert fake_ffp.return_value.close.call_count == 1
-    if "--save-all" in extra_args or Reason.ALERT:
-        assert fake_ffp.return_value.save_logs.call_count == 1
-    else:
-        assert fake_ffp.return_value.save_logs.call_count == 0
+    assert fake_ffp.return_value.save_logs.call_count == 1
     assert fake_ffp.return_value.clean_up.call_count == 1
 
 
