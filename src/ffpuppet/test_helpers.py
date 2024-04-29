@@ -4,6 +4,7 @@
 # You can obtain one at http://mozilla.org/MPL/2.0/.
 """ffpuppet helpers tests"""
 
+from os import getpid
 from pathlib import Path
 from subprocess import CalledProcessError
 
@@ -227,7 +228,12 @@ def test_helpers_06(tmp_path):
     t_file.touch()
     # test with open file
     with (tmp_path / "file").open("w") as wait_fp:
-        assert any(files_in_use([t_file, Path(wait_fp.name)]))
+        in_use = next(files_in_use([t_file, Path(wait_fp.name)]))
+        assert in_use
+        assert len(in_use) == 3
+        assert Path(wait_fp.name).samefile(in_use[0])
+        assert in_use[1] == getpid()
+        assert isinstance(in_use[2], str)
     # existing but closed file
     assert not any(files_in_use([t_file]))
     # missing file

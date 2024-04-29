@@ -10,7 +10,7 @@ from platform import system
 from stat import S_IWUSR
 from subprocess import STDOUT, CalledProcessError, check_output
 from time import sleep, time
-from typing import Any, Callable, Dict, Iterable, Iterator, Optional, Tuple
+from typing import Any, Callable, Dict, Generator, Iterable, Optional, Tuple
 
 from psutil import Process, process_iter
 
@@ -190,7 +190,7 @@ def certutil_find(browser_bin: Optional[Path] = None) -> str:
     return CERTUTIL
 
 
-def files_in_use(files: Iterable[Path]) -> Iterator[Tuple[Path, int, str]]:
+def files_in_use(files: Iterable[Path]) -> Generator[Tuple[Path, int, str], None, None]:
     """Check if any of the given files are open.
     WARNING: This can be slow on Windows.
 
@@ -212,7 +212,7 @@ def files_in_use(files: Iterable[Path]) -> Iterator[Tuple[Path, int, str]]:
                     try:
                         if check_file.samefile(open_file):
                             for pid in pids:
-                                yield open_file, pid, Process(pid).name
+                                yield open_file, pid, Process(pid).name()
                     except OSError:  # pragma: no cover
                         # samefile() can raise if either file cannot be accessed
                         # this is triggered on Windows if a file is missing
@@ -268,9 +268,9 @@ def prepare_environment(
         target_path: Directory containing the Firefox binary.
         sanitizer_log: Location to write sanitizer logs. Log prefix set
                        with ASAN_OPTIONS=log_path=<sanitizer_log>.
-        env_mod (dict): Environment modifier. Add, remove and update entries
-                        in the prepared environment. Add and update by setting
-                        value (str) and remove by setting entry value to None.
+        env_mod: Environment modifier. Add, remove and update entries
+                 in the prepared environment. Add and update by setting
+                 value (str) and remove by setting entry value to None.
 
     Returns:
         Environment to use when launching browser.
@@ -367,8 +367,8 @@ def wait_on_files(
         open_iter = files_in_use(wait_files)
         if deadline <= time():
             LOG.debug("wait_on_files() timeout (%ds)", timeout)
-            for entry in open_iter:
-                LOG.debug("%r open by %r (%d)", str(entry[0]), entry[2], entry[1])
+            for path, pid, name in open_iter:
+                LOG.debug("%r open by %r (%d)", str(path), name, pid)
             break
         if not any(open_iter):
             all_closed = True
@@ -379,14 +379,13 @@ def wait_on_files(
 
 def warn_open(path: Path) -> None:
     """Output a message via `LOG.warning` for each file found to be open by a Process.
-    On Windows open files cannot be removed. Hopefully this can be used to help identify
-    the processes using the files and the underlying issue.
+    On Windows open files cannot be removed. This can be used to help debug issues.
 
     Args:
-        path: Path to scan for initial files.
+        path: Directory to scan for initial files.
 
     Returns:
         None
     """
-    for entry in files_in_use(path.iterdir()):
-        LOG.warning("%r open by %r (%d)", str(entry[0]), entry[2], entry[1])
+    for file_path, pid, name in files_in_use(path.iterdir()):
+        LOG.warning("%r open by %r (%d)", str(file_path), name, pid)
