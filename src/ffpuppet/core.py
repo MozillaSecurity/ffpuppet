@@ -3,7 +3,7 @@
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
 """ffpuppet module"""
 
-from enum import Enum, unique
+from enum import IntEnum, unique
 from logging import getLogger
 from os import X_OK, access, getenv
 from os.path import isfile, realpath
@@ -51,28 +51,28 @@ __all__ = ("Debugger", "FFPuppet", "Reason")
 
 
 @unique
-class Debugger(Enum):
-    """Available "debuggers" to run the browser with"""
+class Debugger(IntEnum):
+    """Available debuggers to run the browser with"""
 
-    NONE: int = 0
-    GDB: int = 1
-    PERNOSCO: int = 2
-    RR: int = 3
-    VALGRIND: int = 4
+    NONE = 0
+    GDB = 1
+    PERNOSCO = 2
+    RR = 3
+    VALGRIND = 4
 
 
 @unique
-class Reason(Enum):
+class Reason(IntEnum):
     """Indicates why the browser process was terminated"""
 
     # target crashed, aborted, triggered an assertion failure, etc...
-    ALERT: int = 0
+    ALERT = 0
     # target was closed by call to FFPuppet close() or has not been launched
-    CLOSED: int = 1
+    CLOSED = 1
     # target exited
-    EXITED: int = 2
+    EXITED = 2
     # target was closed by worker thread
-    WORKER: int = 3
+    WORKER = 3
 
 
 class FFPuppet:
