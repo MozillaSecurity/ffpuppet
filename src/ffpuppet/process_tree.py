@@ -6,6 +6,7 @@
 from logging import getLogger
 from platform import system
 from subprocess import Popen
+from time import sleep
 from typing import Generator, List, Optional, Tuple
 
 from psutil import AccessDenied, NoSuchProcess, Process, TimeoutExpired, wait_procs
@@ -36,15 +37,30 @@ class ProcessTree:
     def cpu_usage(self) -> Generator[Tuple[int, float], None, None]:
         """Collect percentage of CPU usage per process.
 
+        Note: the returned value can be > 100.0 in case of a process running multiple
+        threads on different CPU cores.
+        See: https://psutil.readthedocs.io/en/latest/#psutil.Process.cpu_percent
+
+        This value is not divided by CPU count because we are typically more concerned
+        with the low end for detecting idle processes.
+
         Args:
             None
 
         Yields:
             PID and the CPU usage as a percentage.
         """
-        for proc in self.processes():
+        procs = self.processes()
+        for proc in procs:
             try:
-                yield proc.pid, proc.cpu_percent(interval=0.1)
+                proc.cpu_percent()
+            except (AccessDenied, NoSuchProcess):  # pragma: no cover
+                continue
+        # psutil recommends at least '0.1'.
+        sleep(0.1)
+        for proc in procs:
+            try:
+                yield proc.pid, proc.cpu_percent()
             except (AccessDenied, NoSuchProcess):  # pragma: no cover
                 continue
 

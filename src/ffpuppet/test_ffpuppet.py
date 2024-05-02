@@ -755,7 +755,6 @@ def test_ffpuppet_27():
             ffp.launch(TESTFF_BIN, location=srv.get_addr())
             usage = next(ffp.cpu_usage())
             assert usage
-            assert usage[1] <= 100
             assert usage[1] >= 0
         ffp.close()
         assert ffp.wait(timeout=10)
