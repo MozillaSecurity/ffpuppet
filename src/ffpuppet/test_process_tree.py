@@ -74,6 +74,8 @@ def test_process_tree_01(tmp_path, enable_launcher, launcher_is_parent):
         assert tree.is_running()
         assert len(tree.processes()) == expected_procs
         assert tree.wait_procs() == expected_procs
+        usage = tuple(tree.cpu_usage())
+        assert len(usage) == expected_procs
         tree.terminate()
     finally:
         # this should cause everything to close gracefully if it is still running
