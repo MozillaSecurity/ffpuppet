@@ -30,26 +30,32 @@ def test_bootstrapper_01():
         bts.close()
 
 
-def test_bootstrapper_02(mocker):
-    """test Bootstrapper.wait() failure waiting for initial connection"""
-    fake_sock = mocker.MagicMock(spec_set=socket)
-    fake_sock.accept.side_effect = socket_timeout
-    with Bootstrapper(fake_sock) as bts:
+@mark.parametrize(
+    "exc, msg, continue_cb",
+    [
         # test failure
-        with raises(
-            BrowserTerminatedError, match="Failure waiting for browser connection"
-        ):
-            bts.wait(lambda: False)
-        assert fake_sock.accept.call_count == 1
-        fake_sock.reset_mock()
+        (
+            BrowserTerminatedError,
+            "Failure waiting for browser connection",
+            lambda: False,
+        ),
         # test timeout
-        mocker.patch("ffpuppet.bootstrapper.time", side_effect=(1, 1, 1, 2))
-        with raises(
-            BrowserTimeoutError, match="Timeout waiting for browser connection"
-        ):
-            bts.wait(lambda: True, timeout=0.1)
-        # should call accept() at least 2x for positive and negative timeout check
-        assert fake_sock.accept.call_count > 1
+        (
+            BrowserTimeoutError,
+            "Timeout waiting for browser connection",
+            lambda: True,
+        ),
+    ],
+)
+def test_bootstrapper_02(mocker, exc, msg, continue_cb):
+    """test Bootstrapper.wait() failure waiting for initial connection"""
+    mocker.patch("ffpuppet.bootstrapper.select", return_value=([], None, None))
+    mocker.patch("ffpuppet.bootstrapper.time", side_effect=(1, 1, 2, 3))
+    fake_sock = mocker.MagicMock(spec_set=socket)
+    with Bootstrapper(fake_sock) as bts:
+        with raises(exc, match=msg):
+            bts.wait(continue_cb, timeout=2)
+        assert fake_sock.accept.call_count == 0
 
 
 def test_bootstrapper_03(mocker):
@@ -58,6 +64,7 @@ def test_bootstrapper_03(mocker):
     fake_conn = mocker.Mock(spec_set=socket)
     fake_conn.recv.side_effect = socket_timeout
     fake_sock.accept.return_value = (fake_conn, None)
+    mocker.patch("ffpuppet.bootstrapper.select", return_value=([fake_sock], None, None))
     with Bootstrapper(fake_sock) as bts:
         # test failure
         with raises(BrowserTerminatedError, match="Failure waiting for request"):
@@ -81,6 +88,7 @@ def test_bootstrapper_04(mocker):
     fake_conn.recv.return_value = "A"
     fake_conn.sendall.side_effect = socket_timeout
     fake_sock.accept.return_value = (fake_conn, None)
+    mocker.patch("ffpuppet.bootstrapper.select", return_value=([fake_sock], None, None))
     with Bootstrapper(fake_sock) as bts:
         # test timeout
         with raises(BrowserTimeoutError, match="Timeout sending response"):
@@ -103,6 +111,7 @@ def test_bootstrapper_05(mocker):
     fake_conn = mocker.Mock(spec_set=socket)
     fake_conn.recv.return_value = "foo"
     fake_sock.accept.return_value = (fake_conn, None)
+    mocker.patch("ffpuppet.bootstrapper.select", return_value=([fake_sock], None, None))
     with Bootstrapper(fake_sock) as bts:
         with raises(BrowserTerminatedError, match="Failure during browser startup"):
             bts.wait(lambda: False)
@@ -132,6 +141,7 @@ def test_bootstrapper_06(mocker, redirect, recv, closed):
     fake_conn = mocker.Mock(spec_set=socket)
     fake_conn.recv.side_effect = recv
     fake_sock.accept.return_value = (fake_conn, None)
+    mocker.patch("ffpuppet.bootstrapper.select", return_value=([fake_sock], None, None))
     with Bootstrapper(fake_sock) as bts:
         bts.wait(lambda: True, url=redirect)
     assert fake_conn.close.call_count == closed
@@ -186,6 +196,7 @@ def test_bootstrapper_08(mocker, bind, attempts, raised):
     mocker.patch("ffpuppet.bootstrapper.sleep", autospec=True)
     fake_sock = mocker.MagicMock(spec_set=socket)
     fake_sock.bind.side_effect = bind
+    mocker.patch("ffpuppet.bootstrapper.select", return_value=([fake_sock], None, None))
     mocker.patch("ffpuppet.bootstrapper.socket", return_value=fake_sock)
     with raises(raised):
         with Bootstrapper.create(attempts=attempts):
