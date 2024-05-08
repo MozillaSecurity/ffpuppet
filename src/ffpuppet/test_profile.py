@@ -224,9 +224,8 @@ def test_profile_07(mocker, tmp_path):
 
 def test_profile_08(mocker, tmp_path):
     """test Profile missing certutil"""
-    mocker.patch(
-        "ffpuppet.profile.check_output", autospec=True, side_effect=OSError("test")
-    )
+    mocker.patch("ffpuppet.profile.certutil_available", return_value=False)
+    mocker.patch("ffpuppet.profile.certutil_find", autospec=True)
     cert = tmp_path / "cert"
     cert.touch()
     with raises(OSError, match="certutil not found"):
