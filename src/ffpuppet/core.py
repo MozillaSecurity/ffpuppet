@@ -876,7 +876,7 @@ class FFPuppet:
             dest,
             logs_only=logs_only,
             bin_path=self._bin_path,
-            rr_pack=self._dbg in (Debugger.PERNOSCO, Debugger.RR),
+            rr_pack=getenv("RR_PACK") == "1",
         )
 
     def wait(self, timeout: Optional[float] = None) -> bool:
