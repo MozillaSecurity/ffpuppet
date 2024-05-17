@@ -210,7 +210,7 @@ class ProcessTree:
             Process exit code.
         """
         try:
-            exit_code: int = self.parent.wait(timeout=timeout) or 0
+            exit_code = self.parent.wait(timeout=timeout) or 0
         except NoSuchProcess:  # pragma: no cover
             # this is triggered sometimes when the process goes away
             exit_code = 0
