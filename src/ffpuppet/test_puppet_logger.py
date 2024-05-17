@@ -185,6 +185,12 @@ def test_puppet_logger_07(mocker, tmp_path):
     fake_ck = mocker.patch("ffpuppet.puppet_logger.check_output", autospec=True)
     with PuppetLogger(base_path=str(tmp_path)) as plog:
         assert plog.path is not None
+        # add log data to test rr backtrace detection
+        with (tmp_path / "test_stderr.txt").open("w+b") as in_fp:
+            in_fp.write(b"foo\n")
+            in_fp.write(b"=== Start rr backtrace:\n")
+            in_fp.write(b"foo\n")
+            plog.add_log("stderr", logfp=in_fp)
         (plog.path / plog.PATH_RR / "latest-trace").mkdir(parents=True)
         plog.close()
         # test call to rr failing

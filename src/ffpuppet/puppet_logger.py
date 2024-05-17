@@ -4,6 +4,7 @@
 """browser and debugger log management"""
 
 from logging import getLogger
+from mmap import ACCESS_READ, mmap
 from os import getpid, stat
 from os.path import isfile
 from pathlib import Path
@@ -268,6 +269,16 @@ class PuppetLogger:  # pylint: disable=missing-docstring
         if not logs_only:
             rr_trace = self.path / self.PATH_RR / "latest-trace"
             if rr_trace.is_dir():
+                # check logs for rr related issues
+                try:
+                    with (dest / "log_stderr.txt").open("rb") as lfp:
+                        with mmap(lfp.fileno(), 0, access=ACCESS_READ) as lmm:
+                            if lmm.find(b"=== Start rr backtrace:") != -1:
+                                LOG.warning("rr traceback detected in stderr log")
+                except (OSError, ValueError):  # pragma: no cover
+                    # OSError: in case the file does not exist
+                    # ValueError: cannot mmap an empty file on Windows
+                    pass
                 if rr_pack and not self._rr_packed:
                     LOG.debug("packing rr trace")
                     try:
