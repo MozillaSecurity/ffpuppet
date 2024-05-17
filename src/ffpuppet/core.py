@@ -289,7 +289,7 @@ class FFPuppet:
             None
 
         Returns:
-            A list contains log IDs (str).
+            All log IDs.
         """
         return list(self._logs.available_logs())
 
@@ -303,7 +303,7 @@ class FFPuppet:
             additional_args: Additional arguments to pass to the browser.
 
         Returns:
-            List of arguments that make up the launch command.
+            Arguments that make up the launch command.
         """
         # if a python script is passed use 'sys.executable' as the binary
         # this is used by the test framework
@@ -591,7 +591,7 @@ class FFPuppet:
             yield from self._proc_tree.cpu_usage()
 
     def get_pid(self) -> Optional[int]:
-        """Get the browser process ID.
+        """Get the browser parent process ID.
 
         Args:
             None
