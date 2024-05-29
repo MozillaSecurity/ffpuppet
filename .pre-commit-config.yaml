@@ -63,6 +63,7 @@ repos:
         entry: tox -e mypy --
         language: system
         require_serial: true
+        exclude: /test_.*\.py$
         types: [python]
       - id: pylint
         name: pylint
