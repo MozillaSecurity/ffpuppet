@@ -343,5 +343,5 @@ def main(argv: Optional[List[str]] = None) -> None:  # pylint: disable=missing-d
         if ffp.reason == Reason.ALERT or args.save_all:
             LOG.info("Browser logs available here '%s'", logs.resolve())
         else:
-            rmtree(logs)
+            rmtree(logs, ignore_errors=True)
         ffp.clean_up()
