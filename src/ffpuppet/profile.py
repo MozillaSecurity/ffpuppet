@@ -52,7 +52,8 @@ class Profile:
                 for cert in cert_files:
                     self._install_cert(cert, certutil_find(browser_bin))
         except Exception:
-            rmtree(self.path, onerror=onerror)
+            if self.path.exists():
+                rmtree(self.path, onerror=onerror)
             raise
 
     def __enter__(self) -> "Profile":
@@ -228,9 +229,11 @@ class Profile:
             None
         """
         if self.path:
-            LOG.debug("removing profile")
             try:
-                rmtree(self.path, onerror=onerror)
+                # check if path exists to properly support "onerror"
+                if self.path.exists():
+                    LOG.debug("removing profile")
+                    rmtree(self.path, onerror=onerror)
             except OSError:
                 LOG.error("Failed to remove profile '%s'", self.path)
                 # skip raising here instead of passing ignore_errors to rmtree

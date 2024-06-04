@@ -102,12 +102,15 @@ class PuppetLogger:  # pylint: disable=missing-docstring
         """
         if not self.closed:
             self.close()
-        if self.path is not None and self.path.is_dir():
-            for attempt in range(2):
+        if self.path is not None:
+            # try multiple attempts to remove data
+            for attempt in reversed(range(2)):
                 try:
-                    rmtree(self.path, ignore_errors=ignore_errors, onerror=onerror)
+                    # check if path exists to properly support "onerror"
+                    if self.path.exists():
+                        rmtree(self.path, ignore_errors=ignore_errors, onerror=onerror)
                 except OSError:
-                    if attempt > 0:
+                    if attempt == 0:
                         warn_open(self.path)
                         raise
                     continue
