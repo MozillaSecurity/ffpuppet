@@ -776,7 +776,9 @@ class FFPuppet:
                 stdout=self._logs.get_fp("stdout"),
             )
             self._proc_tree = ProcessTree(proc)
-            if memory_limit and is_windows:
+            if (
+                memory_limit and is_windows
+            ):  # pylint: disable=possibly-used-before-assignment
                 LOG.debug("configuring job object")
                 # pylint: disable=no-member,protected-access
                 config_job_object(

@@ -15,7 +15,7 @@ JOB_OBJECT_LIMIT_PROCESS_MEMORY = 0x100
 
 THREAD_SUSPEND_RESUME = 0x0002
 
-__all__ = ("config_job_object",)
+__all__ = ("config_job_object", "resume_suspended_process")
 __author__ = "Jesse Schwartzentruber"
 
 LOG = getLogger(__name__)

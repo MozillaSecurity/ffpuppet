@@ -20,7 +20,7 @@ else:
 def test_job_object_01():
     """test config_job_object() set limit higher than usage"""
     with Popen([executable, "-c", "input()"], stdin=PIPE, stderr=PIPE) as proc:
-        # pylint: disable=no-member,protected-access
+        # pylint: disable=no-member,protected-access,possibly-used-before-assignment
         config_job_object(proc._handle, 1024 * 1024 * 1024)
         proc.communicate(input=b"a", timeout=10)
         assert proc.wait(10) == 0
@@ -33,7 +33,7 @@ def test_job_object_02():
         stdin=PIPE,
         stderr=PIPE,
     ) as proc:
-        # pylint: disable=no-member,protected-access
+        # pylint: disable=no-member,protected-access,possibly-used-before-assignment
         config_job_object(proc._handle, 32 * 1024 * 1024)
         _, err = proc.communicate(input=b"a", timeout=10)
         assert proc.wait(10) == 1
@@ -53,12 +53,13 @@ def test_thread_resume():
             "run([sys.executable, '-c', "
             "\"input(); a = ['A' * 1024 * 1024 for _ in range(50)]\"], check=True)",
         ],
+        # pylint: disable=possibly-used-before-assignment
         creationflags=CREATE_SUSPENDED,
         stdin=PIPE,
         stderr=PIPE,
     ) as proc:
         sleep(0.1)
-        # pylint: disable=no-member,protected-access
+        # pylint: disable=no-member,protected-access,possibly-used-before-assignment
         config_job_object(proc._handle, 32 * 1024 * 1024)
         resume_suspended_process(proc.pid)
         _, err = proc.communicate(input=b"a", timeout=10)
