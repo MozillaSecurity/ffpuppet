@@ -590,6 +590,22 @@ class FFPuppet:
         if self._proc_tree is not None:
             yield from self._proc_tree.cpu_usage()
 
+    def dump_coverage(self, timeout: int = 15) -> None:
+        """Signal browser to write coverage data to disk.
+
+        Args:
+            timeout: Number of seconds to wait for data to be written to disk.
+
+        Returns:
+            None
+        """
+        if system() != "Linux":  # pragma: no cover
+            raise NotImplementedError("dump_coverage() is not available")
+        if self._proc_tree is not None:
+            if not self._proc_tree.dump_coverage(timeout=timeout):
+                LOG.warning("Timeout writing coverage data")
+                self.close()
+
     def get_pid(self) -> Optional[int]:
         """Get the browser parent process ID.
 

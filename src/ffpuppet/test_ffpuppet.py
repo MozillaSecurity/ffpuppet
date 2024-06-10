@@ -960,3 +960,19 @@ def test_ffpuppet_32(mocker):
     assert config_job_object.mock_calls[0] == mocker.call(123, 456)
     assert resume_suspended.call_count == 1
     assert resume_suspended.mock_calls[0] == mocker.call(789)
+
+
+def test_ffpuppet_33(mocker):
+    """test FFPuppet.dump_coverage()"""
+    with FFPuppet() as ffp:
+        ffp._proc_tree = mocker.Mock(spec_set=ProcessTree)
+        ffp._proc_tree.dump_coverage.side_effect = (True, False)
+        if system() == "Linux":
+            # success
+            ffp.dump_coverage()
+            # hang
+            ffp.dump_coverage()
+        else:
+            with raises(NotImplementedError):
+                ffp.dump_coverage()
+        ffp._proc_tree = None
