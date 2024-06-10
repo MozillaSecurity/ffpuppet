@@ -3,6 +3,8 @@
 # You can obtain one at http://mozilla.org/MPL/2.0/.
 """process_tree.py tests"""
 
+from collections import namedtuple
+from itertools import chain, count, repeat
 from pathlib import Path
 from subprocess import Popen
 from time import sleep
@@ -11,7 +13,7 @@ from psutil import NoSuchProcess, Process, TimeoutExpired
 from pytest import mark, raises
 
 from .exceptions import TerminateError
-from .process_tree import ProcessTree
+from .process_tree import ProcessTree, _last_modified, _writing_coverage
 
 TREE = Path(__file__).parent / "resources" / "tree.py"
 
@@ -169,3 +171,77 @@ def test_process_tree_04(mocker):
     assert stats
     assert stats[0][0] == 1234
     assert stats[0][1] == 2.3
+
+
+@mark.parametrize(
+    "procs, last_mod, writing, success",
+    [
+        # no processes
+        (False, repeat(0), False, False),
+        # data written successfully
+        (True, chain([0], repeat(2)), False, True),
+        # data not updated
+        (True, repeat(0), False, False),
+        # data write timeout
+        (True, chain([0], repeat(2)), True, False),
+    ],
+)
+def test_process_tree_05(mocker, procs, last_mod, writing, success):
+    """test ProcessTree.dump_coverage()"""
+    mocker.patch("ffpuppet.process_tree.COVERAGE_SIGNAL", return_value="foo")
+    mocker.patch("ffpuppet.process_tree.getenv", return_value="foo")
+    mocker.patch("ffpuppet.process_tree.perf_counter", side_effect=count(step=0.25))
+    mocker.patch("ffpuppet.process_tree.sleep", autospec=True)
+    mocker.patch("ffpuppet.process_tree._last_modified", side_effect=last_mod)
+    mocker.patch("ffpuppet.process_tree._writing_coverage", return_value=writing)
+
+    # pylint: disable=missing-class-docstring,super-init-not-called
+    class CovProcessTree(ProcessTree):
+        def __init__(self):
+            pass
+
+        def is_running(self) -> bool:
+            return True
+
+        def processes(self, recursive=False):
+            return [] if not procs else [mocker.Mock(spec_set=Process)]
+
+    tree = CovProcessTree()
+    assert tree.dump_coverage() == success
+
+
+def test_last_modified_01(tmp_path):
+    """test ProcessTree._last_modified()"""
+    # scan missing path
+    assert _last_modified(tmp_path / "missing") is None
+    # scan empty path
+    assert _last_modified(tmp_path) is None
+    # scan path without gcda files
+    (tmp_path / "somefile.txt").touch()
+    assert _last_modified(tmp_path) is None
+    # scan nested path with gcda files
+    (tmp_path / "a").mkdir()
+    (tmp_path / "a" / "file.gcda").touch()
+    assert _last_modified(tmp_path) > 0
+
+
+def test_writing_coverage_01(mocker):
+    """test ProcessTree._writing_coverage()"""
+    openfile = namedtuple("openfile", ["path", "fd"])
+    # empty list
+    assert not _writing_coverage([])
+    # no open files
+    proc = mocker.Mock(spec_set=Process, pid=1337)
+    proc.open_files.return_value = ()
+    assert not _writing_coverage([proc])
+    assert proc.open_files.call_count == 1
+    # open test
+    proc.reset_mock()
+    proc.open_files.return_value = (openfile("file.txt", None),)
+    assert not _writing_coverage([proc])
+    assert proc.open_files.call_count == 1
+    # open gcda
+    proc.reset_mock()
+    proc.open_files.return_value = (openfile("file.gcda", None),)
+    assert _writing_coverage([proc])
+    assert proc.open_files.call_count == 1

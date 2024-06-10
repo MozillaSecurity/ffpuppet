@@ -4,16 +4,58 @@
 """ffpuppet process tree module"""
 
 from logging import getLogger
+from os import getenv
+from pathlib import Path
 from platform import system
 from subprocess import Popen
-from time import sleep
+from time import perf_counter, sleep
 from typing import Generator, List, Optional, Tuple
+
+try:
+    from signal import SIGUSR1, Signals
+
+    COVERAGE_SIGNAL: Optional[Signals] = SIGUSR1
+except ImportError:
+    COVERAGE_SIGNAL = None
 
 from psutil import AccessDenied, NoSuchProcess, Process, TimeoutExpired, wait_procs
 
 from .exceptions import TerminateError
 
 LOG = getLogger(__name__)
+
+
+def _last_modified(scan_dir: Path) -> Optional[float]:
+    """Scan directory recursively and find the latest modified date of all .gcda files.
+
+    Args:
+        scan_dir: Directory to scan.
+
+    Returns:
+        Last modified date or None if no files are found.
+    """
+    try:
+        return max(x.stat().st_mtime for x in scan_dir.glob("**/*.gcda"))
+    except ValueError:
+        return None
+
+
+def _writing_coverage(procs: List[Process]) -> bool:
+    """Check if any processes have open .gcda files.
+
+    Args:
+        procs: List of processes to check.
+
+    Returns:
+        True if processes with open .gcda files are found.
+    """
+    for proc in procs:
+        try:
+            if any(x for x in proc.open_files() if x.path.endswith(".gcda")):
+                return True
+        except (AccessDenied, NoSuchProcess):  # pragma: no cover
+            pass
+    return False
 
 
 class ProcessTree:
@@ -63,6 +105,69 @@ class ProcessTree:
                 yield proc.pid, proc.cpu_percent()
             except (AccessDenied, NoSuchProcess):  # pragma: no cover
                 continue
+
+    def dump_coverage(self, timeout: int = 15, idle_wait: int = 2) -> bool:
+        """Signal processes to write coverage data to disk. Running coverage builds in
+        parallel that are writing to the same location on disk is not recommended.
+        NOTE: Coverage data is also written when launching and closing the browser.
+
+        Args:
+            timeout: Number of seconds to wait for data to be written to disk.
+            idle_wait: Number of seconds to wait to determine if update is complete.
+
+        Returns:
+            True if coverage is written to disk otherwise False.
+        """
+        assert COVERAGE_SIGNAL is not None
+        assert getenv("GCOV_PREFIX_STRIP"), "GCOV_PREFIX_STRIP not set"
+        assert getenv("GCOV_PREFIX"), "GCOV_PREFIX not set"
+        # coverage output can take a few seconds to start and complete
+        assert timeout > 5
+        cov_path = Path(getenv("GCOV_PREFIX"))  # type: ignore[arg-type]
+        last_mdate = _last_modified(cov_path) or 0
+        signaled = 0
+        # send COVERAGE_SIGNAL (SIGUSR1) to browser processes
+        for proc in self.processes():
+            try:
+                proc.send_signal(COVERAGE_SIGNAL)
+                signaled += 1
+            except (AccessDenied, NoSuchProcess):  # pragma: no cover
+                pass
+        # no processes signaled
+        if signaled == 0:
+            LOG.warning("Coverage signal not sent, no browser processes found")
+            return False
+        # wait for processes to write .gcda files (typically takes ~2 seconds)
+        start_time = perf_counter()
+        last_change = None
+        success = False
+        while self.is_running():
+            # collect latest last modified dates
+            mdate = _last_modified(cov_path) or 0
+            # check if gcda files have been updated
+            now = perf_counter()
+            elapsed = now - start_time
+            if mdate > last_mdate:
+                last_change = now
+                last_mdate = mdate
+            # check if gcda write is complete (wait)
+            if (
+                last_change is not None
+                and now - last_change > idle_wait
+                and not _writing_coverage(self.processes())
+            ):
+                LOG.debug("coverage (gcda) dump took %0.2fs", elapsed)
+                success = True
+                break
+            # check if max duration has been exceeded
+            if elapsed >= timeout:
+                if last_change is None:
+                    LOG.warning("Coverage files not modified after %0.2fs", elapsed)
+                else:
+                    LOG.warning("Coverage file open after %0.2fs", elapsed)
+                break
+            sleep(0.25)
+        return success
 
     def is_running(self) -> bool:
         """Check if parent process is running.
