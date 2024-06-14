@@ -8,12 +8,18 @@ from itertools import chain, count, repeat
 from pathlib import Path
 from subprocess import Popen
 from time import sleep
+from unittest import mock
 
-from psutil import NoSuchProcess, Process, TimeoutExpired
+from psutil import AccessDenied, NoSuchProcess, Process, TimeoutExpired
 from pytest import mark, raises
 
 from .exceptions import TerminateError
-from .process_tree import ProcessTree, _last_modified, _writing_coverage
+from .process_tree import (
+    ProcessTree,
+    _last_modified,
+    _safe_wait_procs,
+    _writing_coverage,
+)
 
 TREE = Path(__file__).parent / "resources" / "tree.py"
 
@@ -245,3 +251,60 @@ def test_writing_coverage_01(mocker):
     proc.open_files.return_value = (openfile("file.gcda", None),)
     assert _writing_coverage([proc])
     assert proc.open_files.call_count == 1
+
+
+@mark.parametrize(
+    "wait_side_effect, procs, alive_count, gone_count",
+    [
+        # no processes - passthrough
+        ((([], []),), [], 0, 0),
+        # AccessDenied - no procs
+        (AccessDenied(), [], 0, 0),
+        # AccessDenied - alive (is_running check)
+        (
+            AccessDenied(),
+            [mock.Mock(spec_set=Process, is_running=mock.Mock(return_value=True))],
+            1,
+            0,
+        ),
+        # AccessDenied - gone (is_running check)
+        (
+            AccessDenied(),
+            [mock.Mock(spec_set=Process, is_running=mock.Mock(return_value=False))],
+            0,
+            1,
+        ),
+        # AccessDenied - alive
+        (
+            AccessDenied(),
+            [
+                mock.Mock(
+                    spec_set=Process, is_running=mock.Mock(side_effect=AccessDenied())
+                )
+            ],
+            1,
+            0,
+        ),
+        # AccessDenied - gone
+        (
+            AccessDenied(),
+            [
+                mock.Mock(
+                    spec_set=Process,
+                    is_running=mock.Mock(side_effect=NoSuchProcess(pid=1)),
+                )
+            ],
+            0,
+            1,
+        ),
+    ],
+)
+def test_safe_wait_procs_01(mocker, wait_side_effect, procs, alive_count, gone_count):
+    """test ProcessTree._safe_wait_procs()"""
+    mocker.patch("ffpuppet.process_tree.perf_counter", side_effect=count(step=0.25))
+    mocker.patch("ffpuppet.process_tree.sleep", autospec=True)
+    mocker.patch("ffpuppet.process_tree.wait_procs", side_effect=wait_side_effect)
+
+    result = _safe_wait_procs(procs, timeout=1)
+    assert len(result[0]) == gone_count
+    assert len(result[1]) == alive_count
