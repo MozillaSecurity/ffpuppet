@@ -9,7 +9,7 @@ from pathlib import Path
 from platform import system
 from subprocess import Popen
 from time import perf_counter, sleep
-from typing import Generator, List, Optional, Tuple
+from typing import Callable, Generator, Iterable, List, Optional, Tuple, cast
 
 try:
     from signal import SIGUSR1, Signals
@@ -38,6 +38,52 @@ def _last_modified(scan_dir: Path) -> Optional[float]:
         return max(x.stat().st_mtime for x in scan_dir.glob("**/*.gcda"))
     except ValueError:
         return None
+
+
+def _safe_wait_procs(
+    procs: Iterable[Process],
+    timeout: Optional[float] = 0,
+    callback: Optional[Callable[[Process], object]] = None,
+) -> Tuple[List[Process], List[Process]]:
+    """Wrapper for psutil.wait_procs() to avoid AccessDenied.
+    This can be an issue on Windows.
+
+    Args:
+        See psutil.wait_procs().
+
+    Returns:
+        See psutil.wait_procs().
+    """
+    assert timeout is None or timeout >= 0
+
+    deadline = None if timeout is None else perf_counter() + timeout
+    while True:
+        remaining = None if deadline is None else max(deadline - perf_counter(), 0)
+        try:
+            return cast(
+                Tuple[List[Process], List[Process]],
+                wait_procs(procs, timeout=remaining, callback=callback),
+            )
+        except AccessDenied:
+            pass
+        if deadline is not None and deadline <= perf_counter():
+            break
+        sleep(0.25)
+
+    # manually check processes
+    alive: List[Process] = []
+    gone: List[Process] = []
+    for proc in procs:
+        try:
+            if not proc.is_running():
+                gone.append(proc)
+            else:
+                alive.append(proc)
+        except AccessDenied:
+            alive.append(proc)
+        except NoSuchProcess:
+            gone.append(proc)
+    return (gone, alive)
 
 
 def _writing_coverage(procs: List[Process]) -> bool:
@@ -275,7 +321,7 @@ class ProcessTree:
                 self.parent.wait(timeout=10)
             except (AccessDenied, NoSuchProcess, TimeoutExpired):  # pragma: no cover
                 pass
-            procs = wait_procs(procs, timeout=0)[1]
+            procs = _safe_wait_procs(procs, timeout=0)[1]
 
         use_kill = False
         while procs:
@@ -291,7 +337,7 @@ class ProcessTree:
                 except (AccessDenied, NoSuchProcess):  # pragma: no cover
                     pass
             # wait for processes to terminate
-            procs = wait_procs(procs, timeout=30)[1]
+            procs = _safe_wait_procs(procs, timeout=30)[1]
             if use_kill:
                 break
             use_kill = True
@@ -316,7 +362,7 @@ class ProcessTree:
         """
         try:
             exit_code = self.parent.wait(timeout=timeout) or 0
-        except NoSuchProcess:  # pragma: no cover
+        except (AccessDenied, NoSuchProcess):  # pragma: no cover
             # this is triggered sometimes when the process goes away
             exit_code = 0
         return exit_code
@@ -330,4 +376,4 @@ class ProcessTree:
         Returns:
             Number of processes still alive.
         """
-        return len(wait_procs(self.processes(), timeout=timeout)[1])
+        return len(_safe_wait_procs(self.processes(), timeout=timeout)[1])
