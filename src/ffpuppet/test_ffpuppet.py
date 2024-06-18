@@ -867,6 +867,7 @@ def test_ffpuppet_29(mocker, tmp_path):
         assert ffp._logs.closed
         assert ffp.reason == Reason.CLOSED
     # process running - with crash reports, hang waiting to close
+    fake_wait_files.reset_mock()
     (tmp_path / "fake_report1").touch()
     mocker.patch.object(
         StubbedProc, "_crashreports", return_value=(tmp_path / "fake_report1",)
@@ -879,7 +880,9 @@ def test_ffpuppet_29(mocker, tmp_path):
         assert ffp._proc_tree is None
         assert ffp._logs.closed
         assert ffp.reason == Reason.ALERT
+        assert fake_wait_files.call_count == 1
     # process running - with crash reports, multiple logs
+    fake_wait_files.reset_mock()
     (tmp_path / "fake_report2").touch()
     mocker.patch.object(
         StubbedProc,
@@ -897,6 +900,21 @@ def test_ffpuppet_29(mocker, tmp_path):
         assert ffp._proc_tree is None
         assert ffp._logs.closed
         assert ffp.reason == Reason.ALERT
+        assert ffp._crashreports.call_count == 3  # pylint: disable=no-member
+        assert fake_wait_files.call_count == 1
+    # process running - with disappearing crash reports
+    fake_wait_files.reset_mock()
+    mocker.patch.object(
+        StubbedProc, "_crashreports", side_effect=((tmp_path / "fake_report1",), (), ())
+    )
+    with StubbedProc() as ffp:
+        ffp.launch()
+        ffp.close()
+        assert ffp._proc_tree is None
+        assert ffp._logs.closed
+        assert ffp.reason == Reason.ALERT
+        assert ffp._crashreports.call_count == 3  # pylint: disable=no-member
+        assert fake_wait_files.call_count == 0
 
 
 def test_ffpuppet_30():
