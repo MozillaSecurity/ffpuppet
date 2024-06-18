@@ -493,9 +493,13 @@ class FFPuppet:
                 )
             crash_reports = set(self._crashreports(skip_benign=True))
             LOG.debug("%d crash report(s) found", len(crash_reports))
-            # additional delay to allow crash reports to be completed/closed
-            if not wait_on_files(crash_reports, timeout=30):
-                LOG.warning("Crash reports still open after 30s")
+            if crash_reports:
+                # additional delay to allow crash reports to be completed/closed
+                if not wait_on_files(crash_reports, timeout=30):
+                    LOG.warning("Crash reports still open after 30s")
+            else:
+                # this can actually happen
+                LOG.warning("Crash reports disappeared! How did this happen?")
         elif self._proc_tree.is_running():
             r_code = Reason.CLOSED
         elif abs(self._proc_tree.wait()) not in {0, 1, 2, 9, 15, 245}:
