@@ -162,7 +162,7 @@ class ProcessTree:
             idle_wait: Number of seconds to wait to determine if update is complete.
 
         Returns:
-            True if coverage is written to disk otherwise False.
+            True if coverage is written to disk or processes exit otherwise False.
         """
         assert COVERAGE_SIGNAL is not None
         assert getenv("GCOV_PREFIX_STRIP"), "GCOV_PREFIX_STRIP not set"
@@ -181,13 +181,15 @@ class ProcessTree:
                 pass
         # no processes signaled
         if signaled == 0:
-            LOG.warning("Coverage signal not sent, no browser processes found")
-            return False
+            LOG.debug("coverage signal not sent, no browser processes found")
+            return True
         # wait for processes to write .gcda files (typically takes ~2 seconds)
         start_time = perf_counter()
         last_change = None
-        success = False
-        while self.is_running():
+        while True:
+            if not self.is_running():
+                LOG.debug("not running waiting for coverage dump")
+                return True
             # collect latest last modified dates
             mdate = _last_modified(cov_path) or 0
             # check if gcda files have been updated
@@ -203,8 +205,7 @@ class ProcessTree:
                 and not _writing_coverage(self.processes())
             ):
                 LOG.debug("coverage (gcda) dump took %0.2fs", elapsed)
-                success = True
-                break
+                return True
             # check if max duration has been exceeded
             if elapsed >= timeout:
                 if last_change is None:
@@ -213,7 +214,7 @@ class ProcessTree:
                     LOG.warning("Coverage file open after %0.2fs", elapsed)
                 break
             sleep(0.25)
-        return success
+        return False
 
     def is_running(self) -> bool:
         """Check if parent process is running.

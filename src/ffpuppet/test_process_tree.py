@@ -180,19 +180,21 @@ def test_process_tree_04(mocker):
 
 
 @mark.parametrize(
-    "procs, last_mod, writing, success",
+    "procs, last_mod, writing, is_running, success",
     [
         # no processes
-        (False, repeat(0), False, False),
+        (False, repeat(0), False, True, True),
         # data written successfully
-        (True, chain([0], repeat(2)), False, True),
+        (True, chain([0], repeat(2)), False, True, True),
         # data not updated
-        (True, repeat(0), False, False),
+        (True, repeat(0), False, True, False),
         # data write timeout
-        (True, chain([0], repeat(2)), True, False),
+        (True, chain([0], repeat(2)), True, True, False),
+        # process exits
+        (True, repeat(0), False, False, True),
     ],
 )
-def test_process_tree_05(mocker, procs, last_mod, writing, success):
+def test_process_tree_05(mocker, procs, last_mod, writing, is_running, success):
     """test ProcessTree.dump_coverage()"""
     mocker.patch("ffpuppet.process_tree.COVERAGE_SIGNAL", return_value="foo")
     mocker.patch("ffpuppet.process_tree.getenv", return_value="foo")
@@ -207,7 +209,7 @@ def test_process_tree_05(mocker, procs, last_mod, writing, success):
             pass
 
         def is_running(self) -> bool:
-            return True
+            return is_running
 
         def processes(self, recursive=False):
             return [] if not procs else [mocker.Mock(spec_set=Process)]
