@@ -347,7 +347,7 @@ class ProcessTree:
             LOG.warning("Processes still running: %d", len(procs))
             for proc in procs:
                 try:
-                    LOG.warning("-> %d (%s)", proc.pid, proc.name())
+                    LOG.warning("-> %d: %s (%s)", proc.pid, proc.name(), proc.status())
                 except (AccessDenied, NoSuchProcess):  # pragma: no cover
                     pass
             raise TerminateError("Failed to terminate processes")
