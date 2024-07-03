@@ -53,6 +53,7 @@ class Profile:
                     self._install_cert(cert, certutil_find(browser_bin))
         except Exception:
             if self.path.exists():
+                # pylint: disable=deprecated-argument
                 rmtree(self.path, onerror=onerror)
             raise
 
@@ -233,6 +234,7 @@ class Profile:
                 # check if path exists to properly support "onerror"
                 if self.path.exists():
                     LOG.debug("removing profile")
+                    # pylint: disable=deprecated-argument
                     rmtree(self.path, onerror=onerror)
             except OSError:
                 LOG.error("Failed to remove profile '%s'", self.path)
