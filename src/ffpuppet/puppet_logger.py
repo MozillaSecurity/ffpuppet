@@ -108,6 +108,7 @@ class PuppetLogger:  # pylint: disable=missing-docstring
                 try:
                     # check if path exists to properly support "onerror"
                     if self.path.exists():
+                        # pylint: disable=deprecated-argument
                         rmtree(self.path, ignore_errors=ignore_errors, onerror=onerror)
                 except OSError:
                     if attempt == 0:
