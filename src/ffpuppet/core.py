@@ -44,6 +44,12 @@ if system() == "Windows":
     # config_job_object is only available on Windows
     from .job_object import config_job_object, resume_suspended_process
 
+
+# Note: ignore 245 for now to avoid getting flooded with OOMs that don't
+# have a crash report... this should be revisited when time allows
+# https://bugzil.la/1370520
+# Ignore -9 to avoid false positives due to system OOM killer
+BENIGN_EXIT_CODES = frozenset((0, 1, 2, 9, 15, 245))
 LOG = getLogger(__name__)
 
 __author__ = "Tyson Smith"
@@ -502,11 +508,7 @@ class FFPuppet:
                 LOG.warning("Crash reports disappeared! How did this happen?")
         elif self._proc_tree.is_running():
             r_code = Reason.CLOSED
-        elif abs(self._proc_tree.wait()) not in {0, 1, 2, 9, 15, 245}:
-            # Note: ignore 245 for now to avoid getting flooded with OOMs that don't
-            # have a crash report... this should be revisited when time allows
-            # https://bugzil.la/1370520
-            # Ignore -9 to avoid false positives due to system OOM killer
+        elif abs(self._proc_tree.wait()) not in BENIGN_EXIT_CODES:
             exit_code = self._proc_tree.wait()
             r_code = Reason.ALERT
             LOG.warning(
