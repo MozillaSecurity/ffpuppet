@@ -310,7 +310,7 @@ class FFPuppet:
         cmd: List[str] = []
         if bin_path.lower().endswith(".py"):
             cmd.append(executable)
-        cmd += [bin_path, "-no-remote"]
+        cmd += [bin_path, "-new-instance"]
         if self._headless == "default":
             cmd.append("-headless")
         if self.profile is not None:
