@@ -50,7 +50,7 @@ def test_sanitizer_options_01(init, add, result, overwrite):
             assert opt in result
         # test __iter__
         for opt, value in opts:
-            assert "=".join((opt, value)) in result
+            assert f"{opt}={value}" in result
         # test __contains___
         for opt in result:
             assert opt.split("=")[0] in opts
@@ -76,7 +76,7 @@ def test_sanitizer_options_03(tmp_path):
     # test exists
     file = tmp_path / "file.bin"
     file.touch()
-    opts.add("file", f"'{str(file)}'")
+    opts.add("file", f"'{file}'")
     assert opts.check_path("file")
     # test missing file
     file.unlink()

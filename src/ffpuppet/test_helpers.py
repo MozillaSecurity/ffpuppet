@@ -135,7 +135,7 @@ def test_helpers_01(tmp_path):
     llvm_sym_b.touch()
     env = {
         "ASAN_SYMBOLIZER_PATH": str(llvm_sym_a),
-        "ASAN_OPTIONS": f"external_symbolizer_path='{str(llvm_sym_b)}'",
+        "ASAN_OPTIONS": f"external_symbolizer_path='{llvm_sym_b}'",
     }
     env = _configure_sanitizers(env, tmp_path, "blah")
     asan_opts = parse(env["ASAN_OPTIONS"])

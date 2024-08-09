@@ -50,7 +50,7 @@ def create_winerror(function: str) -> OSError:  # pragma: no cover
 class SystemHandleTableEntryInfoEx(ctypes.Structure):
     """NT API Handle table entry structure"""
 
-    _fields_ = [
+    _fields_ = (
         ("Object", ctypes.c_void_p),
         ("UniqueProcessId", ctypes.wintypes.HANDLE),
         ("HandleValue", ctypes.wintypes.HANDLE),
@@ -59,7 +59,7 @@ class SystemHandleTableEntryInfoEx(ctypes.Structure):
         ("ObjectTypeIndex", ctypes.c_ushort),
         ("HandleAttributes", ctypes.c_ulong),
         ("Reserved", ctypes.c_ulong),
-    ]
+    )
 
 
 def nt_query_system_handle_information_ex() -> ctypes.Structure:
@@ -93,11 +93,11 @@ def nt_query_system_handle_information_ex() -> ctypes.Structure:
     class SystemHandleInformationEx(ctypes.Structure):
         """NT API Handle table structure"""
 
-        _fields_ = [
+        _fields_ = (
             ("NumberOfHandles", ctypes.c_void_p),
             ("Reserved", ctypes.c_void_p),
             ("Handles", SystemHandleTableEntryInfoEx * (num_handles or 0)),
-        ]
+        )
 
     return SystemHandleInformationEx.from_buffer(buf)
 

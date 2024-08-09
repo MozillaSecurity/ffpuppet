@@ -24,20 +24,20 @@ LOG = getLogger(__name__)
 class IOCounters(ctypes.Structure):
     """IOCounters"""
 
-    _fields_ = [
+    _fields_ = (
         ("read_operation_count", ctypes.c_ulonglong),
         ("write_operation_count", ctypes.c_ulonglong),
         ("other_operation_count", ctypes.c_ulonglong),
         ("read_transfer_count", ctypes.c_ulonglong),
         ("write_transfer_count", ctypes.c_ulonglong),
         ("other_transfer_count", ctypes.c_ulonglong),
-    ]
+    )
 
 
 class JobObjectBasicLimitInformation(ctypes.Structure):
     """JobObjectBasicLimitInformation"""
 
-    _fields_ = [
+    _fields_ = (
         ("per_process_user_time_limit", ctypes.wintypes.LARGE_INTEGER),
         ("per_job_user_time_limit", ctypes.wintypes.LARGE_INTEGER),
         ("limit_flags", ctypes.wintypes.DWORD),
@@ -47,20 +47,20 @@ class JobObjectBasicLimitInformation(ctypes.Structure):
         ("affinity", ctypes.wintypes.PULONG),
         ("priority_class", ctypes.wintypes.DWORD),
         ("scheduling_class", ctypes.wintypes.DWORD),
-    ]
+    )
 
 
 class JobObjectExtendedLimitInformation(ctypes.Structure):
     """JobObjectExtendedLimitInformation"""
 
-    _fields_ = [
+    _fields_ = (
         ("basic_limit_information", JobObjectBasicLimitInformation),
         ("io_info", IOCounters),
         ("process_memory_limit", ctypes.c_size_t),
         ("job_memory_limit", ctypes.c_size_t),
         ("peak_process_memory_used", ctypes.c_size_t),
         ("peak_job_memory_used", ctypes.c_size_t),
-    ]
+    )
 
 
 def config_job_object(handle: Handle, limit: int) -> None:

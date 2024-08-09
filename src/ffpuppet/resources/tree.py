@@ -11,9 +11,8 @@ from socket import AF_INET, SOCK_STREAM, socket
 from subprocess import Popen
 from sys import executable
 from time import perf_counter, sleep
-from typing import Any, List
+from typing import Any, Optional, Tuple
 
-CHILD_PROCS: List["Popen[bytes]"] = []
 LOG = getLogger(__name__)
 SHUTDOWN = False
 SOCKET_TIMEOUT = 60
@@ -29,6 +28,7 @@ def handle_signal(signum: int, _frame: Any) -> None:
 
 def main(args: Namespace) -> int:
     """Mock a Firefox browser process tree for testing purposes"""
+    child_procs: Optional[Tuple["Popen[bytes]", ...]] = None
     start = perf_counter()
     try:
         pid = getpid()
@@ -52,7 +52,7 @@ def main(args: Namespace) -> int:
             assert not args.contentproc, f"-contentproc not expected! ({pid})"
             LOG.info("Launcher process")
             # pylint: disable=consider-using-with
-            CHILD_PROCS.append(Popen(cmd))
+            child_procs = (Popen(cmd),)
         elif args.contentproc:
             LOG.info("Content process (ppid: %r)", args.parent_pid)
             with socket(AF_INET, SOCK_STREAM) as conn:
@@ -70,9 +70,8 @@ def main(args: Namespace) -> int:
                 cmd.append("--port")
                 cmd.append(str(srv.getsockname()[1]))
                 cmd.append("-contentproc")
-                for _ in range(args.procs):
-                    # pylint: disable=consider-using-with
-                    CHILD_PROCS.append(Popen(cmd))
+                # pylint: disable=consider-using-with
+                child_procs = tuple(Popen(cmd) for _ in range(args.procs))
                 # wait for processes to launch
                 for _ in range(args.procs):
                     conn, _ = srv.accept()
@@ -85,7 +84,7 @@ def main(args: Namespace) -> int:
 
         # wait loop
         while not SHUTDOWN and perf_counter() - start < args.duration:
-            if CHILD_PROCS and all(x.poll() is not None for x in CHILD_PROCS):
+            if child_procs and all(x.poll() is not None for x in child_procs):
                 break
             sleep(0.1)
 
@@ -95,11 +94,12 @@ def main(args: Namespace) -> int:
     finally:
         if not args.contentproc:
             args.sync.unlink(missing_ok=True)
-        for proc in CHILD_PROCS:
-            if proc.poll() is None:
-                proc.terminate()
-        for proc in CHILD_PROCS:
-            proc.wait(timeout=10)
+        if child_procs:
+            for proc in child_procs:
+                if proc.poll() is None:
+                    proc.terminate()
+            for proc in child_procs:
+                proc.wait(timeout=10)
         LOG.info("Exiting, runtime %0.3fs", perf_counter() - start)
 
     return 0
