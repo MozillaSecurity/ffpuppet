@@ -491,12 +491,10 @@ def test_ffpuppet_20(tmp_path):
 
 def test_ffpuppet_21(tmp_path):
     """test collecting and cleaning up ASan logs"""
-    test_logs = []
     with FFPuppet() as ffp:
         ffp.launch(TESTFF_BIN)
         assert ffp._logs.path is not None
-        for i in range(4):
-            test_logs.append(Path(f"{ffp._logs.path / ffp._logs.PREFIX_SAN}.{i}"))
+        test_logs = [ffp._logs.path / f"{ffp._logs.PREFIX_SAN}.{i}" for i in range(4)]
         # ignore benign ASan warning
         with test_logs[0].open("w") as log_fp:
             log_fp.write("==123==WARNING: Symbolizer buffer too small")

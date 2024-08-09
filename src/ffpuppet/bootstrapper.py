@@ -24,25 +24,27 @@ __all__ = ("Bootstrapper",)
 class Bootstrapper:  # pylint: disable=missing-docstring
     # see: searchfox.org/mozilla-central/source/netwerk/base/nsIOService.cpp
     # include ports above 1023
-    BLOCKED_PORTS = {
-        1719,
-        1720,
-        1723,
-        2049,
-        3659,
-        4045,
-        5060,
-        5061,
-        6000,
-        6566,
-        6665,
-        6666,
-        6667,
-        6668,
-        6669,
-        6697,
-        10080,
-    }
+    BLOCKED_PORTS = frozenset(
+        (
+            1719,
+            1720,
+            1723,
+            2049,
+            3659,
+            4045,
+            5060,
+            5061,
+            6000,
+            6566,
+            6665,
+            6666,
+            6667,
+            6668,
+            6669,
+            6697,
+            10080,
+        )
+    )
     # receive buffer size
     BUF_SIZE = 4096
     # duration of initial blocking socket operations

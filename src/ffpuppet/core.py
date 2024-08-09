@@ -396,7 +396,8 @@ class FFPuppet:
                 "-return-child-result",
                 "-batch",
                 "--args",
-            ] + cmd
+                *cmd,
+            ]
 
         elif self._dbg in (Debugger.PERNOSCO, Debugger.RR):
             rr_cmd = [

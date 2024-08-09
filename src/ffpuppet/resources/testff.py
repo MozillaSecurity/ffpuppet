@@ -88,9 +88,7 @@ def main() -> int:  # pylint: disable=missing-docstring
     if cmd == "memory":
         sys.stdout.write("simulating high memory usage\n")
         sys.stdout.flush()
-        blob = []
-        for _ in range(200):
-            blob.append("A" * 1024 * 1024)
+        _ = ["A" * 1024 * 1024 for _ in range(200)]
     elif cmd == "soft_assert":
         sys.stdout.write("simulating soft assertion\n")
         sys.stdout.flush()
