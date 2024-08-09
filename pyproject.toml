@@ -54,4 +54,21 @@ ignored-modules = ["pytest"]
 [tool.pytest.ini_options]
 log_level = "DEBUG"
 
+[tool.ruff.lint]
+select = [
+    # pycodestyle
+    "E",
+    # Pyflakes
+    "F",
+    # Flynt
+    "FLY",
+    # Perflint
+    "PERF",
+    # Ruff-specific rules
+    "RUF",
+    # pycodestyle
+    "W",
+]
+ignore = ["PERF203"]
+
 [tool.setuptools_scm]
