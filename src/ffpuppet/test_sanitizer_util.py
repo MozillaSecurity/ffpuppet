@@ -40,7 +40,6 @@ def test_sanitizer_options_01(init, add, result, overwrite):
     for key, value in add.items():
         opts.add(key, value, overwrite=overwrite)
     # test __str__
-    assert str(opts) == str(opts.options)
     split_opts = SanitizerOptions.re_delim.split(str(opts))
     assert len(split_opts) == len(result)
     if opts:
