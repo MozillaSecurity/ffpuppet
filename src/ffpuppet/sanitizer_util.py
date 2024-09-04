@@ -2,11 +2,12 @@
 # License, v. 2.0. If a copy of the MPL was not distributed with this
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
 """ffpuppet sanitizer utilities"""
+from __future__ import annotations
 
 from logging import getLogger
 from os.path import exists
 from re import compile as re_compile
-from typing import Dict, Iterator, Optional, Tuple
+from typing import Iterator
 
 LOG = getLogger(__name__)
 
@@ -19,15 +20,15 @@ class SanitizerOptions:  # pylint: disable=missing-docstring
 
     __slots__ = ("_options",)
 
-    def __init__(self, options: Optional[str] = None) -> None:
-        self._options: Dict[str, str] = {}
+    def __init__(self, options: str | None = None) -> None:
+        self._options: dict[str, str] = {}
         if options is not None:
             self.load_options(options)
 
     def __contains__(self, item: str) -> bool:
         return item in self._options
 
-    def __iter__(self) -> Iterator[Tuple[str, str]]:
+    def __iter__(self) -> Iterator[tuple[str, str]]:
         yield from self._options.items()
 
     def __len__(self) -> int:
@@ -70,7 +71,7 @@ class SanitizerOptions:  # pylint: disable=missing-docstring
             return exists(value)
         return True
 
-    def get(self, flag: str) -> Optional[str]:
+    def get(self, flag: str) -> str | None:
         """Get sanitizer flag.
 
         Args:
@@ -93,7 +94,7 @@ class SanitizerOptions:  # pylint: disable=missing-docstring
         """
         return len(token) > 1 and token[0] == token[-1] and token[0] in ('"', "'")
 
-    def load_options(self, options: Optional[str]) -> None:
+    def load_options(self, options: str | None) -> None:
         """Load flags from *SAN_OPTIONS in env.
 
         Args:
@@ -110,7 +111,7 @@ class SanitizerOptions:  # pylint: disable=missing-docstring
                 except TypeError:
                     LOG.warning("Malformed option %r", option)
 
-    def pop(self, flag: str) -> Optional[str]:
+    def pop(self, flag: str) -> str | None:
         """Pop sanitizer flag.
 
         Args:

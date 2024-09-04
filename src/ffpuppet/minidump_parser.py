@@ -2,13 +2,15 @@
 # License, v. 2.0. If a copy of the MPL was not distributed with this
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
 """ffpuppet minidump parsing module"""
+from __future__ import annotations
+
 from json import JSONDecodeError, load
 from logging import DEBUG, INFO, basicConfig, getLogger
 from pathlib import Path
 from shutil import rmtree, which
 from subprocess import CalledProcessError, TimeoutExpired, run
 from tempfile import TemporaryFile, mkdtemp
-from typing import IO, Any, Dict, List, Optional
+from typing import IO, Any
 
 LOG = getLogger(__name__)
 MDSW_URL = "https://lib.rs/crates/minidump-stackwalk"
@@ -29,17 +31,17 @@ class MinidumpParser:
 
     __slots__ = ("_storage", "_symbols")
 
-    def __init__(self, symbols: Optional[Path] = None) -> None:
+    def __init__(self, symbols: Path | None = None) -> None:
         self._storage = Path(mkdtemp(prefix="md-parser-"))
         self._symbols = symbols
 
-    def __enter__(self) -> "MinidumpParser":
+    def __enter__(self) -> MinidumpParser:
         return self
 
     def __exit__(self, *exc: Any) -> None:
         self.close()
 
-    def _cmd(self, src: Path) -> List[str]:
+    def _cmd(self, src: Path) -> list[str]:
         """Generate minidump-stackwalk command line.
 
         Args:
@@ -58,7 +60,7 @@ class MinidumpParser:
         return cmd
 
     @staticmethod
-    def _fmt_output(data: Dict[str, Any], out_fp: IO[bytes], limit: int = 150) -> None:
+    def _fmt_output(data: dict[str, Any], out_fp: IO[bytes], limit: int = 150) -> None:
         """Write summarized contents of a minidump to a file in a format that is
         consumable by FuzzManager.
 
@@ -73,7 +75,7 @@ class MinidumpParser:
         assert limit > 0
         # generate register information lines
         frames = data["crashing_thread"]["frames"]
-        reg_lines: List[str] = []
+        reg_lines: list[str] = []
         for reg, value in frames[0]["registers"].items():
             # display three registers per line
             sep = "\t" if (len(reg_lines) + 1) % 3 else "\n"

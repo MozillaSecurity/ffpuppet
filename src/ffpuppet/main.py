@@ -2,6 +2,7 @@
 # License, v. 2.0. If a copy of the MPL was not distributed with this
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
 """ffpuppet main.py"""
+from __future__ import annotations
 
 from argparse import ArgumentParser, Namespace
 from importlib.metadata import PackageNotFoundError, version
@@ -11,7 +12,6 @@ from platform import system
 from shutil import rmtree, which
 from tempfile import mkdtemp
 from time import sleep, strftime
-from typing import List, Optional
 
 from .core import Debugger, FFPuppet, Reason
 from .exceptions import BrowserExecutionError
@@ -70,7 +70,7 @@ def dump_to_console(log_dir: Path, log_quota: int = 0x8000) -> str:
     return "".join(lines)
 
 
-def parse_args(argv: Optional[List[str]] = None) -> Namespace:
+def parse_args(argv: list[str] | None = None) -> Namespace:
     """Handle argument parsing.
 
     Args:
@@ -285,7 +285,7 @@ def parse_args(argv: Optional[List[str]] = None) -> Namespace:
     return args
 
 
-def main(argv: Optional[List[str]] = None) -> None:  # pylint: disable=missing-docstring
+def main(argv: list[str] | None = None) -> None:  # pylint: disable=missing-docstring
     args = parse_args(argv)
     # set output verbosity
     if args.log_level == DEBUG:

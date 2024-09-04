@@ -3,6 +3,8 @@
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
 """ffpuppet module"""
 
+from __future__ import annotations
+
 from enum import IntEnum, unique
 from logging import getLogger
 from os import X_OK, access, getenv
@@ -15,7 +17,7 @@ from re import match as re_match
 from shutil import copyfileobj
 from subprocess import Popen, check_output
 from sys import executable
-from typing import Any, Dict, Generator, List, Optional, Pattern, Set, Tuple, Union
+from typing import Any, Generator, Pattern
 from urllib.request import pathname2url
 
 try:
@@ -115,26 +117,26 @@ class FFPuppet:
     def __init__(
         self,
         debugger: Debugger = Debugger.NONE,
-        headless: Optional[str] = None,
-        use_profile: Optional[Path] = None,
+        headless: str | None = None,
+        use_profile: Path | None = None,
         use_xvfb: bool = False,
-        working_path: Optional[str] = None,
+        working_path: str | None = None,
     ) -> None:
         # tokens used to notify log scanner to kill the browser process
-        self._abort_tokens: Set[Pattern[str]] = set()
-        self._bin_path: Optional[Path] = None
-        self._checks: List[Union[CheckLogContents, CheckLogSize, CheckMemoryUsage]] = []
+        self._abort_tokens: set[Pattern[str]] = set()
+        self._bin_path: Path | None = None
+        self._checks: list[CheckLogContents | CheckLogSize | CheckMemoryUsage] = []
         self._dbg = debugger
         self._dbg_sanity_check(self._dbg)
         self._headless = headless
         self._launches = 0  # number of successful browser launches
         self._logs = PuppetLogger(base_path=working_path)
-        self._proc_tree: Optional[ProcessTree] = None
+        self._proc_tree: ProcessTree | None = None
         self._profile_template = use_profile
-        self._xvfb: Optional[Xvfb] = None
+        self._xvfb: Xvfb | None = None
         self._working_path = working_path
-        self.profile: Optional[Profile] = None
-        self.reason: Optional[Reason] = Reason.CLOSED
+        self.profile: Profile | None = None
+        self.reason: Reason | None = Reason.CLOSED
 
         if use_xvfb:
             self._headless = "xvfb"
@@ -151,7 +153,7 @@ class FFPuppet:
         else:
             assert self._headless in (None, "default")
 
-    def __enter__(self) -> "FFPuppet":
+    def __enter__(self) -> FFPuppet:
         return self
 
     def __exit__(self, *exc: Any) -> None:
@@ -288,7 +290,7 @@ class FFPuppet:
         assert token
         self._abort_tokens.add(re_compile(token))
 
-    def available_logs(self) -> List[str]:
+    def available_logs(self) -> list[str]:
         """List of IDs for the currently available logs.
 
         Args:
@@ -300,8 +302,8 @@ class FFPuppet:
         return list(self._logs.available_logs())
 
     def build_launch_cmd(
-        self, bin_path: str, additional_args: Optional[List[str]] = None
-    ) -> List[str]:
+        self, bin_path: str, additional_args: list[str] | None = None
+    ) -> list[str]:
         """Build a command that can be used to launch the browser.
 
         Args:
@@ -313,7 +315,7 @@ class FFPuppet:
         """
         # if a python script is passed use 'sys.executable' as the binary
         # this is used by the test framework
-        cmd: List[str] = []
+        cmd: list[str] = []
         if bin_path.lower().endswith(".py"):
             cmd.append(executable)
         cmd += [bin_path, "-new-instance"]
@@ -449,8 +451,8 @@ class FFPuppet:
         self,
         log_id: str,
         offset: int = 0,
-        target_file: Optional[str] = None,
-    ) -> Optional[Path]:
+        target_file: str | None = None,
+    ) -> Path | None:
         """Create a copy of the selected browser log.
 
         Args:
@@ -585,7 +587,7 @@ class FFPuppet:
             LOG.debug("reason code: %s", r_code.name)
             self.reason = r_code
 
-    def cpu_usage(self) -> Generator[Tuple[int, float], None, None]:
+    def cpu_usage(self) -> Generator[tuple[int, float], None, None]:
         """Collect percentage of CPU usage per process.
 
         Args:
@@ -613,7 +615,7 @@ class FFPuppet:
                 LOG.warning("Timeout writing coverage data")
                 self.close()
 
-    def get_pid(self) -> Optional[int]:
+    def get_pid(self) -> int | None:
         """Get the browser parent process ID.
 
         Args:
@@ -622,7 +624,7 @@ class FFPuppet:
         Returns:
             Browser PID.
         """
-        pid: Optional[int] = None
+        pid: int | None = None
         if self._proc_tree is not None:
             pid = self._proc_tree.parent.pid
         return pid
@@ -666,14 +668,14 @@ class FFPuppet:
     def launch(
         self,
         bin_path: Path,
-        env_mod: Optional[Dict[str, Optional[str]]] = None,
+        env_mod: dict[str, str | None] | None = None,
         launch_timeout: int = 300,
-        location: Optional[str] = None,
+        location: str | None = None,
         log_limit: int = 0,
         memory_limit: int = 0,
-        prefs_js: Optional[Path] = None,
-        extension: Optional[List[Path]] = None,
-        cert_files: Optional[List[Path]] = None,
+        prefs_js: Path | None = None,
+        extension: list[Path] | None = None,
+        cert_files: list[Path] | None = None,
     ) -> None:
         """Launch a new browser process.
 
@@ -710,9 +712,7 @@ class FFPuppet:
         LOG.debug("requested location: %r", location)
         if location is not None:
             if isfile(location):
-                location = "///".join(
-                    ["file:", pathname2url(realpath(location)).lstrip("/")]
-                )
+                location = f"file:///{pathname2url(realpath(location)).lstrip('/')}"
             elif re_match(r"http(s)?://", location, IGNORECASE) is None:
                 raise OSError(f"Cannot find {location!r}")
 
@@ -872,7 +872,7 @@ class FFPuppet:
         assert self._launches > -1, "clean_up() has been called"
         return self._launches
 
-    def log_length(self, log_id: str) -> Optional[int]:
+    def log_length(self, log_id: str) -> int | None:
         """Get the length of the selected browser log.
 
         Args:
@@ -904,7 +904,7 @@ class FFPuppet:
             rr_pack=getenv("RR_PACK") == "1",
         )
 
-    def wait(self, timeout: Optional[float] = None) -> bool:
+    def wait(self, timeout: float | None = None) -> bool:
         """Wait for browser process(es) to terminate. This call will block until
         all process(es) exit unless a timeout is specified. If a timeout of zero
         or greater is specified the call will block until the timeout expires.

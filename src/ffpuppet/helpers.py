@@ -2,6 +2,7 @@
 # License, v. 2.0. If a copy of the MPL was not distributed with this
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
 """ffpuppet helper utilities"""
+from __future__ import annotations
 
 from logging import getLogger
 from os import W_OK, access, chmod, environ
@@ -10,7 +11,7 @@ from platform import system
 from stat import S_IWUSR
 from subprocess import STDOUT, CalledProcessError, check_output
 from time import sleep, time
-from typing import Any, Callable, Dict, Generator, Iterable, Optional, Tuple
+from typing import Any, Callable, Generator, Iterable
 
 from psutil import Process, process_iter
 
@@ -36,8 +37,8 @@ __all__ = (
 
 
 def _configure_sanitizers(
-    orig_env: Dict[str, str], target_path: Path, log_path: Path
-) -> Dict[str, str]:
+    orig_env: dict[str, str], target_path: Path, log_path: Path
+) -> dict[str, str]:
     """Copy environment and update default values in *SAN_OPTIONS entries.
     These values are only updated if they are not provided, with the exception of
     'log_path'. 'log_path' is used by FFPuppet to detect results.
@@ -50,7 +51,7 @@ def _configure_sanitizers(
     Returns:
         Environment with *SAN_OPTIONS defaults set.
     """
-    env: Dict[str, str] = dict(orig_env)
+    env: dict[str, str] = dict(orig_env)
     # https://github.com/google/sanitizers/wiki/SanitizerCommonFlags
     common_flags = [
         ("abort_on_error", "false"),
@@ -174,7 +175,7 @@ def certutil_available(certutil: str) -> bool:
     return False
 
 
-def certutil_find(browser_bin: Optional[Path] = None) -> str:
+def certutil_find(browser_bin: Path | None = None) -> str:
     """Look for NSS certutil in known location or fallback to built-in tool.
 
     Args:
@@ -190,7 +191,7 @@ def certutil_find(browser_bin: Optional[Path] = None) -> str:
     return CERTUTIL
 
 
-def files_in_use(files: Iterable[Path]) -> Generator[Tuple[Path, int, str], None, None]:
+def files_in_use(files: Iterable[Path]) -> Generator[tuple[Path, int, str], None, None]:
     """Check if any of the given files are open.
     WARNING: This can be slow on Windows.
 
@@ -260,8 +261,8 @@ def onerror(
 def prepare_environment(
     target_path: Path,
     sanitizer_log: Path,
-    env_mod: Optional[Dict[str, Optional[str]]] = None,
-) -> Dict[str, str]:
+    env_mod: dict[str, str | None] | None = None,
+) -> dict[str, str]:
     """Create environment that can be used when launching the browser.
 
     Args:
@@ -275,8 +276,8 @@ def prepare_environment(
     Returns:
         Environment to use when launching browser.
     """
-    base: Dict[str, Optional[str]] = {}
-    env: Dict[str, str] = dict(environ)
+    base: dict[str, str | None] = {}
+    env: dict[str, str] = dict(environ)
 
     # https://developer.gimp.org/api/2.0/glib/glib-running.html#G_SLICE
     base["G_SLICE"] = "always-malloc"
