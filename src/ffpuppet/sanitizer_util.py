@@ -110,19 +110,6 @@ class SanitizerOptions:  # pylint: disable=missing-docstring
                 except TypeError:
                     LOG.warning("Malformed option %r", option)
 
-    @property
-    def options(self) -> str:
-        """Join all flag and value pairs for use with *SAN_OPTIONS.
-
-        Args:
-            None
-
-        Returns:
-            Colon separated list of options.
-        """
-        # TODO: Remove after next release
-        return str(self)
-
     def pop(self, flag: str) -> Optional[str]:
         """Pop sanitizer flag.
 
