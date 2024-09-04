@@ -2,6 +2,7 @@
 # License, v. 2.0. If a copy of the MPL was not distributed with this
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
 """ffpuppet profile manager"""
+from __future__ import annotations
 
 from json import load as json_load
 from logging import getLogger
@@ -10,7 +11,7 @@ from shutil import copyfile, copytree, rmtree
 from subprocess import STDOUT, CalledProcessError, check_output
 from tempfile import mkdtemp
 from time import time
-from typing import Any, Dict, List, Optional
+from typing import Any
 from xml.etree import ElementTree
 
 from .helpers import certutil_available, certutil_find, onerror
@@ -30,17 +31,17 @@ class Profile:
 
     def __init__(
         self,
-        browser_bin: Optional[Path] = None,
-        cert_files: Optional[List[Path]] = None,
-        extensions: Optional[List[Path]] = None,
-        prefs_file: Optional[Path] = None,
-        template: Optional[Path] = None,
-        working_path: Optional[str] = None,
+        browser_bin: Path | None = None,
+        cert_files: list[Path] | None = None,
+        extensions: list[Path] | None = None,
+        prefs_file: Path | None = None,
+        template: Path | None = None,
+        working_path: str | None = None,
     ) -> None:
         if cert_files and not certutil_available(certutil_find(browser_bin)):
             raise OSError("NSS certutil not found")
 
-        self.path: Optional[Path] = Path(mkdtemp(dir=working_path, prefix="ffprofile_"))
+        self.path: Path | None = Path(mkdtemp(dir=working_path, prefix="ffprofile_"))
         try:
             if template is not None:
                 self._copy_template(template)
@@ -57,7 +58,7 @@ class Profile:
                 rmtree(self.path, onerror=onerror)
             raise
 
-    def __enter__(self) -> "Profile":
+    def __enter__(self) -> Profile:
         return self
 
     def __exit__(self, *exc: Any) -> None:
@@ -73,7 +74,7 @@ class Profile:
         if not times_json.is_file():
             times_json.write_text(f'{{"created":{int(time()) * 1000}}}')
 
-    def _copy_extensions(self, extensions: List[Path]) -> None:
+    def _copy_extensions(self, extensions: list[Path]) -> None:
         assert self.path
         ext_path = self.path / "extensions"
         ext_path.mkdir(exist_ok=True)
@@ -164,7 +165,7 @@ class Profile:
             LOG.error(exc.output.decode().strip())
             raise RuntimeError("certutil error") from None
 
-    def add_prefs(self, prefs: Dict[str, str]) -> None:
+    def add_prefs(self, prefs: dict[str, str]) -> None:
         """Write or append preferences from prefs to prefs.js file in profile_path.
 
         Args:
@@ -206,7 +207,7 @@ class Profile:
         return not missing_prefs
 
     @property
-    def invalid_prefs(self) -> Optional[Path]:
+    def invalid_prefs(self) -> Path | None:
         """Path to Invalidprefs.js if it exists.
 
         Args:

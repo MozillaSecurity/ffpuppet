@@ -2,18 +2,20 @@
 # License, v. 2.0. If a copy of the MPL was not distributed with this
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
 """ffpuppet bootstrapper module"""
-
-# as of python 3.10 socket.timeout was made an alias of TimeoutError
-# pylint: disable=ungrouped-imports
-from socket import timeout as socket_timeout  # isort: skip
+from __future__ import annotations
 
 from logging import getLogger
 from select import select
 from socket import SO_REUSEADDR, SOL_SOCKET, socket
 from time import sleep, time
-from typing import Any, Callable, Optional
+from typing import Any, Callable
 
 from .exceptions import BrowserTerminatedError, BrowserTimeoutError, LaunchError
+
+# as of python 3.10 socket.timeout was made an alias of TimeoutError
+# pylint: disable=ungrouped-imports,wrong-import-order
+from socket import timeout as socket_timeout  # isort: skip
+
 
 LOG = getLogger(__name__)
 
@@ -55,7 +57,7 @@ class Bootstrapper:  # pylint: disable=missing-docstring
     def __init__(self, sock: socket) -> None:
         self._socket = sock
 
-    def __enter__(self) -> "Bootstrapper":
+    def __enter__(self) -> Bootstrapper:
         return self
 
     def __exit__(self, *exc: Any) -> None:
@@ -73,7 +75,7 @@ class Bootstrapper:  # pylint: disable=missing-docstring
         self._socket.close()
 
     @classmethod
-    def create(cls, attempts: int = 50, port: int = 0) -> "Bootstrapper":
+    def create(cls, attempts: int = 50, port: int = 0) -> Bootstrapper:
         """Create a Bootstrapper.
 
         Args:
@@ -135,7 +137,7 @@ class Bootstrapper:  # pylint: disable=missing-docstring
         self,
         cb_continue: Callable[[], bool],
         timeout: float = 60,
-        url: Optional[str] = None,
+        url: str | None = None,
     ) -> None:
         """Wait for browser connection, read request and send response.
 
@@ -150,7 +152,7 @@ class Bootstrapper:  # pylint: disable=missing-docstring
         assert timeout >= 0
         start_time = time()
         time_limit = start_time + timeout
-        conn: Optional[socket] = None
+        conn: socket | None = None
         try:
             LOG.debug("waiting for browser connection...")
             while conn is None:

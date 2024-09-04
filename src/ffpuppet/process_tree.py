@@ -2,6 +2,7 @@
 # License, v. 2.0. If a copy of the MPL was not distributed with this
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
 """ffpuppet process tree module"""
+from __future__ import annotations
 
 from logging import getLogger
 from os import getenv
@@ -9,12 +10,12 @@ from pathlib import Path
 from platform import system
 from subprocess import Popen
 from time import perf_counter, sleep
-from typing import Callable, Generator, Iterable, List, Optional, Tuple, cast
+from typing import Callable, Generator, Iterable, List, Tuple, cast
 
 try:
     from signal import SIGUSR1, Signals
 
-    COVERAGE_SIGNAL: Optional[Signals] = SIGUSR1
+    COVERAGE_SIGNAL: Signals | None = SIGUSR1
 except ImportError:
     COVERAGE_SIGNAL = None
 
@@ -25,7 +26,7 @@ from .exceptions import TerminateError
 LOG = getLogger(__name__)
 
 
-def _last_modified(scan_dir: Path) -> Optional[float]:
+def _last_modified(scan_dir: Path) -> float | None:
     """Scan directory recursively and find the latest modified date of all .gcda files.
 
     Args:
@@ -42,9 +43,9 @@ def _last_modified(scan_dir: Path) -> Optional[float]:
 
 def _safe_wait_procs(
     procs: Iterable[Process],
-    timeout: Optional[float] = 0,
-    callback: Optional[Callable[[Process], object]] = None,
-) -> Tuple[List[Process], List[Process]]:
+    timeout: float | None = 0,
+    callback: Callable[[Process], object] | None = None,
+) -> tuple[list[Process], list[Process]]:
     """Wrapper for psutil.wait_procs() to avoid AccessDenied.
     This can be an issue on Windows.
 
@@ -60,6 +61,7 @@ def _safe_wait_procs(
     while True:
         remaining = None if deadline is None else max(deadline - perf_counter(), 0)
         try:
+            # Python 3.8 is not compatible with __future__.annotations in cast()
             return cast(
                 Tuple[List[Process], List[Process]],
                 wait_procs(procs, timeout=remaining, callback=callback),
@@ -71,8 +73,8 @@ def _safe_wait_procs(
         sleep(0.25)
 
     # manually check processes
-    alive: List[Process] = []
-    gone: List[Process] = []
+    alive: list[Process] = []
+    gone: list[Process] = []
     for proc in procs:
         try:
             if not proc.is_running():
@@ -86,7 +88,7 @@ def _safe_wait_procs(
     return (gone, alive)
 
 
-def _writing_coverage(procs: List[Process]) -> bool:
+def _writing_coverage(procs: list[Process]) -> bool:
     """Check if any processes have open .gcda files.
 
     Args:
@@ -115,14 +117,14 @@ class ProcessTree:
 
     __slots__ = ("_launcher", "_launcher_check", "_proc", "parent")
 
-    def __init__(self, proc: "Popen[bytes]") -> None:
-        self._launcher: Optional[Process] = None
+    def __init__(self, proc: Popen[bytes]) -> None:
+        self._launcher: Process | None = None
         # only perform the launcher check on Windows
         self._launcher_check = system() == "Windows"
         self._proc = proc
         self.parent: Process = Process(proc.pid)
 
-    def cpu_usage(self) -> Generator[Tuple[int, float], None, None]:
+    def cpu_usage(self) -> Generator[tuple[int, float], None, None]:
         """Collect percentage of CPU usage per process.
 
         Note: the returned value can be > 100.0 in case of a process running multiple
@@ -228,7 +230,7 @@ class ProcessTree:
         return self._poll(self.parent) is None
 
     @property
-    def launcher(self) -> Optional[Process]:
+    def launcher(self) -> Process | None:
         """Inspect process tree and identity the browser launcher and parent processes.
 
         Args:
@@ -263,7 +265,7 @@ class ProcessTree:
         return self._launcher
 
     @staticmethod
-    def _poll(proc: Process) -> Optional[int]:
+    def _poll(proc: Process) -> int | None:
         """Poll a given process.
 
         Args:
@@ -280,7 +282,7 @@ class ProcessTree:
         except TimeoutExpired:
             return None
 
-    def processes(self, recursive: bool = False) -> List[Process]:
+    def processes(self, recursive: bool = False) -> list[Process]:
         """Processes in the process tree.
 
         Args:
@@ -289,7 +291,7 @@ class ProcessTree:
         Returns:
             Processes in the process tree.
         """
-        procs: List[Process] = []
+        procs: list[Process] = []
         if self.launcher is not None and self._poll(self.launcher) is None:
             procs.append(self.launcher)
         if self._poll(self.parent) is None:
@@ -368,7 +370,7 @@ class ProcessTree:
             exit_code = 0
         return exit_code
 
-    def wait_procs(self, timeout: Optional[float] = 0) -> int:
+    def wait_procs(self, timeout: float | None = 0) -> int:
         """Wait for process tree to exit.
 
         Args:

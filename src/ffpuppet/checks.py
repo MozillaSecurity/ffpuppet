@@ -2,11 +2,12 @@
 # License, v. 2.0. If a copy of the MPL was not distributed with this
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
 """ffpuppet checks module"""
+from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from os import SEEK_SET, stat
 from platform import system
-from typing import IO, Callable, Iterable, List, Optional, Pattern, Tuple
+from typing import IO, Callable, Iterable, Pattern
 
 from psutil import AccessDenied, NoSuchProcess, Process
 
@@ -28,15 +29,15 @@ class Check(ABC):
     Check base class
     """
 
-    name: Optional[str] = None
+    name: str | None = None
 
     __slots__ = ("message",)
 
     def __init__(self) -> None:
-        self.message: Optional[str] = None
+        self.message: str | None = None
 
     @abstractmethod
-    def check(self) -> Optional[bool]:
+    def check(self) -> bool:
         """
         Implement a check that returns True when the abort conditions are met.
         """
@@ -71,7 +72,7 @@ class CheckLogContents(Check):
         assert log_files, "log_files is empty"
         assert search_tokens, "search_tokens is empty"
         super().__init__()
-        self.logs: List[_LogContentsCheckState] = []
+        self.logs: list[_LogContentsCheckState] = []
         for log_file in log_files:
             self.logs.append(_LogContentsCheckState(log_file))
         self.tokens = search_tokens
@@ -157,7 +158,7 @@ class CheckMemoryUsage(Check):
     __slots__ = ("_get_procs", "_is_linux", "limit", "pid")
 
     def __init__(
-        self, pid: int, limit: int, get_procs_cb: Callable[[], List[Process]]
+        self, pid: int, limit: int, get_procs_cb: Callable[[], list[Process]]
     ) -> None:
         super().__init__()
         self._get_procs = get_procs_cb
@@ -176,7 +177,7 @@ class CheckMemoryUsage(Check):
             self.limit otherwise False.
         """
         largest_shared = 0
-        proc_info: List[Tuple[int, int]] = []
+        proc_info: list[tuple[int, int]] = []
         total_usage = 0
         for proc in self._get_procs():
             try:

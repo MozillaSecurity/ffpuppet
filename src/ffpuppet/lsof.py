@@ -2,10 +2,11 @@
 # License, v. 2.0. If a copy of the MPL was not distributed with this
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
 """Windows utility to map all open files on the system to process"""
+from __future__ import annotations
+
 import ctypes
 import ctypes.wintypes
 from pathlib import Path
-from typing import Dict, Optional, Set
 
 DUPLICATE_SAME_ACCESS = 2
 FILE_TYPE_DISK = 1
@@ -104,7 +105,7 @@ def nt_query_system_handle_information_ex() -> ctypes.Structure:
 
 def pid_handle_to_filename(
     pid: int, hnd: int, raise_for_error: bool = False
-) -> Optional[Path]:
+) -> Path | None:
     """Resolve a PID/Handle pair to a filesystem Path.
 
     Args:
@@ -172,7 +173,7 @@ def pid_handle_to_filename(
     return Path(ctypes.wstring_at(buf)[4:])  # always prefixed with \\?\
 
 
-def pids_by_file() -> Dict[Path, Set[int]]:
+def pids_by_file() -> dict[Path, set[int]]:
     """Create a mapping of open paths to the Processes that own the open file handles.
 
     Args:
@@ -182,7 +183,7 @@ def pids_by_file() -> Dict[Path, Set[int]]:
         dict mapping Path (the path of the open file) to a set of PIDs which have
         that path open.
     """
-    result: Dict[Path, Set[int]] = {}
+    result: dict[Path, set[int]] = {}
     for hnd in nt_query_system_handle_information_ex().Handles:
         fname = pid_handle_to_filename(hnd.UniqueProcessId, hnd.HandleValue)
         if fname is not None:
