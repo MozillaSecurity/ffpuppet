@@ -191,7 +191,7 @@ def certutil_find(browser_bin: Path | None = None) -> str:
     return CERTUTIL
 
 
-def files_in_use(files: Iterable[Path]) -> Generator[tuple[Path, int, str], None, None]:
+def files_in_use(files: Iterable[Path]) -> Generator[tuple[Path, int, str]]:
     """Check if any of the given files are open.
     WARNING: This can be slow on Windows.
 

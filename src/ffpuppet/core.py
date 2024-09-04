@@ -211,7 +211,7 @@ class FFPuppet:
 
     def _crashreports(
         self, skip_md: bool = False, skip_benign: bool = True
-    ) -> Generator[Path, None, None]:
+    ) -> Generator[Path]:
         """Collect crash logs/reports.
 
         Args:
@@ -587,7 +587,7 @@ class FFPuppet:
             LOG.debug("reason code: %s", r_code.name)
             self.reason = r_code
 
-    def cpu_usage(self) -> Generator[tuple[int, float], None, None]:
+    def cpu_usage(self) -> Generator[tuple[int, float]]:
         """Collect percentage of CPU usage per process.
 
         Args:

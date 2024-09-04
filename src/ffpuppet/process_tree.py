@@ -124,7 +124,7 @@ class ProcessTree:
         self._proc = proc
         self.parent: Process = Process(proc.pid)
 
-    def cpu_usage(self) -> Generator[tuple[int, float], None, None]:
+    def cpu_usage(self) -> Generator[tuple[int, float]]:
         """Collect percentage of CPU usage per process.
 
         Note: the returned value can be > 100.0 in case of a process running multiple
