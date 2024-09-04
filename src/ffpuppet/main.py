@@ -285,7 +285,12 @@ def parse_args(argv: list[str] | None = None) -> Namespace:
     return args
 
 
-def main(argv: list[str] | None = None) -> None:  # pylint: disable=missing-docstring
+def main(argv: list[str] | None = None) -> None:
+    """
+    FFPuppet main entry point
+
+    Run with --help for usage
+    """
     args = parse_args(argv)
     # set output verbosity
     if args.log_level == DEBUG:
