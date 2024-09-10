@@ -1,6 +1,8 @@
 #!/usr/bin/env python
 """fake browser tree"""
 
+from __future__ import annotations
+
 # NOTE: this must only use the standard library
 import signal
 from argparse import ArgumentParser, Namespace
@@ -11,7 +13,7 @@ from socket import AF_INET, SOCK_STREAM, socket
 from subprocess import Popen
 from sys import executable
 from time import perf_counter, sleep
-from typing import Any, Optional, Tuple
+from typing import Any
 
 LOG = getLogger(__name__)
 SHUTDOWN = False
@@ -28,7 +30,7 @@ def handle_signal(signum: int, _frame: Any) -> None:
 
 def main(args: Namespace) -> int:
     """Mock a Firefox browser process tree for testing purposes"""
-    child_procs: Optional[Tuple["Popen[bytes]", ...]] = None
+    child_procs: tuple[Popen[bytes], ...] | None = None
     start = perf_counter()
     try:
         pid = getpid()
