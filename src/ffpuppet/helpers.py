@@ -4,6 +4,7 @@
 """ffpuppet helper utilities"""
 from __future__ import annotations
 
+from contextlib import suppress
 from logging import getLogger
 from os import W_OK, access, chmod, environ
 from pathlib import Path
@@ -210,26 +211,22 @@ def files_in_use(files: Iterable[Path]) -> Generator[tuple[Path, int, str]]:
         if system() == "Windows":
             for open_file, pids in pids_by_file().items():
                 for check_file in files:
-                    try:
+                    # samefile() can raise if either file cannot be accessed
+                    # this is triggered on Windows if a file is missing
+                    with suppress(OSError):
                         if check_file.samefile(open_file):
                             for pid in pids:
                                 yield open_file, pid, Process(pid).name()
-                    except OSError:  # pragma: no cover
-                        # samefile() can raise if either file cannot be accessed
-                        # this is triggered on Windows if a file is missing
-                        pass
         else:
             for proc in process_iter(["pid", "name", "open_files"]):
                 if not proc.info["open_files"]:
                     continue
                 for open_file in (Path(x.path) for x in proc.info["open_files"]):
                     for check_file in files:
-                        try:
+                        # samefile() can raise if either file cannot be accessed
+                        with suppress(OSError):
                             if check_file.samefile(open_file):
                                 yield open_file, proc.info["pid"], proc.info["name"]
-                        except OSError:  # pragma: no cover
-                            # samefile() can raise if either file cannot be accessed
-                            pass
 
 
 def onerror(

@@ -3,6 +3,7 @@
 # You can obtain one at http://mozilla.org/MPL/2.0/.
 """ffpuppet helpers tests"""
 
+from contextlib import suppress
 from os import getpid
 from pathlib import Path
 from subprocess import CalledProcessError
@@ -29,10 +30,8 @@ def test_helpers_01(tmp_path):
     def parse(opt_str):
         opts = {}
         for entry in SanitizerOptions.re_delim.split(opt_str):
-            try:
+            with suppress(ValueError):
                 key, value = entry.split("=", maxsplit=1)
-            except ValueError:
-                pass
             opts[key] = value
         return opts
 

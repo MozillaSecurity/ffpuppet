@@ -11,7 +11,6 @@ from shutil import copyfile, copytree, rmtree
 from subprocess import STDOUT, CalledProcessError, check_output
 from tempfile import mkdtemp
 from time import time
-from typing import Any
 from xml.etree import ElementTree
 
 from .helpers import certutil_available, certutil_find, onerror
@@ -61,7 +60,7 @@ class Profile:
     def __enter__(self) -> Profile:
         return self
 
-    def __exit__(self, *exc: Any) -> None:
+    def __exit__(self, *exc: object) -> None:
         self.remove()
 
     def __str__(self) -> str:

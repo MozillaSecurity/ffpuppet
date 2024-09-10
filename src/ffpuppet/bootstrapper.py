@@ -8,7 +8,7 @@ from logging import getLogger
 from select import select
 from socket import SO_REUSEADDR, SOL_SOCKET, socket
 from time import sleep, time
-from typing import Any, Callable
+from typing import Callable
 
 from .exceptions import BrowserTerminatedError, BrowserTimeoutError, LaunchError
 
@@ -60,7 +60,7 @@ class Bootstrapper:  # pylint: disable=missing-docstring
     def __enter__(self) -> Bootstrapper:
         return self
 
-    def __exit__(self, *exc: Any) -> None:
+    def __exit__(self, *exc: object) -> None:
         self.close()
 
     def close(self) -> None:

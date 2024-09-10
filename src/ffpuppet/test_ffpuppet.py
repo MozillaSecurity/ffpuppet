@@ -453,7 +453,7 @@ def test_ffpuppet_19():
     """test running multiple instances in parallel"""
     # use test pool size of 10
     with HTTPTestServer() as srv:
-        ffp_instances = list(FFPuppet() for _ in range(10))
+        ffp_instances = [FFPuppet() for _ in range(10)]
         try:
             for ffp in ffp_instances:
                 # NOTE: launching truly in parallel can DoS the test webserver

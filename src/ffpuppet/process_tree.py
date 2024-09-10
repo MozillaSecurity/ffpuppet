@@ -4,13 +4,13 @@
 """ffpuppet process tree module"""
 from __future__ import annotations
 
+from contextlib import suppress
 from logging import getLogger
 from os import getenv
 from pathlib import Path
 from platform import system
-from subprocess import Popen
 from time import perf_counter, sleep
-from typing import Callable, Generator, Iterable, List, Tuple, cast
+from typing import TYPE_CHECKING, Callable, Generator, Iterable, List, Tuple, cast
 
 try:
     from signal import SIGUSR1, Signals
@@ -22,6 +22,9 @@ except ImportError:
 from psutil import AccessDenied, NoSuchProcess, Process, TimeoutExpired, wait_procs
 
 from .exceptions import TerminateError
+
+if TYPE_CHECKING:
+    from subprocess import Popen
 
 LOG = getLogger(__name__)
 
@@ -60,14 +63,12 @@ def _safe_wait_procs(
     deadline = None if timeout is None else perf_counter() + timeout
     while True:
         remaining = None if deadline is None else max(deadline - perf_counter(), 0)
-        try:
+        with suppress(AccessDenied):
             # Python 3.8 is not compatible with __future__.annotations in cast()
             return cast(
                 Tuple[List[Process], List[Process]],
                 wait_procs(procs, timeout=remaining, callback=callback),
             )
-        except AccessDenied:
-            pass
         if deadline is not None and deadline <= perf_counter():
             break
         sleep(0.25)
@@ -98,11 +99,9 @@ def _writing_coverage(procs: list[Process]) -> bool:
         True if processes with open .gcda files are found.
     """
     for proc in procs:
-        try:
+        with suppress(AccessDenied, NoSuchProcess):
             if any(x for x in proc.open_files() if x.path.endswith(".gcda")):
                 return True
-        except (AccessDenied, NoSuchProcess):  # pragma: no cover
-            pass
     return False
 
 
@@ -176,11 +175,9 @@ class ProcessTree:
         signaled = 0
         # send COVERAGE_SIGNAL (SIGUSR1) to browser processes
         for proc in self.processes():
-            try:
+            with suppress(AccessDenied, NoSuchProcess):
                 proc.send_signal(COVERAGE_SIGNAL)
                 signaled += 1
-            except (AccessDenied, NoSuchProcess):  # pragma: no cover
-                pass
         # no processes signaled
         if signaled == 0:
             LOG.debug("coverage signal not sent, no browser processes found")
@@ -296,10 +293,8 @@ class ProcessTree:
             procs.append(self.launcher)
         if self._poll(self.parent) is None:
             procs.append(self.parent)
-        try:
+        with suppress(AccessDenied, NoSuchProcess):
             procs.extend(self.parent.children(recursive=recursive))
-        except (AccessDenied, NoSuchProcess):  # pragma: no cover
-            pass
         return procs
 
     def terminate(self) -> None:
@@ -318,12 +313,10 @@ class ProcessTree:
 
         # try terminating the parent process first, this should be all that is needed
         if self._poll(self.parent) is None:
-            try:
+            with suppress(AccessDenied, NoSuchProcess, TimeoutExpired):
                 LOG.debug("attempting to terminate parent (%d)", self.parent.pid)
                 self.parent.terminate()
                 self.parent.wait(timeout=10)
-            except (AccessDenied, NoSuchProcess, TimeoutExpired):  # pragma: no cover
-                pass
             procs = _safe_wait_procs(procs, timeout=0)[1]
 
         use_kill = False
@@ -335,10 +328,11 @@ class ProcessTree:
             )
             # iterate over processes and call terminate()/kill()
             for proc in procs:
-                try:
-                    proc.kill() if use_kill else proc.terminate()
-                except (AccessDenied, NoSuchProcess):  # pragma: no cover
-                    pass
+                with suppress(AccessDenied, NoSuchProcess):
+                    if use_kill:
+                        proc.kill()
+                    else:
+                        proc.terminate()
             # wait for processes to terminate
             procs = _safe_wait_procs(procs, timeout=30)[1]
             if use_kill:
@@ -348,10 +342,8 @@ class ProcessTree:
         if procs:
             LOG.warning("Processes still running: %d", len(procs))
             for proc in procs:
-                try:
+                with suppress(AccessDenied, NoSuchProcess):
                     LOG.warning("-> %d: %s (%s)", proc.pid, proc.name(), proc.status())
-                except (AccessDenied, NoSuchProcess):  # pragma: no cover
-                    pass
             raise TerminateError("Failed to terminate processes")
 
     def wait(self, timeout: int = 300) -> int:

@@ -38,7 +38,7 @@ class MinidumpParser:
     def __enter__(self) -> MinidumpParser:
         return self
 
-    def __exit__(self, *exc: Any) -> None:
+    def __exit__(self, *exc: object) -> None:
         self.close()
 
     def _cmd(self, src: Path) -> list[str]:
