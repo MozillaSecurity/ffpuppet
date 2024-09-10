@@ -39,7 +39,7 @@ def dump_to_console(log_dir: Path, log_quota: int = 0x8000) -> str:
         Merged log data to be displayed on the console.
     """
 
-    logs = list(x for x in log_dir.iterdir() if x.is_file())
+    logs = [x for x in log_dir.iterdir() if x.is_file()]
     if not logs:
         return ""
     # display stdout and stderr last to avoid the need to scroll back

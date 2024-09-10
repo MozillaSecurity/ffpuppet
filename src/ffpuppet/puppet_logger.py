@@ -4,6 +4,7 @@
 """browser and debugger log management"""
 from __future__ import annotations
 
+from contextlib import suppress
 from logging import getLogger
 from mmap import ACCESS_READ, mmap
 from os import getpid, stat
@@ -12,7 +13,7 @@ from pathlib import Path
 from shutil import copy2, copyfileobj, copytree, rmtree
 from subprocess import STDOUT, CalledProcessError, check_output
 from tempfile import NamedTemporaryFile, mkdtemp
-from typing import IO, Any, Iterator, KeysView
+from typing import IO, Iterator, KeysView
 
 from .helpers import onerror, warn_open
 
@@ -44,7 +45,7 @@ class PuppetLogger:  # pylint: disable=missing-docstring
     def __enter__(self) -> PuppetLogger:
         return self
 
-    def __exit__(self, *exc: Any) -> None:
+    def __exit__(self, *exc: object) -> None:
         self.clean_up()
 
     def add_log(self, log_id: str, logfp: IO[bytes] | None = None) -> IO[bytes]:
@@ -275,15 +276,13 @@ class PuppetLogger:  # pylint: disable=missing-docstring
             rr_trace = self.path / self.PATH_RR / "latest-trace"
             if rr_trace.is_dir():
                 # check logs for rr related issues
-                try:
+                # OSError: in case the file does not exist
+                # ValueError: cannot mmap an empty file on Windows
+                with suppress(OSError, ValueError):
                     with (dest / "log_stderr.txt").open("rb") as lfp:
                         with mmap(lfp.fileno(), 0, access=ACCESS_READ) as lmm:
                             if lmm.find(b"=== Start rr backtrace:") != -1:
                                 LOG.warning("rr traceback detected in stderr log")
-                except (OSError, ValueError):  # pragma: no cover
-                    # OSError: in case the file does not exist
-                    # ValueError: cannot mmap an empty file on Windows
-                    pass
                 if rr_pack and not self._rr_packed:
                     LOG.debug("packing rr trace")
                     try:

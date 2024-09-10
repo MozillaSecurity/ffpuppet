@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+from contextlib import suppress
 from enum import IntEnum, unique
 from logging import getLogger
 from os import X_OK, access, getenv
@@ -17,21 +18,17 @@ from re import match as re_match
 from shutil import copyfileobj
 from subprocess import Popen, check_output
 from sys import executable
-from typing import Any, Generator, Pattern
+from typing import Generator, Pattern
 from urllib.request import pathname2url
 
-try:
+with suppress(ImportError):
     # pylint: disable=ungrouped-imports
     from subprocess import CREATE_NEW_PROCESS_GROUP  # type: ignore[attr-defined]
 
     CREATE_SUSPENDED = 0x00000004
-except ImportError:
-    pass
 
-try:
+with suppress(ImportError):
     from xvfbwrapper import Xvfb
-except ImportError:
-    pass
 
 from .bootstrapper import Bootstrapper
 from .checks import CheckLogContents, CheckLogSize, CheckMemoryUsage
@@ -156,7 +153,7 @@ class FFPuppet:
     def __enter__(self) -> FFPuppet:
         return self
 
-    def __exit__(self, *exc: Any) -> None:
+    def __exit__(self, *exc: object) -> None:
         self.clean_up()
 
     def _benign_sanitizer_report(self, report: Path) -> bool:
@@ -610,10 +607,9 @@ class FFPuppet:
         """
         if system() != "Linux":  # pragma: no cover
             raise NotImplementedError("dump_coverage() is not available")
-        if self._proc_tree is not None:
-            if not self._proc_tree.dump_coverage(timeout=timeout):
-                LOG.warning("Timeout writing coverage data")
-                self.close()
+        if self._proc_tree and not self._proc_tree.dump_coverage(timeout=timeout):
+            LOG.warning("Timeout writing coverage data")
+            self.close()
 
     def get_pid(self) -> int | None:
         """Get the browser parent process ID.
@@ -917,8 +913,7 @@ class FFPuppet:
             True if processes exit before timeout expires otherwise False.
         """
         assert timeout is None or timeout >= 0
-        if self._proc_tree:
-            if self._proc_tree.wait_procs(timeout=timeout) > 0:
-                LOG.debug("wait(timeout=%0.2f) timed out", timeout)
-                return False
+        if self._proc_tree and self._proc_tree.wait_procs(timeout=timeout) > 0:
+            LOG.debug("wait(timeout=%0.2f) timed out", timeout)
+            return False
         return True
