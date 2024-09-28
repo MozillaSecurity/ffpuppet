@@ -15,7 +15,7 @@ from platform import system
 from re import IGNORECASE
 from re import compile as re_compile
 from re import match as re_match
-from shutil import copyfileobj
+from shutil import copy, copyfileobj
 from subprocess import Popen, check_output
 from sys import executable
 from typing import Generator, Pattern
@@ -547,6 +547,11 @@ class FFPuppet:
                     MDSW_URL,
                 )
             elif dmp_files:
+                if getenv("SAVE_DMP") == "1":
+                    # save minidump directory contents (.dmp and .extra files)
+                    dmps = self._logs.add_path("minidumps")
+                    for md_file in (self.profile.path / "minidumps").glob("*"):
+                        copy(md_file, dmps)
                 # check for local build symbols
                 if (self._bin_path.parent / "crashreporter-symbols").is_dir():
                     sym_path = self._bin_path.parent / "crashreporter-symbols"
