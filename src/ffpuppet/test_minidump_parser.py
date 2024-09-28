@@ -273,3 +273,19 @@ def test_minidump_parser_05(mocker, call_result, mdsw_bin, result):
     mocker.patch("ffpuppet.minidump_parser.run", side_effect=call_result)
     mocker.patch.object(MinidumpParser, "MDSW_BIN", mdsw_bin)
     assert MinidumpParser.mdsw_available(min_version="0.15.2") == result
+
+
+def test_minidump_parser_06(tmp_path):
+    """test MinidumpParser.dmp_files()"""
+    # empty minidump path
+    assert not MinidumpParser.dmp_files(tmp_path)
+    # find single dump file
+    (tmp_path / "a.dmp").write_text("a")
+    assert tmp_path / "a.dmp" in MinidumpParser.dmp_files(tmp_path)
+    # find multiple dump files
+    (tmp_path / "b.dmp").write_text("b")
+    (tmp_path / "c.dmp").write_text("c")
+    assert len(MinidumpParser.dmp_files(tmp_path)) == 3
+    # add .extra file to prioritize .dmp file
+    (tmp_path / "b.extra").write_text('{"MozCrashReason":"foo"}')
+    assert MinidumpParser.dmp_files(tmp_path)[0] == (tmp_path / "b.dmp")

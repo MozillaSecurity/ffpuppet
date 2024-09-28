@@ -535,12 +535,7 @@ class FFPuppet:
             assert self.profile is not None
             assert self.profile.path is not None
             assert self._bin_path is not None
-            # check for minidumps and order by last modified date
-            # hopefully the oldest log is the cause of the issue
-            dmp_files = sorted(
-                (self.profile.path / "minidumps").glob("*.dmp"),
-                key=lambda x: x.stat().st_mtime,
-            )
+            dmp_files = MinidumpParser.dmp_files(self.profile.path / "minidumps")
             if dmp_files and not MinidumpParser.mdsw_available():
                 LOG.error(
                     "Unable to process minidump, minidump-stackwalk is required. %s",

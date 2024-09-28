@@ -196,6 +196,32 @@ class MinidumpParser:
                         log_fp.write(out_fp.read())
         return dst
 
+    @staticmethod
+    def dmp_files(src_dir: Path) -> list[Path]:
+        """Scan a directory for minidump (.dmp) files. Prioritize files that also have
+        a MozCrashReason entry in the supporting .extra file.
+
+        Args:
+            src_dir: Directory containing minidump files.
+
+        Returns:
+            Dump files.
+        """
+        dmps: list[Path] = []
+        for dmp in sorted(src_dir.glob("*.dmp"), key=lambda x: x.stat().st_mtime):
+            try:
+                # check .extra file for MozCrashReason entry
+                with dmp.with_suffix(".extra").open() as out_fp:
+                    has_reason = load(out_fp).get("MozCrashReason") is not None
+            except (FileNotFoundError, JSONDecodeError):
+                has_reason = False
+            # prioritize dmp with MozCrashReason
+            if has_reason:
+                dmps.insert(0, dmp)
+            else:
+                dmps.append(dmp)
+        return dmps
+
     @classmethod
     def mdsw_available(cls, min_version: str = "0.15.2") -> bool:
         """Check if minidump-stackwalk binary is available.
