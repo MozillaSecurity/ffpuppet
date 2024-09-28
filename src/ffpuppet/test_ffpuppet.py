@@ -24,6 +24,7 @@ from .exceptions import (
     BrowserTimeoutError,
     LaunchError,
 )
+from .minidump_parser import MinidumpParser
 from .profile import Profile
 
 Bootstrapper.POLL_WAIT = 0.2
@@ -557,11 +558,9 @@ def test_ffpuppet_22(mocker, tmp_path, mdsw_available):
         (dst / filename).write_text(src.read_text())
         return dst / filename
 
-    md_parser = mocker.patch("ffpuppet.core.MinidumpParser")
-    md_parser.mdsw_available.return_value = mdsw_available
-    md_parser.return_value.__enter__.return_value.create_log.side_effect = (
-        _fake_create_log
-    )
+    mocker.patch("ffpuppet.core.getenv", return_value="1")
+    mocker.patch.object(MinidumpParser, "mdsw_available", return_value=mdsw_available)
+    mocker.patch.object(MinidumpParser, "create_log", side_effect=_fake_create_log)
     profile = tmp_path / "profile"
     profile.mkdir()
     (profile / "minidumps").mkdir()
@@ -580,14 +579,14 @@ def test_ffpuppet_22(mocker, tmp_path, mdsw_available):
         ffp.close()
         logs = tmp_path / "logs"
         ffp.save_logs(logs)
-        assert md_parser.mdsw_available.call_count == 1
         if mdsw_available:
-            assert md_parser.call_count == 1
             assert any(logs.glob("log_minidump_00.txt"))
             assert any(logs.glob("log_minidump_01.txt"))
             assert any(logs.glob("log_minidump_02.txt"))
+            assert (logs / "minidumps").is_dir()
+            assert len(tuple((logs / "minidumps").glob("*"))) == 3
         else:
-            assert md_parser.call_count == 0
+            assert not any(logs.glob("log_minidump_*"))
 
 
 def test_ffpuppet_23(tmp_path):
