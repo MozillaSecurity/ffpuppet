@@ -168,32 +168,34 @@ class MinidumpParser:
         cmd = self._cmd(src)
         dst = self._storage / filename
         # using nested with statements for python 3.8 support
-        with TemporaryFile(dir=self._storage, prefix="mdsw_out_") as out_fp:
-            with TemporaryFile(dir=self._storage, prefix="mdsw_err_") as err_fp:
-                LOG.debug("running %r", " ".join(cmd))
-                try:
-                    run(cmd, check=True, stderr=err_fp, stdout=out_fp, timeout=timeout)
-                    out_fp.seek(0)
-                    # load json, format data and write log
-                    with dst.open("wb") as log_fp:
-                        self._fmt_output(load(out_fp), log_fp)
-                except (CalledProcessError, JSONDecodeError, TimeoutExpired) as exc:
-                    if isinstance(exc, CalledProcessError):
-                        msg = f"minidump-stackwalk failed ({exc.returncode})"
-                    elif isinstance(exc, JSONDecodeError):
-                        msg = "json decode error"
-                    else:
-                        msg = "minidump-stackwalk timeout"
-                    LOG.warning("Failed to parse minidump: %s", msg)
-                    err_fp.seek(0)
-                    out_fp.seek(0)
-                    # write log
-                    with dst.open("wb") as log_fp:
-                        log_fp.write(f"Failed to parse minidump: {msg}".encode())
-                        log_fp.write(b"\n\nminidump-stackwalk stderr:\n")
-                        log_fp.write(err_fp.read())
-                        log_fp.write(b"\n\nminidump-stackwalk stdout:\n")
-                        log_fp.write(out_fp.read())
+        with (
+            TemporaryFile(dir=self._storage, prefix="mdsw_out_") as out_fp,
+            TemporaryFile(dir=self._storage, prefix="mdsw_err_") as err_fp,
+        ):
+            LOG.debug("running %r", " ".join(cmd))
+            try:
+                run(cmd, check=True, stderr=err_fp, stdout=out_fp, timeout=timeout)
+                out_fp.seek(0)
+                # load json, format data and write log
+                with dst.open("wb") as log_fp:
+                    self._fmt_output(load(out_fp), log_fp)
+            except (CalledProcessError, JSONDecodeError, TimeoutExpired) as exc:
+                if isinstance(exc, CalledProcessError):
+                    msg = f"minidump-stackwalk failed ({exc.returncode})"
+                elif isinstance(exc, JSONDecodeError):
+                    msg = "json decode error"
+                else:
+                    msg = "minidump-stackwalk timeout"
+                LOG.warning("Failed to parse minidump: %s", msg)
+                err_fp.seek(0)
+                out_fp.seek(0)
+                # write log
+                with dst.open("wb") as log_fp:
+                    log_fp.write(f"Failed to parse minidump: {msg}".encode())
+                    log_fp.write(b"\n\nminidump-stackwalk stderr:\n")
+                    log_fp.write(err_fp.read())
+                    log_fp.write(b"\n\nminidump-stackwalk stdout:\n")
+                    log_fp.write(out_fp.read())
         return dst
 
     @staticmethod

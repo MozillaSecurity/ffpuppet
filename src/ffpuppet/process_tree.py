@@ -10,7 +10,7 @@ from os import getenv
 from pathlib import Path
 from platform import system
 from time import perf_counter, sleep
-from typing import TYPE_CHECKING, Callable, Generator, Iterable, List, Tuple, cast
+from typing import TYPE_CHECKING, Callable, cast
 
 try:
     from signal import SIGUSR1, Signals
@@ -24,6 +24,7 @@ from psutil import AccessDenied, NoSuchProcess, Process, TimeoutExpired, wait_pr
 from .exceptions import TerminateError
 
 if TYPE_CHECKING:
+    from collections.abc import Generator, Iterable
     from subprocess import Popen
 
 LOG = getLogger(__name__)
@@ -64,9 +65,8 @@ def _safe_wait_procs(
     while True:
         remaining = None if deadline is None else max(deadline - perf_counter(), 0)
         with suppress(AccessDenied):
-            # Python 3.8 is not compatible with __future__.annotations in cast()
             return cast(
-                Tuple[List[Process], List[Process]],
+                tuple[list[Process], list[Process]],
                 wait_procs(procs, timeout=remaining, callback=callback),
             )
         if deadline is not None and deadline <= perf_counter():

@@ -7,7 +7,10 @@ from __future__ import annotations
 from logging import getLogger
 from os.path import exists
 from re import compile as re_compile
-from typing import Iterator
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from collections.abc import Iterator
 
 LOG = getLogger(__name__)
 
