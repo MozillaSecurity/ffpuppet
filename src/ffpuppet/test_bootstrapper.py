@@ -111,9 +111,11 @@ def test_bootstrapper_05(mocker):
     fake_conn.recv.return_value = "foo"
     fake_sock.accept.return_value = (fake_conn, None)
     mocker.patch("ffpuppet.bootstrapper.select", return_value=([fake_sock], None, None))
-    with Bootstrapper(fake_sock) as bts:
-        with raises(BrowserTerminatedError, match="Failure during browser startup"):
-            bts.wait(lambda: False)
+    with (
+        Bootstrapper(fake_sock) as bts,
+        raises(BrowserTerminatedError, match="Failure during browser startup"),
+    ):
+        bts.wait(lambda: False)
     assert fake_conn.close.call_count == 1
 
 
@@ -197,9 +199,8 @@ def test_bootstrapper_08(mocker, bind, attempts, raised):
     fake_sock.bind.side_effect = bind
     mocker.patch("ffpuppet.bootstrapper.select", return_value=([fake_sock], None, None))
     mocker.patch("ffpuppet.bootstrapper.socket", return_value=fake_sock)
-    with raises(raised):
-        with Bootstrapper.create(attempts=attempts):
-            pass
+    with raises(raised), Bootstrapper.create(attempts=attempts):
+        pass
     assert fake_sock.bind.call_count == attempts
     assert fake_sock.close.call_count == attempts
 

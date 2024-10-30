@@ -13,9 +13,12 @@ from pathlib import Path
 from shutil import copy2, copyfileobj, copytree, rmtree
 from subprocess import STDOUT, CalledProcessError, check_output
 from tempfile import NamedTemporaryFile, mkdtemp
-from typing import IO, Iterator, KeysView
+from typing import IO, TYPE_CHECKING
 
 from .helpers import onerror, warn_open
+
+if TYPE_CHECKING:
+    from collections.abc import Iterator, KeysView
 
 LOG = getLogger(__name__)
 
@@ -278,11 +281,13 @@ class PuppetLogger:  # pylint: disable=missing-docstring
                 # check logs for rr related issues
                 # OSError: in case the file does not exist
                 # ValueError: cannot mmap an empty file on Windows
-                with suppress(OSError, ValueError):
-                    with (dest / "log_stderr.txt").open("rb") as lfp:
-                        with mmap(lfp.fileno(), 0, access=ACCESS_READ) as lmm:
-                            if lmm.find(b"=== Start rr backtrace:") != -1:
-                                LOG.warning("rr traceback detected in stderr log")
+                with (
+                    suppress(OSError, ValueError),
+                    (dest / "log_stderr.txt").open("rb") as lfp,
+                    mmap(lfp.fileno(), 0, access=ACCESS_READ) as lmm,
+                ):
+                    if lmm.find(b"=== Start rr backtrace:") != -1:
+                        LOG.warning("rr traceback detected in stderr log")
                 if rr_pack and not self._rr_packed:
                     LOG.debug("packing rr trace")
                     try:

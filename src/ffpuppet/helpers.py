@@ -12,11 +12,14 @@ from platform import system
 from stat import S_IWUSR
 from subprocess import STDOUT, CalledProcessError, check_output
 from time import sleep, time
-from typing import Any, Callable, Generator, Iterable
+from typing import TYPE_CHECKING, Any, Callable
 
 from psutil import Process, process_iter
 
 from .sanitizer_util import SanitizerOptions
+
+if TYPE_CHECKING:
+    from collections.abc import Generator, Iterable
 
 if system() == "Windows":
     from .lsof import pids_by_file

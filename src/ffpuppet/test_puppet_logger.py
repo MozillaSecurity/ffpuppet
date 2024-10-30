@@ -221,11 +221,13 @@ def test_puppet_logger_07(mocker, tmp_path):
 
 def test_puppet_logger_08(tmp_path):
     """test PuppetLogger.add_log() with file not on disk"""
-    with PuppetLogger(base_path=str(tmp_path)) as plog:
-        with SpooledTemporaryFile(max_size=2048) as log_fp:
-            plog.add_log("test", logfp=log_fp)
-            with raises(OSError, match="log file None does not exist"):
-                plog.get_fp("test")
+    with (
+        PuppetLogger(base_path=str(tmp_path)) as plog,
+        SpooledTemporaryFile(max_size=2048) as log_fp,
+    ):
+        plog.add_log("test", logfp=log_fp)
+        with raises(OSError, match="log file None does not exist"):
+            plog.get_fp("test")
 
 
 def test_puppet_logger_09(mocker, tmp_path):

@@ -204,9 +204,11 @@ def test_profile_06(mocker, tmp_path):
     mocker.patch("ffpuppet.profile.rmtree", autospec=True, side_effect=OSError("test"))
     with Profile(working_path=str(tmp_path)) as profile:
         profile.remove(ignore_errors=True)
-    with Profile(working_path=str(tmp_path)) as profile:
-        with raises(OSError, match="test"):
-            profile.remove(ignore_errors=False)
+    with (
+        Profile(working_path=str(tmp_path)) as profile,
+        raises(OSError, match="test"),
+    ):
+        profile.remove(ignore_errors=False)
 
 
 def test_profile_07(mocker, tmp_path):

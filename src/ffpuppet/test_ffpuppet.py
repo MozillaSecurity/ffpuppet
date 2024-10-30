@@ -79,9 +79,8 @@ class HTTPTestServer:
 @mark.skipif(system() == "Windows", reason="Unsupported on Windows")
 def test_ffpuppet_00(tmp_path):
     """test that invalid executables raise the right exception"""
-    with FFPuppet() as ffp:
-        with raises(OSError, match="is not an executable"):
-            ffp.launch(tmp_path)
+    with FFPuppet() as ffp, raises(OSError, match="is not an executable"):
+        ffp.launch(tmp_path)
 
 
 def test_ffpuppet_01():
@@ -415,21 +414,22 @@ def test_ffpuppet_15(mocker, tmp_path, debugger, dbg_bin, version):
 
 def test_ffpuppet_16(tmp_path):
     """test calling save_logs() before close()"""
-    with FFPuppet() as ffp:
-        with HTTPTestServer() as srv:
-            ffp.launch(TESTFF_BIN, location=srv.get_addr())
-            with raises(AssertionError):
-                ffp.save_logs(tmp_path / "logs")
+    with FFPuppet() as ffp, HTTPTestServer() as srv:
+        ffp.launch(TESTFF_BIN, location=srv.get_addr())
+        with raises(AssertionError):
+            ffp.save_logs(tmp_path / "logs")
 
 
 def test_ffpuppet_17(tmp_path):
     """test detecting invalid prefs file"""
     prefs = tmp_path / "prefs.js"
     prefs.write_bytes(b"//fftest_invalid_js\n")
-    with FFPuppet() as ffp:
-        with HTTPTestServer() as srv:
-            with raises(LaunchError, match="'.+?' is invalid"):
-                ffp.launch(TESTFF_BIN, location=srv.get_addr(), prefs_js=prefs)
+    with (
+        FFPuppet() as ffp,
+        HTTPTestServer() as srv,
+        raises(LaunchError, match="'.+?' is invalid"),
+    ):
+        ffp.launch(TESTFF_BIN, location=srv.get_addr(), prefs_js=prefs)
 
 
 def test_ffpuppet_18():

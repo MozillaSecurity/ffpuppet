@@ -12,13 +12,12 @@ from os import X_OK, access, getenv
 from os.path import isfile, realpath
 from pathlib import Path
 from platform import system
-from re import IGNORECASE
+from re import IGNORECASE, Pattern
 from re import compile as re_compile
 from re import match as re_match
 from shutil import copy, copyfileobj
 from subprocess import Popen, check_output
 from sys import executable
-from typing import Generator, Pattern
 from urllib.request import pathname2url
 
 with suppress(ImportError):
@@ -30,6 +29,8 @@ with suppress(ImportError):
 with suppress(ImportError):
     from xvfbwrapper import Xvfb
 
+from typing import TYPE_CHECKING
+
 from .bootstrapper import Bootstrapper
 from .checks import CheckLogContents, CheckLogSize, CheckMemoryUsage
 from .exceptions import BrowserExecutionError, InvalidPrefs, LaunchError
@@ -38,6 +39,9 @@ from .minidump_parser import MDSW_URL, MinidumpParser
 from .process_tree import ProcessTree
 from .profile import Profile
 from .puppet_logger import PuppetLogger
+
+if TYPE_CHECKING:
+    from collections.abc import Generator
 
 if system() == "Windows":
     # config_job_object is only available on Windows
