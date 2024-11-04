@@ -167,7 +167,6 @@ class MinidumpParser:
         assert timeout >= 0
         cmd = self._cmd(src)
         dst = self._storage / filename
-        # using nested with statements for python 3.8 support
         with (
             TemporaryFile(dir=self._storage, prefix="mdsw_out_") as out_fp,
             TemporaryFile(dir=self._storage, prefix="mdsw_err_") as err_fp,
