@@ -347,7 +347,12 @@ class FFPuppet:
                 "--smc-check=all-non-file",
                 "--trace-children=yes",
                 "--trace-children-skip=python*,*/lsb_release",
-                "--track-origins=no",
+                # track-origins=no is much faster and best used to discover issues
+                (
+                    "--track-origins=yes"
+                    if getenv("VALGRIND_TRACK_ORIGINS") == "1"
+                    else "--track-origins=no"
+                ),
                 "--vex-iropt-register-updates=allregs-at-mem-access",
                 "--vgdb=no",
             ]
