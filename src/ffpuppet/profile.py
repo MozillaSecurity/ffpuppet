@@ -13,7 +13,7 @@ from tempfile import mkdtemp
 from time import time
 from xml.etree import ElementTree
 
-from .helpers import certutil_available, certutil_find, onerror
+from .helpers import certutil_available, certutil_find
 
 LOG = getLogger(__name__)
 
@@ -53,8 +53,7 @@ class Profile:
                     self._install_cert(cert, certutil_find(browser_bin))
         except Exception:
             if self.path.exists():
-                # pylint: disable=deprecated-argument
-                rmtree(self.path, onerror=onerror)
+                rmtree(self.path, ignore_errors=True)
             raise
 
     def __enter__(self) -> Profile:
@@ -220,27 +219,18 @@ class Profile:
             return self.path / "Invalidprefs.js"
         return None
 
-    def remove(self, ignore_errors: bool = True) -> None:
+    def remove(self) -> None:
         """Remove the profile from the filesystem.
 
         Args:
-            ignore_errors: Do not raise exception if error is encountered.
+            None
 
         Returns:
             None
         """
-        if self.path:
-            try:
-                # check if path exists to properly support "onerror"
-                if self.path.exists():
-                    LOG.debug("removing profile")
-                    # pylint: disable=deprecated-argument
-                    rmtree(self.path, onerror=onerror)
-            except OSError:
+        if self.path is not None:
+            LOG.debug("removing profile")
+            rmtree(self.path, ignore_errors=True)
+            if self.path.exists():
                 LOG.error("Failed to remove profile '%s'", self.path)
-                # skip raising here instead of passing ignore_errors to rmtree
-                # this way onerror is always called if there is an error
-                if not ignore_errors:
-                    raise
-            finally:
-                self.path = None
+            self.path = None

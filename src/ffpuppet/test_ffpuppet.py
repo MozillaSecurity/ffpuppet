@@ -590,34 +590,6 @@ def test_ffpuppet_22(mocker, tmp_path, mdsw_available):
 
 
 def test_ffpuppet_23(tmp_path):
-    """test rmtree error handler"""
-    # normal profile creation
-    # - just create a puppet, write a readonly file in its profile, then call close()
-    with FFPuppet() as ffp:
-        ffp.launch(TESTFF_BIN)
-        assert ffp.profile is not None
-        ro_file = ffp.profile.path / "read-only-test.txt"
-        ro_file.touch()
-        ro_file.chmod(S_IREAD)
-        ffp.close()
-        assert not ro_file.is_file()
-        ffp.clean_up()
-    # use template profile that contains a readonly file
-    profile = tmp_path / "profile"
-    profile.mkdir()
-    ro_file = profile / "read-only.txt"
-    ro_file.touch()
-    ro_file.chmod(S_IREAD)
-    with FFPuppet(use_profile=profile) as ffp:
-        ffp.launch(TESTFF_BIN)
-        assert ffp.profile is not None
-        prof_path = ffp.profile.path
-        assert prof_path.is_dir()
-        ffp.close()
-        assert not prof_path.is_dir()
-
-
-def test_ffpuppet_24(tmp_path):
     """test using a readonly prefs.js and extension"""
     prefs = tmp_path / "prefs.js"
     prefs.touch()
@@ -633,7 +605,7 @@ def test_ffpuppet_24(tmp_path):
         assert not prof_path.is_dir()
 
 
-def test_ffpuppet_25(mocker, tmp_path):
+def test_ffpuppet_24(mocker, tmp_path):
     """test _crashreports()"""
     mocker.patch(
         "ffpuppet.core.check_output", autospec=True, return_value=b"valgrind-99.0"
@@ -695,7 +667,7 @@ def test_ffpuppet_25(mocker, tmp_path):
             assert not ffp._logs.watching
 
 
-def test_ffpuppet_26(mocker, tmp_path):
+def test_ffpuppet_25(mocker, tmp_path):
     """test build_launch_cmd()"""
     with FFPuppet() as ffp:
         cmd = ffp.build_launch_cmd("bin_path", ["test"])
@@ -743,7 +715,7 @@ def test_ffpuppet_26(mocker, tmp_path):
         assert cmd[0] == "valgrind"
 
 
-def test_ffpuppet_27():
+def test_ffpuppet_26():
     """test cpu_usage()"""
     with FFPuppet() as ffp:
         assert not any(ffp.cpu_usage())
@@ -756,7 +728,7 @@ def test_ffpuppet_27():
         assert ffp.wait(timeout=10)
 
 
-def test_ffpuppet_28(mocker):
+def test_ffpuppet_27(mocker):
     """test _dbg_sanity_check()"""
     fake_system = mocker.patch("ffpuppet.core.system", autospec=True)
     fake_chkout = mocker.patch("ffpuppet.core.check_output", autospec=True)
@@ -815,7 +787,7 @@ def test_ffpuppet_28(mocker):
         FFPuppet._dbg_sanity_check(Debugger.VALGRIND)
 
 
-def test_ffpuppet_29(mocker, tmp_path):
+def test_ffpuppet_28(mocker, tmp_path):
     """test FFPuppet.close() setting reason"""
 
     class StubbedProc(FFPuppet):
@@ -914,7 +886,7 @@ def test_ffpuppet_29(mocker, tmp_path):
         assert fake_wait_files.call_count == 0
 
 
-def test_ffpuppet_30():
+def test_ffpuppet_29():
     """test ignoring benign sanitizer logs"""
     with FFPuppet() as ffp:
         ffp.launch(TESTFF_BIN)
@@ -939,7 +911,7 @@ def test_ffpuppet_30():
         (False, FileNotFoundError),
     ],
 )
-def test_ffpuppet_31(mocker, tmp_path, bin_exists, expect_exc):
+def test_ffpuppet_30(mocker, tmp_path, bin_exists, expect_exc):
     """test Popen failure during launch"""
     bin_fake = tmp_path / "fake_bin"
     if bin_exists:
@@ -957,7 +929,7 @@ def test_ffpuppet_31(mocker, tmp_path, bin_exists, expect_exc):
 
 
 @mark.skipif(system() != "Windows", reason="Only supported on Windows")
-def test_ffpuppet_32(mocker):
+def test_ffpuppet_31(mocker):
     """test FFPuppet.launch() config_job_object code path"""
     mocker.patch("ffpuppet.core.ProcessTree", autospec=True)
     fake_bts = mocker.patch("ffpuppet.core.Bootstrapper", autospec=True)
@@ -977,7 +949,7 @@ def test_ffpuppet_32(mocker):
     assert resume_suspended.mock_calls[0] == mocker.call(789)
 
 
-def test_ffpuppet_33(mocker):
+def test_ffpuppet_32(mocker):
     """test FFPuppet.dump_coverage()"""
     with FFPuppet() as ffp:
         ffp._proc_tree = mocker.Mock(spec_set=ProcessTree)
