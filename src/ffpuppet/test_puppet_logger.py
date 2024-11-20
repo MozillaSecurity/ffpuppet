@@ -10,7 +10,6 @@ from time import sleep
 
 from pytest import raises
 
-from .helpers import onerror
 from .puppet_logger import PuppetLogger
 
 
@@ -240,15 +239,15 @@ def test_puppet_logger_09(mocker, tmp_path):
         fake_rmtree.side_effect = OSError("test")
         with raises(OSError):
             plog.clean_up()
-        assert fake_rmtree.call_count == 2
-        fake_rmtree.assert_called_with(path, ignore_errors=False, onerror=onerror)
+        assert fake_rmtree.call_count == 1
+        fake_rmtree.assert_called_with(path, ignore_errors=False)
         assert plog.path is not None
         fake_rmtree.reset_mock()
         # test with ignore_errors=True
         fake_rmtree.side_effect = None
         plog.clean_up(ignore_errors=True)
         assert fake_rmtree.call_count == 1
-        fake_rmtree.assert_called_with(path, ignore_errors=True, onerror=onerror)
+        fake_rmtree.assert_called_with(path, ignore_errors=True)
         assert plog.path is None
 
 

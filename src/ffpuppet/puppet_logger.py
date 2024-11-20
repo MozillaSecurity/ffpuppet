@@ -15,7 +15,7 @@ from subprocess import STDOUT, CalledProcessError, check_output
 from tempfile import NamedTemporaryFile, mkdtemp
 from typing import IO, TYPE_CHECKING
 
-from .helpers import onerror, warn_open
+from .helpers import warn_open
 
 if TYPE_CHECKING:
     from collections.abc import Iterator, KeysView
@@ -108,19 +108,12 @@ class PuppetLogger:  # pylint: disable=missing-docstring
         if not self.closed:
             self.close()
         if self.path is not None:
-            # try multiple attempts to remove data
-            for attempt in reversed(range(2)):
-                try:
-                    # check if path exists to properly support "onerror"
-                    if self.path.exists():
-                        # pylint: disable=deprecated-argument
-                        rmtree(self.path, ignore_errors=ignore_errors, onerror=onerror)
-                except OSError:
-                    if attempt == 0:
-                        warn_open(self.path)
-                        raise
-                    continue
-                break
+            try:
+                if self.path.exists():
+                    rmtree(self.path, ignore_errors=ignore_errors)
+            except OSError:
+                warn_open(self.path)
+                raise
         self._logs.clear()
         self.path = None
 

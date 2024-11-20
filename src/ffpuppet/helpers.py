@@ -6,13 +6,12 @@ from __future__ import annotations
 
 from contextlib import suppress
 from logging import getLogger
-from os import W_OK, access, chmod, environ
+from os import environ
 from pathlib import Path
 from platform import system
-from stat import S_IWUSR
 from subprocess import STDOUT, CalledProcessError, check_output
 from time import sleep, time
-from typing import TYPE_CHECKING, Any, Callable
+from typing import TYPE_CHECKING
 
 from psutil import Process, process_iter
 
@@ -33,7 +32,6 @@ __all__ = (
     "certutil_available",
     "certutil_find",
     "files_in_use",
-    "onerror",
     "prepare_environment",
     "wait_on_files",
     "warn_open",
@@ -230,32 +228,6 @@ def files_in_use(files: Iterable[Path]) -> Generator[tuple[Path, int, str]]:
                         with suppress(OSError):
                             if check_file.samefile(open_file):
                                 yield open_file, proc.info["pid"], proc.info["name"]
-
-
-def onerror(
-    func: Callable[[str], Any], path: str, _exc_info: Any
-) -> None:  # pragma: no cover
-    """
-    Error handler for `shutil.rmtree`.
-
-    If the error is due to an access error (read only file)
-    it attempts to add write permission and then retries.
-
-    If the error is for another reason it re-raises the error.
-
-    Copyright Michael Foord 2004
-    Released subject to the BSD License
-    ref: http://www.voidspace.org.uk/python/recipebook.shtml#utils
-
-    Usage : `shutil.rmtree(path, onerror=onerror)`
-    """
-    if not access(path, W_OK):
-        # Is the error an access error?
-        chmod(path, S_IWUSR)
-        func(path)
-    else:
-        # this should only ever be called from an exception context
-        raise  # pylint: disable=misplaced-bare-raise
 
 
 def prepare_environment(

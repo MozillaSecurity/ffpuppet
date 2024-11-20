@@ -586,9 +586,9 @@ class FFPuppet:
             self._proc_tree = None
             self._logs.close()
             self._checks = []
-            assert self.profile
-            self.profile.remove(ignore_errors=force_close)
-            self.profile = None
+            if self.profile is not None:
+                self.profile.remove()
+                self.profile = None
         finally:
             LOG.debug("reason code: %s", r_code.name)
             self.reason = r_code
