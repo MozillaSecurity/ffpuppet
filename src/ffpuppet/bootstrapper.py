@@ -7,7 +7,7 @@ from __future__ import annotations
 from logging import getLogger
 from select import select
 from socket import SO_REUSEADDR, SOL_SOCKET, socket
-from time import sleep, time
+from time import perf_counter, sleep
 from typing import Callable
 
 from .exceptions import BrowserTerminatedError, BrowserTimeoutError, LaunchError
@@ -150,7 +150,7 @@ class Bootstrapper:  # pylint: disable=missing-docstring
             None
         """
         assert timeout >= 0
-        start_time = time()
+        start_time = perf_counter()
         time_limit = start_time + timeout
         conn: socket | None = None
         try:
@@ -163,7 +163,7 @@ class Bootstrapper:  # pylint: disable=missing-docstring
                         raise BrowserTerminatedError(
                             "Failure waiting for browser connection"
                         )
-                    if time() >= time_limit:
+                    if perf_counter() >= time_limit:
                         raise BrowserTimeoutError(
                             "Timeout waiting for browser connection"
                         )
@@ -188,7 +188,7 @@ class Bootstrapper:  # pylint: disable=missing-docstring
                         break
                     if not cb_continue():
                         raise BrowserTerminatedError("Failure waiting for request")
-                    if time() >= time_limit:
+                    if perf_counter() >= time_limit:
                         raise BrowserTimeoutError("Timeout waiting for request")
                     if count_recv == 0:
                         LOG.debug("connection failed, waiting for next connection...")
@@ -206,7 +206,7 @@ class Bootstrapper:  # pylint: disable=missing-docstring
                     "Connection: close\r\n\r\n"
                 )
             # set timeout to match remaining time
-            conn.settimeout(max(time_limit - time(), 1))
+            conn.settimeout(max(time_limit - perf_counter(), 1))
             LOG.debug("sending response (redirect %r)", url)
             try:
                 conn.sendall(resp.encode("ascii"))
@@ -218,7 +218,7 @@ class Bootstrapper:  # pylint: disable=missing-docstring
                 raise BrowserTerminatedError("Failure during browser startup")
             if resp_timeout:
                 raise BrowserTimeoutError("Timeout sending response")
-            LOG.debug("bootstrap complete (%0.1fs)", time() - start_time)
+            LOG.debug("bootstrap complete (%0.1fs)", perf_counter() - start_time)
         except OSError as exc:  # pragma: no cover
             raise LaunchError(f"Error attempting to launch browser: {exc}") from exc
         finally:

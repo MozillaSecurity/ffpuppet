@@ -49,7 +49,7 @@ def test_bootstrapper_01():
 def test_bootstrapper_02(mocker, exc, msg, continue_cb):
     """test Bootstrapper.wait() failure waiting for initial connection"""
     mocker.patch("ffpuppet.bootstrapper.select", return_value=([], None, None))
-    mocker.patch("ffpuppet.bootstrapper.time", side_effect=(1, 1, 2, 3))
+    mocker.patch("ffpuppet.bootstrapper.perf_counter", side_effect=(1, 1, 2, 3))
     fake_sock = mocker.MagicMock(spec_set=socket)
     with Bootstrapper(fake_sock) as bts:
         with raises(exc, match=msg):
@@ -72,7 +72,7 @@ def test_bootstrapper_03(mocker):
         assert fake_conn.close.call_count == 1
         fake_conn.reset_mock()
         # test timeout
-        mocker.patch("ffpuppet.bootstrapper.time", side_effect=(1, 1, 1, 1, 2))
+        mocker.patch("ffpuppet.bootstrapper.perf_counter", side_effect=(1, 1, 1, 1, 2))
         with raises(BrowserTimeoutError, match="Timeout waiting for request"):
             bts.wait(lambda: True, timeout=0.1)
         # should call recv() at least 2x for positive and negative timeout check
