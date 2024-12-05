@@ -197,7 +197,7 @@ def test_helpers_03(mocker, tmp_path):
 def test_helpers_04(mocker, tmp_path):
     """test wait_on_files()"""
     fake_sleep = mocker.patch("ffpuppet.helpers.sleep", autospec=True)
-    fake_time = mocker.patch("ffpuppet.helpers.time", autospec=True)
+    fake_time = mocker.patch("ffpuppet.helpers.perf_counter", autospec=True)
     t_file = tmp_path / "file.bin"
     t_file.touch()
     # test with open file (timeout)

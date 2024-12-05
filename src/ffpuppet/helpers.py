@@ -10,7 +10,7 @@ from os import environ
 from pathlib import Path
 from platform import system
 from subprocess import STDOUT, CalledProcessError, check_output
-from time import sleep, time
+from time import perf_counter, sleep
 from typing import TYPE_CHECKING
 
 from psutil import Process, process_iter
@@ -335,10 +335,10 @@ def wait_on_files(
     assert timeout >= 0
     all_closed = False
     poll_rate = min(poll_rate, timeout)
-    deadline = time() + timeout
+    deadline = perf_counter() + timeout
     while True:
         open_iter = files_in_use(wait_files)
-        if deadline <= time():
+        if deadline <= perf_counter():
             LOG.debug("wait_on_files() timeout (%ds)", timeout)
             for path, pid, name in open_iter:
                 LOG.debug("%r open by %r (%d)", str(path), name, pid)
