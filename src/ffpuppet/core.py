@@ -109,8 +109,9 @@ class FFPuppet:
         "_logs",
         "_proc_tree",
         "_profile_template",
-        "_xvfb",
         "_working_path",
+        "_xvfb",
+        "marionette",
         "profile",
         "reason",
     )
@@ -136,6 +137,7 @@ class FFPuppet:
         self._profile_template = use_profile
         self._xvfb: Xvfb | None = None
         self._working_path = working_path
+        self.marionette: int | None = None
         self.profile: Profile | None = None
         self.reason: Reason | None = Reason.CLOSED
 
@@ -583,6 +585,7 @@ class FFPuppet:
 
         # reset remaining to closed state
         try:
+            self.marionette = None
             self._proc_tree = None
             self._logs.close()
             self._checks = []
@@ -677,6 +680,7 @@ class FFPuppet:
         launch_timeout: int = 300,
         location: str | None = None,
         log_limit: int = 0,
+        marionette: int | None = None,
         memory_limit: int = 0,
         prefs_js: Path | None = None,
         extension: list[Path] | None = None,
@@ -764,7 +768,6 @@ class FFPuppet:
                 "network.proxy.failover_direct": "false",
                 "privacy.partition.network_state": "false",
             }
-            self.profile.add_prefs(prefs)
 
             launch_args = [bootstrapper.location]
             is_windows = system() == "Windows"
@@ -772,6 +775,23 @@ class FFPuppet:
                 # disable launcher process
                 launch_args.append("-no-deelevate")
                 launch_args.append("-wait-for-browser")
+
+            if marionette is not None:
+                # find/validate port to use
+                free_sock = Bootstrapper.create_socket(port=marionette)
+                if free_sock is None:
+                    if marionette == 0:
+                        LOG.error("Cannot find available port for marionette")
+                    else:
+                        LOG.error("Marionette cannot use port: %d", marionette)
+                    raise LaunchError("Debugging server port unavailable")
+                self.marionette = free_sock.getsockname()[1]
+                free_sock.close()
+                launch_args.append("-marionette")
+                prefs["marionette.port"] = str(self.marionette)
+
+            self.profile.add_prefs(prefs)
+
             cmd = self.build_launch_cmd(str(bin_path), additional_args=launch_args)
 
             # open logs
@@ -830,6 +850,7 @@ class FFPuppet:
             if self._proc_tree is None:
                 # only clean up here if a launch was not attempted or Popen failed
                 LOG.debug("process not launched")
+                self.marionette = None
                 self.profile.remove()
                 self.profile = None
                 self.reason = Reason.CLOSED
