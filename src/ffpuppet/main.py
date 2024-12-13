@@ -13,6 +13,7 @@ from shutil import rmtree, which
 from tempfile import mkdtemp
 from time import sleep, strftime
 
+from .bootstrapper import Bootstrapper
 from .core import Debugger, FFPuppet, Reason
 from .exceptions import BrowserExecutionError
 from .helpers import certutil_available, certutil_find
@@ -133,6 +134,15 @@ def parse_args(argv: list[str] | None = None) -> Namespace:
         default=None,
         nargs="?",
         help="Headless mode. 'default' uses browser's built-in headless mode.",
+    )
+    cfg_group.add_argument(
+        "--marionette",
+        const=0,
+        default=None,
+        nargs="?",
+        type=int,
+        help="Enable marionette. If a port is provided it is used otherwise "
+        "a random port is selected. (default: disabled)",
     )
     cfg_group.add_argument(
         "-p",
@@ -267,6 +277,8 @@ def parse_args(argv: list[str] | None = None) -> Namespace:
         value = int(Path(settings).read_bytes())
         if value > 1:
             parser.error(f"rr needs {settings} <= 1, but it is {value}")
+    if args.marionette is not None and not Bootstrapper.check_port(args.marionette):
+        parser.error("--marionette must be 0 or > 1024 and < 65536")
     if not args.logs.is_dir():
         parser.error(f"Log output directory is invalid '{args.logs}'")
     args.log_level = log_level_map[args.log_level]
@@ -317,6 +329,7 @@ def main(argv: list[str] | None = None) -> None:
             location=args.url,
             launch_timeout=args.launch_timeout,
             log_limit=args.log_limit,
+            marionette=args.marionette,
             memory_limit=args.memory,
             prefs_js=args.prefs,
             extension=args.extension,
@@ -326,6 +339,8 @@ def main(argv: list[str] | None = None) -> None:
             assert ffp.profile is not None
             assert ffp.profile.path is not None
             Profile.check_prefs(ffp.profile.path / "prefs.js", args.prefs)
+        if ffp.marionette is not None:
+            LOG.info("Marionette listening on port: %d", ffp.marionette)
         LOG.info("Running Firefox (pid: %d)...", ffp.get_pid())
         while ffp.is_healthy():
             sleep(args.poll_interval)

@@ -72,6 +72,12 @@ def test_parse_args_01(capsys, mocker, tmp_path):
     with raises(SystemExit):
         parse_args([str(fake_bin), "--log-limit", "-1"])
     assert "error: --log-limit must be >= 0" in capsys.readouterr()[-1]
+    # invalid marionette port
+    with raises(SystemExit):
+        parse_args([str(fake_bin), "--marionette", "123"])
+    assert (
+        "error: --marionette must be 0 or > 1024 and < 65536" in capsys.readouterr()[-1]
+    )
     # invalid memory limit
     with raises(SystemExit):
         parse_args([str(fake_bin), "--memory", "-1"])
