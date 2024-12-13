@@ -8,14 +8,16 @@ from logging import getLogger
 from select import select
 from socket import SO_REUSEADDR, SOL_SOCKET, socket
 from time import perf_counter, sleep
-from typing import Callable
-
-from .exceptions import BrowserTerminatedError, BrowserTimeoutError, LaunchError
+from typing import TYPE_CHECKING, Callable
 
 # as of python 3.10 socket.timeout was made an alias of TimeoutError
 # pylint: disable=ungrouped-imports,wrong-import-order
 from socket import timeout as socket_timeout  # isort: skip
 
+from .exceptions import BrowserTerminatedError, BrowserTimeoutError, LaunchError
+
+if TYPE_CHECKING:
+    from collections.abc import Iterable
 
 LOG = getLogger(__name__)
 
@@ -63,6 +65,18 @@ class Bootstrapper:  # pylint: disable=missing-docstring
     def __exit__(self, *exc: object) -> None:
         self.close()
 
+    @classmethod
+    def check_port(cls, value: int) -> bool:
+        """Verify port value is in valid range.
+
+        Args:
+            None
+
+        Returns:
+            bool
+        """
+        return value == 0 or 1024 <= value <= 65535
+
     def close(self) -> None:
         """Close listening socket.
 
@@ -85,9 +99,35 @@ class Bootstrapper:  # pylint: disable=missing-docstring
         Returns:
             Bootstrapper.
         """
+        sock = cls.create_socket(attempts=attempts, port=port)
+        if sock is None:
+            raise LaunchError("Could not find available port")
+        return cls(sock)
+
+    @classmethod
+    def create_socket(
+        cls,
+        attempts: int = 50,
+        blocked: Iterable[int] | None = BLOCKED_PORTS,
+        port: int = 0,
+    ) -> socket | None:
+        """Create a listening socket.
+
+        Args:
+            attempts: Number of times to attempt to bind.
+            blocked: Ports that cannot be used.
+            port: Port to use. Use 0 for system select.
+
+        Returns:
+            A listening socket.
+        """
         assert attempts > 0
-        assert port == 0 or 1024 <= port <= 65535
-        assert port not in cls.BLOCKED_PORTS
+        if not cls.check_port(port):
+            LOG.debug("requested invalid port: %d", port)
+            return None
+        if blocked and port in blocked:
+            LOG.debug("requested blocked port: %d", port)
+            return None
         for _ in range(attempts):
             sock = socket()
             sock.setsockopt(SOL_SOCKET, SO_REUSEADDR, 1)
@@ -100,14 +140,14 @@ class Bootstrapper:  # pylint: disable=missing-docstring
                 sleep(0.1)
                 continue
             # avoid blocked ports
-            if sock.getsockname()[1] in cls.BLOCKED_PORTS:
+            if blocked and sock.getsockname()[1] in blocked:
                 LOG.debug("bound to blocked port, retrying...")
                 sock.close()
                 continue
             break
         else:
-            raise LaunchError("Could not find available port")
-        return cls(sock)
+            return None
+        return sock
 
     @property
     def location(self) -> str:

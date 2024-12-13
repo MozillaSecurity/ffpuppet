@@ -963,3 +963,25 @@ def test_ffpuppet_32(mocker):
             with raises(NotImplementedError):
                 ffp.dump_coverage()
         ffp._proc_tree = None
+
+
+def test_ffpuppet_33():
+    """test FFPuppet.launch() with marionette"""
+    with FFPuppet() as ffp, HTTPTestServer() as srv:
+        assert ffp.marionette is None
+        ffp.launch(TESTFF_BIN, marionette=0, location=srv.get_addr())
+        assert ffp.marionette is not None
+        ffp.close()
+        assert ffp.marionette is None
+
+
+@mark.parametrize("port", [0, 123])
+def test_ffpuppet_34(mocker, port):
+    """test FFPuppet.launch() with marionette failure"""
+    fake_bts = mocker.patch("ffpuppet.core.Bootstrapper", autospec=True)
+    fake_bts.create.return_value.location = ""
+    fake_bts.create_socket.return_value = None
+    with FFPuppet() as ffp, HTTPTestServer() as srv:
+        with raises(LaunchError):
+            ffp.launch(TESTFF_BIN, marionette=port, location=srv.get_addr())
+        assert ffp.marionette is None

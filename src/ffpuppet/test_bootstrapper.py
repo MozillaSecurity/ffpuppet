@@ -184,23 +184,22 @@ def test_bootstrapper_07():
 
 
 @mark.parametrize(
-    "bind, attempts, raised",
+    "bind, attempts",
     [
         # failed to bind (OSError)
-        ((OSError(0, "foo1"),), 1, LaunchError),
+        ((OSError(0, "foo1"),), 1),
         # failed to bind (PermissionError) - multiple attempts
-        (repeat(PermissionError(10013, "foo2"), 4), 4, LaunchError),
+        (repeat(PermissionError(10013, "foo2"), 4), 4),
     ],
 )
-def test_bootstrapper_08(mocker, bind, attempts, raised):
-    """test Bootstrapper.create() - failures"""
+def test_bootstrapper_08(mocker, bind, attempts):
+    """test Bootstrapper.create_socket() - failures"""
     mocker.patch("ffpuppet.bootstrapper.sleep", autospec=True)
     fake_sock = mocker.MagicMock(spec_set=socket)
     fake_sock.bind.side_effect = bind
     mocker.patch("ffpuppet.bootstrapper.select", return_value=([fake_sock], None, None))
     mocker.patch("ffpuppet.bootstrapper.socket", return_value=fake_sock)
-    with raises(raised), Bootstrapper.create(attempts=attempts):
-        pass
+    assert Bootstrapper.create_socket(attempts=attempts) is None
     assert fake_sock.bind.call_count == attempts
     assert fake_sock.close.call_count == attempts
 
@@ -216,3 +215,33 @@ def test_bootstrapper_09(mocker):
     with Bootstrapper.create(attempts=2):
         pass
     assert fake_sock.close.call_count == 2
+
+
+def test_bootstrapper_10(mocker):
+    """test Bootstrapper.create() - failure"""
+    mocker.patch("ffpuppet.bootstrapper.Bootstrapper.create_socket", return_value=None)
+    with raises(LaunchError), Bootstrapper.create():
+        pass
+
+
+@mark.parametrize("value", [123, 5555])
+def test_bootstrapper_11(value):
+    """test Bootstrapper.create_socket() - unusable ports"""
+    assert Bootstrapper.create_socket(blocked=[5555], port=value) is None
+
+
+@mark.parametrize(
+    "value, result",
+    [
+        (0, True),
+        (1337, True),
+        (32768, True),
+        (-1, False),
+        (1, False),
+        (1023, False),
+        (65536, False),
+    ],
+)
+def test_bootstrapper_12(value, result):
+    """test Bootstrapper.check_port()"""
+    assert Bootstrapper.check_port(value) == result

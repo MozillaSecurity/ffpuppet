@@ -29,6 +29,7 @@ def main() -> int:
     parser = ArgumentParser(prog="testff", description="Fake Firefox for testing")
     parser.add_argument("url")
     parser.add_argument("-headless", action="store_true", help="ignored")
+    parser.add_argument("-marionette", nargs="?", type=int, help="ignored")
     parser.add_argument("-new-instance", action="store_true", help="ignored")
     parser.add_argument("-no-deelevate", action="store_true", help="ignored")
     parser.add_argument("-wait-for-browser", action="store_true", help="ignored")
