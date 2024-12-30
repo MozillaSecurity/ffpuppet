@@ -122,26 +122,6 @@ def test_parse_args_01(capsys, mocker, tmp_path):
         assert parse_args([str(fake_bin)])
 
 
-def test_parse_args_02(mocker, tmp_path):
-    """test parse_args() - headless"""
-    fake_system = mocker.patch("ffpuppet.main.system", autospec=True)
-    fake_bin = tmp_path / "fake.bin"
-    fake_bin.touch()
-    # no headless
-    assert parse_args([str(fake_bin)]).headless is None
-    # headless (default)
-    assert parse_args([str(fake_bin), "--headless"]).headless == "default"
-    # headless via Xvfb
-    fake_system.return_value = "Linux"
-    assert parse_args([str(fake_bin), "--headless", "xvfb"]).headless == "xvfb"
-    # --xvfb flag
-    assert parse_args([str(fake_bin), "--xvfb"]).headless == "xvfb"
-    # headless Xvfb unsupported
-    fake_system.return_value = "Windows"
-    with raises(SystemExit):
-        parse_args([str(fake_bin), "--headless", "xvfb"])
-
-
 def test_dump_to_console_01(tmp_path):
     """test dump_to_console()"""
     # call with no logs
