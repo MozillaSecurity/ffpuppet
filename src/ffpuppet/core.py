@@ -26,13 +26,11 @@ with suppress(ImportError):
 
     CREATE_SUSPENDED = 0x00000004
 
-with suppress(ImportError):
-    from xvfbwrapper import Xvfb
-
 from typing import TYPE_CHECKING
 
 from .bootstrapper import Bootstrapper
 from .checks import CheckLogContents, CheckLogSize, CheckMemoryUsage
+from .display import DISPLAYS, DisplayMode
 from .exceptions import BrowserExecutionError, InvalidPrefs, LaunchError
 from .helpers import prepare_environment, wait_on_files
 from .minidump_parser import MDSW_URL, MinidumpParser
@@ -87,13 +85,6 @@ class Reason(IntEnum):
 class FFPuppet:
     """FFPuppet manages launching and monitoring the browser process(es).
     This includes setting up the environment, collecting logs and some debugger support.
-
-    Attributes:
-        debugger: Debugger to use.
-        headless: Headless mode to use.
-        use_profile: Path to existing user profile.
-        use_xvfb: Use Xvfb (DEPRECATED).
-        working_path: Path to use as base directory for temporary files.
     """
 
     LAUNCH_TIMEOUT_MIN = 10  # minimum amount of time to wait for the browser to launch
@@ -104,13 +95,12 @@ class FFPuppet:
         "_bin_path",
         "_checks",
         "_dbg",
-        "_headless",
+        "_display",
         "_launches",
         "_logs",
         "_proc_tree",
         "_profile_template",
         "_working_path",
-        "_xvfb",
         "marionette",
         "profile",
         "reason",
@@ -119,42 +109,34 @@ class FFPuppet:
     def __init__(
         self,
         debugger: Debugger = Debugger.NONE,
-        headless: str | None = None,
+        display_mode: DisplayMode = DisplayMode.DEFAULT,
         use_profile: Path | None = None,
-        use_xvfb: bool = False,
         working_path: str | None = None,
     ) -> None:
+        """
+        Args:
+            debugger: Debugger to use.
+            display_mode: Display mode to use.
+            use_profile: Path to existing profile to use.
+            working_path: Path to use as base directory for temporary files.
+        """
         # tokens used to notify log scanner to kill the browser process
         self._abort_tokens: set[Pattern[str]] = set()
         self._bin_path: Path | None = None
         self._checks: list[CheckLogContents | CheckLogSize | CheckMemoryUsage] = []
         self._dbg = debugger
         self._dbg_sanity_check(self._dbg)
-        self._headless = headless
-        self._launches = 0  # number of successful browser launches
-        self._logs = PuppetLogger(base_path=working_path)
+        self._display = DISPLAYS[display_mode]()
+        # number of successful browser launches
+        self._launches = 0
         self._proc_tree: ProcessTree | None = None
         self._profile_template = use_profile
-        self._xvfb: Xvfb | None = None
         self._working_path = working_path
         self.marionette: int | None = None
         self.profile: Profile | None = None
         self.reason: Reason | None = Reason.CLOSED
 
-        if use_xvfb:
-            self._headless = "xvfb"
-
-        if self._headless == "xvfb":
-            try:
-                self._xvfb = Xvfb(width=1280, height=1024)
-            except NameError:
-                self._logs.clean_up(ignore_errors=True)
-                raise OSError(
-                    "Please install xvfbwrapper (Only supported on Linux)"
-                ) from None
-            self._xvfb.start()
-        else:
-            assert self._headless in (None, "default")
+        self._logs = PuppetLogger(base_path=working_path)
 
     def __enter__(self) -> FFPuppet:
         return self
@@ -322,8 +304,7 @@ class FFPuppet:
         if bin_path.lower().endswith(".py"):
             cmd.append(executable)
         cmd += [bin_path, "-new-instance"]
-        if self._headless == "default":
-            cmd.append("-headless")
+        cmd.extend(self._display.args)
         if self.profile is not None:
             cmd += ["-profile", str(self.profile)]
 
@@ -441,12 +422,11 @@ class FFPuppet:
             LOG.debug("clean_up() call ignored")
             return
         LOG.debug("clean_up() called")
-        self.close(force_close=True)
+        try:
+            self.close(force_close=True)
+        finally:
+            self._display.close()
         self._logs.clean_up(ignore_errors=True)
-        # close Xvfb
-        if self._xvfb is not None:
-            self._xvfb.stop()
-            self._xvfb = None
         # at this point everything should be cleaned up
         assert self.reason is not None
         assert self._logs.closed
@@ -736,8 +716,7 @@ class FFPuppet:
             # https://developer.gimp.org/api/2.0/glib/glib-running.html#G_DEBUG
             env_mod["G_DEBUG"] = "gc-friendly"
             env_mod["MOZ_CRASHREPORTER_DISABLE"] = "1"
-        if self._headless == "xvfb":
-            env_mod["MOZ_ENABLE_WAYLAND"] = "0"
+        env_mod.update(self._display.env)
 
         # create a profile
         self.profile = Profile(
