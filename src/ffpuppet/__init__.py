@@ -4,6 +4,7 @@
 """FFPuppet module"""
 
 from .core import Debugger, FFPuppet, Reason
+from .display import DisplayMode
 from .exceptions import (
     BrowserExecutionError,
     BrowserTerminatedError,
@@ -17,6 +18,7 @@ __all__ = (
     "BrowserTerminatedError",
     "BrowserTimeoutError",
     "Debugger",
+    "DisplayMode",
     "FFPuppet",
     "LaunchError",
     "Reason",

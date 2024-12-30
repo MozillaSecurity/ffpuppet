@@ -15,6 +15,7 @@ from time import sleep, strftime
 
 from .bootstrapper import Bootstrapper
 from .core import Debugger, FFPuppet, Reason
+from .display import DisplayMode
 from .exceptions import LaunchError
 from .helpers import certutil_available, certutil_find
 from .profile import Profile
@@ -117,23 +118,18 @@ def parse_args(argv: list[str] | None = None) -> Namespace:
         help="Install trusted certificates.",
     )
     cfg_group.add_argument(
+        "--display",
+        choices=sorted(x.name.lower() for x in DisplayMode),
+        default=DisplayMode.DEFAULT.name,
+        help="Display mode.",
+    )
+    cfg_group.add_argument(
         "-e",
         "--extension",
         action="append",
         type=Path,
         help="Install extensions. Specify the path to the xpi or the directory "
         "containing the unpacked extension.",
-    )
-    headless_choices = ["default"]
-    if system() == "Linux":
-        headless_choices.append("xvfb")
-    cfg_group.add_argument(
-        "--headless",
-        choices=headless_choices,
-        const="default",
-        default=None,
-        nargs="?",
-        help="Headless mode. 'default' uses browser's built-in headless mode.",
     )
     cfg_group.add_argument(
         "--marionette",
@@ -160,14 +156,6 @@ def parse_args(argv: list[str] | None = None) -> Namespace:
     cfg_group.add_argument(
         "-u", "--url", help="Server URL or path to local file to load."
     )
-    if system() == "Linux":
-        cfg_group.add_argument(
-            "--xvfb",
-            action="store_true",
-            help="DEPRECATED! Please use '--headless xvfb'",
-        )
-    else:
-        cfg_group.set_defaults(xvfb=False)
 
     report_group = parser.add_argument_group("Issue Detection & Reporting")
     report_group.add_argument(
@@ -290,19 +278,12 @@ def parse_args(argv: list[str] | None = None) -> Namespace:
     args.memory *= 1_048_576
     if args.prefs is not None and not args.prefs.is_file():
         parser.error(f"Invalid prefs.js file '{args.prefs}'")
-    if args.xvfb:
-        LOG.warning("'--xvfb' is DEPRECATED. Please use '--headless xvfb'")
-        args.headless = "xvfb"
 
     return args
 
 
 def main(argv: list[str] | None = None) -> None:
-    """
-    FFPuppet main entry point
-
-    Run with --help for usage
-    """
+    """FFPuppet main entry point."""
     args = parse_args(argv)
     # set output verbosity
     if args.log_level == DEBUG:
@@ -315,7 +296,7 @@ def main(argv: list[str] | None = None) -> None:
 
     ffp = FFPuppet(
         debugger=args.debugger,
-        headless=args.headless,
+        display_mode=DisplayMode[args.display.upper()],
         use_profile=args.profile,
     )
     for a_token in args.abort_token:

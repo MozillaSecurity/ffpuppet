@@ -320,39 +320,7 @@ def test_ffpuppet_12():
                 ffp.close()
 
 
-def test_ffpuppet_13(mocker):
-    """test launching under Xvfb"""
-    mocker.patch("ffpuppet.core.Popen", autospec=True)
-    mocker.patch("ffpuppet.core.ProcessTree", autospec=True)
-    fake_bts = mocker.patch("ffpuppet.core.Bootstrapper", autospec=True)
-    fake_bts.create.return_value.location = "http://test:123"
-    fake_system = mocker.patch("ffpuppet.core.system", autospec=True)
-    is_linux = system() == "Linux"
-    fake_xvfb = mocker.patch(
-        "ffpuppet.core.Xvfb", autospec=is_linux, create=not is_linux
-    )
-    # success
-    fake_system.return_value = "Linux"
-    with FFPuppet(headless="xvfb") as ffp:
-        ffp.launch(TESTFF_BIN)
-    assert fake_xvfb.call_count == 1
-    assert fake_xvfb.return_value.start.call_count == 1
-    fake_xvfb.reset_mock()
-    # success - legacy
-    fake_system.return_value = "Linux"
-    with FFPuppet(use_xvfb=True):
-        pass
-    assert fake_xvfb.call_count == 1
-    assert fake_xvfb.return_value.start.call_count == 1
-    fake_xvfb.reset_mock()
-    # not installed
-    fake_xvfb.side_effect = NameError
-    with raises(OSError, match="Please install xvfbwrapper"):
-        FFPuppet(headless="xvfb")
-    assert fake_xvfb.start.call_count == 0
-
-
-def test_ffpuppet_14(tmp_path):
+def test_ffpuppet_13(tmp_path):
     """test passing a file and a non existing file to launch() via location"""
     with FFPuppet() as ffp:
         with raises(OSError, match="Cannot find"):
@@ -393,7 +361,7 @@ def test_ffpuppet_14(tmp_path):
         (Debugger.VALGRIND, b"valgrind", b"valgrind-99.0"),
     ],
 )
-def test_ffpuppet_15(mocker, tmp_path, debugger, dbg_bin, version):
+def test_ffpuppet_14(mocker, tmp_path, debugger, dbg_bin, version):
     """test launching with debuggers"""
     mocker.patch("ffpuppet.core.check_output", autospec=True, return_value=version)
     mocker.patch("ffpuppet.core.Popen", autospec=True)
@@ -412,7 +380,7 @@ def test_ffpuppet_15(mocker, tmp_path, debugger, dbg_bin, version):
     assert b"[ffpuppet] Reason code:" in log_data
 
 
-def test_ffpuppet_16(tmp_path):
+def test_ffpuppet_15(tmp_path):
     """test calling save_logs() before close()"""
     with FFPuppet() as ffp, HTTPTestServer() as srv:
         ffp.launch(TESTFF_BIN, location=srv.get_addr())
@@ -420,7 +388,7 @@ def test_ffpuppet_16(tmp_path):
             ffp.save_logs(tmp_path / "logs")
 
 
-def test_ffpuppet_17(tmp_path):
+def test_ffpuppet_16(tmp_path):
     """test detecting invalid prefs file"""
     prefs = tmp_path / "prefs.js"
     prefs.write_bytes(b"//fftest_invalid_js\n")
@@ -432,7 +400,7 @@ def test_ffpuppet_17(tmp_path):
         ffp.launch(TESTFF_BIN, location=srv.get_addr(), prefs_js=prefs)
 
 
-def test_ffpuppet_18():
+def test_ffpuppet_17():
     """test log_length()"""
     with FFPuppet() as ffp:
         assert ffp.log_length("INVALID") is None
@@ -450,7 +418,7 @@ def test_ffpuppet_18():
         assert ffp.log_length("stderr") is None
 
 
-def test_ffpuppet_19():
+def test_ffpuppet_18():
     """test running multiple instances in parallel"""
     # use test pool size of 10
     with HTTPTestServer() as srv:
@@ -466,7 +434,7 @@ def test_ffpuppet_19():
                 ffp.clean_up()
 
 
-def test_ffpuppet_20(tmp_path):
+def test_ffpuppet_19(tmp_path):
     """test hitting log size limit"""
     prefs = tmp_path / "prefs.js"
     prefs.write_bytes(b"//fftest_big_log\n")
@@ -490,7 +458,7 @@ def test_ffpuppet_20(tmp_path):
         )
 
 
-def test_ffpuppet_21(tmp_path):
+def test_ffpuppet_20(tmp_path):
     """test collecting and cleaning up ASan logs"""
     with FFPuppet() as ffp:
         ffp.launch(TESTFF_BIN)
@@ -549,7 +517,7 @@ def test_ffpuppet_21(tmp_path):
 
 
 @mark.parametrize("mdsw_available", [True, False])
-def test_ffpuppet_22(mocker, tmp_path, mdsw_available):
+def test_ffpuppet_21(mocker, tmp_path, mdsw_available):
     """test multiple minidumps"""
 
     def _fake_create_log(src, filename, _timeout: int = 90):
@@ -589,7 +557,7 @@ def test_ffpuppet_22(mocker, tmp_path, mdsw_available):
             assert not any(logs.glob("log_minidump_*"))
 
 
-def test_ffpuppet_23(tmp_path):
+def test_ffpuppet_22(tmp_path):
     """test using a readonly prefs.js and extension"""
     prefs = tmp_path / "prefs.js"
     prefs.touch()
@@ -605,7 +573,7 @@ def test_ffpuppet_23(tmp_path):
         assert not prof_path.is_dir()
 
 
-def test_ffpuppet_24(mocker, tmp_path):
+def test_ffpuppet_23(mocker, tmp_path):
     """test _crashreports()"""
     mocker.patch(
         "ffpuppet.core.check_output", autospec=True, return_value=b"valgrind-99.0"
@@ -667,21 +635,13 @@ def test_ffpuppet_24(mocker, tmp_path):
             assert not ffp._logs.watching
 
 
-def test_ffpuppet_25(mocker, tmp_path):
+def test_ffpuppet_24(mocker, tmp_path):
     """test build_launch_cmd()"""
     with FFPuppet() as ffp:
         cmd = ffp.build_launch_cmd("bin_path", ["test"])
         assert len(cmd) == 3
         assert cmd[0] == "bin_path"
         assert cmd[-1] == "test"
-        assert "-headless" not in cmd
-        # headless
-        ffp._headless = "default"
-        cmd = ffp.build_launch_cmd("bin_path", ["test"])
-        assert len(cmd) == 4
-        assert cmd[0] == "bin_path"
-        assert cmd[-1] == "test"
-        assert "-headless" in cmd
         # GDB
         ffp._dbg = Debugger.GDB
         cmd = ffp.build_launch_cmd("bin_path")
@@ -715,7 +675,7 @@ def test_ffpuppet_25(mocker, tmp_path):
         assert cmd[0] == "valgrind"
 
 
-def test_ffpuppet_26():
+def test_ffpuppet_25():
     """test cpu_usage()"""
     with FFPuppet() as ffp:
         assert not any(ffp.cpu_usage())
@@ -728,7 +688,7 @@ def test_ffpuppet_26():
         assert ffp.wait(timeout=10)
 
 
-def test_ffpuppet_27(mocker):
+def test_ffpuppet_26(mocker):
     """test _dbg_sanity_check()"""
     fake_system = mocker.patch("ffpuppet.core.system", autospec=True)
     fake_chkout = mocker.patch("ffpuppet.core.check_output", autospec=True)
@@ -787,7 +747,7 @@ def test_ffpuppet_27(mocker):
         FFPuppet._dbg_sanity_check(Debugger.VALGRIND)
 
 
-def test_ffpuppet_28(mocker, tmp_path):
+def test_ffpuppet_27(mocker, tmp_path):
     """test FFPuppet.close() setting reason"""
 
     class StubbedProc(FFPuppet):
@@ -886,7 +846,7 @@ def test_ffpuppet_28(mocker, tmp_path):
         assert fake_wait_files.call_count == 0
 
 
-def test_ffpuppet_29():
+def test_ffpuppet_28():
     """test ignoring benign sanitizer logs"""
     with FFPuppet() as ffp:
         ffp.launch(TESTFF_BIN)
@@ -911,7 +871,7 @@ def test_ffpuppet_29():
         (False, FileNotFoundError),
     ],
 )
-def test_ffpuppet_30(mocker, tmp_path, bin_exists, expect_exc):
+def test_ffpuppet_29(mocker, tmp_path, bin_exists, expect_exc):
     """test Popen failure during launch"""
     bin_fake = tmp_path / "fake_bin"
     if bin_exists:
@@ -929,7 +889,7 @@ def test_ffpuppet_30(mocker, tmp_path, bin_exists, expect_exc):
 
 
 @mark.skipif(system() != "Windows", reason="Only supported on Windows")
-def test_ffpuppet_31(mocker):
+def test_ffpuppet_30(mocker):
     """test FFPuppet.launch() config_job_object code path"""
     mocker.patch("ffpuppet.core.ProcessTree", autospec=True)
     fake_bts = mocker.patch("ffpuppet.core.Bootstrapper", autospec=True)
@@ -949,7 +909,7 @@ def test_ffpuppet_31(mocker):
     assert resume_suspended.mock_calls[0] == mocker.call(789)
 
 
-def test_ffpuppet_32(mocker):
+def test_ffpuppet_31(mocker):
     """test FFPuppet.dump_coverage()"""
     with FFPuppet() as ffp:
         ffp._proc_tree = mocker.Mock(spec_set=ProcessTree)
@@ -965,7 +925,7 @@ def test_ffpuppet_32(mocker):
         ffp._proc_tree = None
 
 
-def test_ffpuppet_33():
+def test_ffpuppet_32():
     """test FFPuppet.launch() with marionette"""
     with FFPuppet() as ffp, HTTPTestServer() as srv:
         assert ffp.marionette is None
@@ -976,7 +936,7 @@ def test_ffpuppet_33():
 
 
 @mark.parametrize("port", [0, 123])
-def test_ffpuppet_34(mocker, port):
+def test_ffpuppet_33(mocker, port):
     """test FFPuppet.launch() with marionette failure"""
     fake_bts = mocker.patch("ffpuppet.core.Bootstrapper", autospec=True)
     fake_bts.create.return_value.location = ""
