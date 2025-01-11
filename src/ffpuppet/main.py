@@ -15,7 +15,7 @@ from time import sleep, strftime
 
 from .bootstrapper import Bootstrapper
 from .core import Debugger, FFPuppet, Reason
-from .exceptions import BrowserExecutionError
+from .exceptions import LaunchError
 from .helpers import certutil_available, certutil_find
 from .profile import Profile
 
@@ -344,11 +344,11 @@ def main(argv: list[str] | None = None) -> None:
         LOG.info("Running Firefox (pid: %d)...", ffp.get_pid())
         while ffp.is_healthy():
             sleep(args.poll_interval)
-    except BrowserExecutionError:
-        LOG.error("Cannot execute binary. Perhaps required libraries are missing?")
     except KeyboardInterrupt:
         user_exit = True
         LOG.info("Ctrl+C detected.")
+    except LaunchError as exc:
+        LOG.error("Launch failed: %s", exc)
     finally:
         LOG.info("Shutting down...")
         ffp.close()

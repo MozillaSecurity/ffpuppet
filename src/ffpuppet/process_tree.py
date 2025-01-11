@@ -39,10 +39,9 @@ def _last_modified(scan_dir: Path) -> float | None:
     Returns:
         Last modified date or None if no files are found.
     """
-    try:
+    with suppress(ValueError):
         return max(x.stat().st_mtime for x in scan_dir.glob("**/*.gcda"))
-    except ValueError:
-        return None
+    return None
 
 
 def _safe_wait_procs(
@@ -141,17 +140,13 @@ class ProcessTree:
         """
         procs = self.processes()
         for proc in procs:
-            try:
+            with suppress(AccessDenied, NoSuchProcess):
                 proc.cpu_percent()
-            except (AccessDenied, NoSuchProcess):  # pragma: no cover
-                continue
         # psutil recommends at least '0.1'.
         sleep(0.1)
         for proc in procs:
-            try:
+            with suppress(AccessDenied, NoSuchProcess):
                 yield proc.pid, proc.cpu_percent()
-            except (AccessDenied, NoSuchProcess):  # pragma: no cover
-                continue
 
     def dump_coverage(self, timeout: int = 15, idle_wait: int = 2) -> bool:
         """Signal processes to write coverage data to disk. Running coverage builds in
