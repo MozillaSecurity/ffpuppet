@@ -23,7 +23,7 @@ def test_bootstrapper_01():
     with Bootstrapper.create() as bts:
         assert bts._socket is not None
         assert bts.location.startswith("http://127.0.0.1:")
-        assert int(bts.location.split(":")[-1]) >= 1024
+        assert int(bts.location.rsplit(":", maxsplit=1)[-1]) >= 1024
         assert bts.port >= 1024
         assert bts.port not in Bootstrapper.BLOCKED_PORTS
         bts.close()

@@ -572,9 +572,7 @@ class FFPuppet:
                     for count, dmp_file in enumerate(dmp_files):
                         md_txt = parser.create_log(dmp_file, f"minidump_{count:02}.txt")
                         with md_txt.open("rb") as md_fp:
-                            copyfileobj(
-                                md_fp, self._logs.add_log(md_txt.stem)
-                            )  # type: ignore
+                            copyfileobj(md_fp, self._logs.add_log(md_txt.stem))
 
             stderr_fp = self._logs.get_fp("stderr")
             if stderr_fp:
