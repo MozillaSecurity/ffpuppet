@@ -13,13 +13,13 @@ from .exceptions import (
 from .sanitizer_util import SanitizerOptions
 
 __all__ = (
+    "BrowserExecutionError",
+    "BrowserTerminatedError",
+    "BrowserTimeoutError",
     "Debugger",
     "FFPuppet",
-    "Reason",
-    "BrowserExecutionError",
-    "BrowserTimeoutError",
-    "BrowserTerminatedError",
     "LaunchError",
+    "Reason",
     "SanitizerOptions",
 )
 __author__ = "Tyson Smith"
