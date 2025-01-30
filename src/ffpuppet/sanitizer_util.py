@@ -111,7 +111,7 @@ class SanitizerOptions:  # pylint: disable=missing-docstring
             for option in self.re_delim.split(options):
                 try:
                     self.add(*option.split("=", maxsplit=1))
-                except TypeError:
+                except TypeError:  # noqa: PERF203
                     LOG.warning("Malformed option %r", option)
 
     def pop(self, flag: str) -> str | None:

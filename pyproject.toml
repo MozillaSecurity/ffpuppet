@@ -81,8 +81,5 @@ select = [
     # pycodestyle
     "W",
 ]
-ignore = [
-    "PERF203",
-]
 
 [tool.setuptools_scm]
