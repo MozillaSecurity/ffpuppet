@@ -81,7 +81,7 @@ def _safe_wait_procs(
                 gone.append(proc)
             else:
                 alive.append(proc)
-        except AccessDenied:
+        except AccessDenied:  # noqa: PERF203
             alive.append(proc)
         except NoSuchProcess:
             gone.append(proc)
