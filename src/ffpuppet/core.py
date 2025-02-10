@@ -512,8 +512,9 @@ class FFPuppet:
             LOG.debug("%d crash report(s) found", len(crash_reports))
             if crash_reports:
                 # additional delay to allow crash reports to be completed/closed
-                if not wait_on_files(crash_reports, timeout=30):
-                    LOG.warning("Crash reports still open after 30s")
+                report_wait = 30 if self._dbg == Debugger.NONE else 60
+                if not wait_on_files(crash_reports, timeout=report_wait):
+                    LOG.warning("Crash reports still open after %ds", report_wait)
             else:
                 # this can actually happen
                 LOG.warning("Crash reports disappeared! How did this happen?")
