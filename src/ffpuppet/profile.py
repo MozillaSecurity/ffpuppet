@@ -8,7 +8,7 @@ from json import load as json_load
 from logging import getLogger
 from pathlib import Path
 from shutil import copyfile, copytree, rmtree
-from subprocess import STDOUT, CalledProcessError, check_output
+from subprocess import STDOUT, CalledProcessError, TimeoutExpired, check_output
 from tempfile import mkdtemp
 from time import time
 from xml.etree import ElementTree
@@ -159,7 +159,8 @@ class Profile:
                 stderr=STDOUT,
                 timeout=10,
             )
-        except CalledProcessError as exc:
+        except (CalledProcessError, TimeoutExpired) as exc:
+            LOG.error(str(exc))
             LOG.error(exc.output.decode().strip())
             raise RuntimeError("certutil error") from None
 
