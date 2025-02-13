@@ -11,7 +11,7 @@ from pytest import mark, raises
 from .profile import Profile
 
 
-def test_profile_01(tmp_path):
+def test_profile_basic(tmp_path):
     """test basic Profile"""
     with Profile(working_path=str(tmp_path)) as profile:
         assert profile
@@ -25,7 +25,7 @@ def test_profile_01(tmp_path):
         assert profile.path is None
 
 
-def test_profile_02(tmp_path):
+def test_profile_use_template(tmp_path):
     """test Profile with template"""
     template = tmp_path / "template"
     template.mkdir()
@@ -49,7 +49,7 @@ def test_profile_02(tmp_path):
         ({}, {"foo": "'a1b1c1'", "test.enabled": "true"}),
     ],
 )
-def test_profile_03(tmp_path, existing, additional):
+def test_profile_prefs_js(tmp_path, existing, additional):
     """test Profile with prefs.js"""
     prefs = None
     if existing:
@@ -74,7 +74,7 @@ def test_profile_03(tmp_path, existing, additional):
             assert len(lines) == len(existing) + len(additional)
 
 
-def test_profile_04(mocker, tmp_path):
+def test_profile_extensions(mocker, tmp_path):
     """test create_profile() extension support"""
     mocker.patch(
         "ffpuppet.profile.mkdtemp", autospec=True, return_value=str(tmp_path / "dst")
@@ -172,7 +172,7 @@ def test_profile_04(mocker, tmp_path):
         assert (ext_path / "example.js").is_file()
 
 
-def test_profile_05(tmp_path):
+def test_profile_check_prefs(tmp_path):
     """test check_prefs()"""
     dummy_prefs = tmp_path / "dummy.js"
     dummy_prefs.write_text(
@@ -199,7 +199,7 @@ def test_profile_05(tmp_path):
     assert not Profile.check_prefs(dummy_prefs, custom_prefs)
 
 
-def test_profile_06(mocker, tmp_path):
+def test_profile_remove(mocker, tmp_path):
     """test Profile.remove() fail to remove data directory"""
     mocker.patch("ffpuppet.profile.rmtree", autospec=True)
     with Profile(working_path=str(tmp_path)) as profile:
@@ -209,7 +209,7 @@ def test_profile_06(mocker, tmp_path):
         assert path.exists()
 
 
-def test_profile_07(mocker, tmp_path):
+def test_profile_install_certs(mocker, tmp_path):
     """test Profile with certs"""
     mocker.patch("ffpuppet.profile.certutil_available", autospec=True)
     fake_check = mocker.patch("ffpuppet.profile.check_output", autospec=True)
@@ -221,8 +221,8 @@ def test_profile_07(mocker, tmp_path):
         assert fake_check.call_count == 2
 
 
-def test_profile_08(mocker, tmp_path):
-    """test Profile missing certutil"""
+def test_profile_certutil_missing(mocker, tmp_path):
+    """test Profile missing certutil binary"""
     mocker.patch("ffpuppet.profile.certutil_available", return_value=False)
     mocker.patch("ffpuppet.profile.certutil_find", autospec=True)
     cert = tmp_path / "cert"
@@ -231,15 +231,37 @@ def test_profile_08(mocker, tmp_path):
         Profile(cert_files=[cert], working_path=str(tmp_path))
 
 
-def test_profile_09(mocker, tmp_path):
-    """test Profile._install_cert() certutil error"""
+# pylint: disable=protected-access
+def test_profile_install_cert(mocker, tmp_path):
+    """test Profile._install_cert() certutil"""
     mocker.patch("ffpuppet.profile.certutil_available", autospec=True)
-    mocker.patch(
-        "ffpuppet.profile.check_output",
-        autospec=True,
-        side_effect=CalledProcessError(1, "test", output=b"error msg"),
-    )
+    fake_check = mocker.patch("ffpuppet.profile.check_output", autospec=True)
+
     cert = tmp_path / "cert"
     cert.touch()
-    with raises(RuntimeError, match="certutil error"):
-        Profile(cert_files=[cert], working_path=str(tmp_path))
+    with Profile(working_path=str(tmp_path)) as profile:
+        fake_check.reset_mock()
+        profile._install_cert(cert, "fake_certutil")
+        assert fake_check.call_count == 1
+
+        fake_check.side_effect = CalledProcessError(1, "test", output=b"error msg")
+        with raises(RuntimeError, match="Install cert: certutil error"):
+            profile._install_cert(cert, "fake_certutil")
+
+
+# pylint: disable=protected-access
+def test_profile_init_cert_db(mocker, tmp_path):
+    """test Profile._init_cert_db() certutil"""
+    mocker.patch("ffpuppet.profile.certutil_available", autospec=True)
+    fake_check = mocker.patch("ffpuppet.profile.check_output", autospec=True)
+
+    with Profile(working_path=str(tmp_path)) as profile:
+        fake_check.reset_mock()
+        profile._init_cert_db("fake_certutil")
+        assert fake_check.call_count == 1
+
+        cert = tmp_path / "cert"
+        cert.touch()
+        fake_check.side_effect = CalledProcessError(1, "test", output=b"error msg")
+        with raises(RuntimeError, match="Init cert db: certutil error"):
+            profile._init_cert_db("fake_certutil")
