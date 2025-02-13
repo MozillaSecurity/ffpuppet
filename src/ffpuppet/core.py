@@ -679,7 +679,7 @@ class FFPuppet:
             memory_limit: Memory limit in bytes. Browser will be terminated
                           if its memory usage exceeds the amount specified.
             prefs_js: prefs.js file to install in the Firefox profile.
-            extension: List of extensions to be installed.
+            extension: Extensions to be installed.
 
         Returns:
             None
