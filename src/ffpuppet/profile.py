@@ -11,9 +11,13 @@ from shutil import copyfile, copytree, rmtree
 from subprocess import STDOUT, CalledProcessError, TimeoutExpired, check_output
 from tempfile import mkdtemp
 from time import time
+from typing import TYPE_CHECKING
 from xml.etree import ElementTree
 
 from .helpers import certutil_available, certutil_find
+
+if TYPE_CHECKING:
+    from collections.abc import Iterable
 
 LOG = getLogger(__name__)
 
@@ -31,8 +35,8 @@ class Profile:
     def __init__(
         self,
         browser_bin: Path | None = None,
-        cert_files: list[Path] | None = None,
-        extensions: list[Path] | None = None,
+        cert_files: Iterable[Path] | None = None,
+        extensions: Iterable[Path] | None = None,
         prefs_file: Path | None = None,
         template: Path | None = None,
         working_path: str | None = None,
@@ -72,7 +76,7 @@ class Profile:
         if not times_json.is_file():
             times_json.write_text(f'{{"created":{int(time()) * 1000}}}')
 
-    def _copy_extensions(self, extensions: list[Path]) -> None:
+    def _copy_extensions(self, extensions: Iterable[Path]) -> None:
         assert self.path
         ext_path = self.path / "extensions"
         ext_path.mkdir(exist_ok=True)
