@@ -283,15 +283,17 @@ def prepare_environment(
     if env_mod is not None:
         base.update(env_mod)
     # environment variables to skip if previously set in environ
-    optional = (
-        "_RR_TRACE_DIR",
-        "MOZ_CRASHREPORTER",
-        "MOZ_CRASHREPORTER_NO_DELETE_DUMP",
-        "MOZ_CRASHREPORTER_NO_REPORT",
-        "MOZ_CRASHREPORTER_SHUTDOWN",
-        "MOZ_SKIA_DISABLE_ASSERTS",
-        "RUST_BACKTRACE",
-        "XPCOM_DEBUG_BREAK",
+    optional = frozenset(
+        (
+            "_RR_TRACE_DIR",
+            "MOZ_CRASHREPORTER",
+            "MOZ_CRASHREPORTER_NO_DELETE_DUMP",
+            "MOZ_CRASHREPORTER_NO_REPORT",
+            "MOZ_CRASHREPORTER_SHUTDOWN",
+            "MOZ_SKIA_DISABLE_ASSERTS",
+            "RUST_BACKTRACE",
+            "XPCOM_DEBUG_BREAK",
+        )
     )
     # merge presets and modifications
     for env_name, env_value in base.items():
