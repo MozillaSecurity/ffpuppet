@@ -18,6 +18,7 @@ from re import match as re_match
 from shutil import copy, copyfileobj
 from subprocess import Popen, check_output
 from sys import executable
+from typing import TYPE_CHECKING
 from urllib.request import pathname2url
 
 with suppress(ImportError):
@@ -25,8 +26,6 @@ with suppress(ImportError):
     from subprocess import CREATE_NEW_PROCESS_GROUP  # type: ignore[attr-defined]
 
     CREATE_SUSPENDED = 0x00000004
-
-from typing import TYPE_CHECKING
 
 from .bootstrapper import Bootstrapper
 from .checks import CheckLogContents, CheckLogSize, CheckMemoryUsage
@@ -39,7 +38,7 @@ from .profile import Profile
 from .puppet_logger import PuppetLogger
 
 if TYPE_CHECKING:
-    from collections.abc import Generator
+    from collections.abc import Generator, Iterable, Sequence
 
 if system() == "Windows":
     # config_job_object is only available on Windows
@@ -287,7 +286,7 @@ class FFPuppet:
         return list(self._logs.available_logs())
 
     def build_launch_cmd(
-        self, bin_path: str, additional_args: list[str] | None = None
+        self, bin_path: str, additional_args: Sequence[str] | None = None
     ) -> list[str]:
         """Build a command that can be used to launch the browser.
 
@@ -662,8 +661,8 @@ class FFPuppet:
         marionette: int | None = None,
         memory_limit: int = 0,
         prefs_js: Path | None = None,
-        extension: list[Path] | None = None,
-        cert_files: list[Path] | None = None,
+        extension: Iterable[Path] | None = None,
+        cert_files: Iterable[Path] | None = None,
     ) -> None:
         """Launch a new browser process.
 
@@ -780,8 +779,7 @@ class FFPuppet:
             stderr.flush()
             # launch the browser
             launch_timeout = max(launch_timeout, self.LAUNCH_TIMEOUT_MIN)
-            LOG.debug("launch timeout: %d", launch_timeout)
-            LOG.debug("launch command: %r", " ".join(cmd))
+            LOG.debug("launching (%ds) %r", launch_timeout, " ".join(cmd))
             self.reason = None
             creationflags = 0
             if is_windows:

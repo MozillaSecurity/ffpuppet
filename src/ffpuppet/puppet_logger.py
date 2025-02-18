@@ -18,7 +18,7 @@ from typing import IO, TYPE_CHECKING
 from .helpers import warn_open
 
 if TYPE_CHECKING:
-    from collections.abc import Iterator, KeysView
+    from collections.abc import Generator, KeysView
 
 LOG = getLogger(__name__)
 
@@ -163,7 +163,7 @@ class PuppetLogger:  # pylint: disable=missing-docstring
         self.closed = True
 
     @property
-    def files(self) -> Iterator[str]:
+    def files(self) -> Generator[str]:
         """File names of log files.
 
         Args:
