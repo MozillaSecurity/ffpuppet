@@ -16,7 +16,7 @@ with suppress(ImportError):
     from xvfbwrapper import Xvfb
 
 if TYPE_CHECKING:
-    from collections.abc import Iterable, Mapping
+    from collections.abc import Mapping, Sequence
 
 
 LOG = getLogger(__name__)
@@ -44,7 +44,7 @@ class Display:
     __slots__ = ("args", "env")
 
     def __init__(self) -> None:
-        self.args: Iterable[str] = ()
+        self.args: Sequence[str] = ()
         self.env: Mapping[str, str] = MappingProxyType({})
 
     def close(self) -> None:

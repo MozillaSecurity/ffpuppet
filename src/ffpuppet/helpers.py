@@ -18,7 +18,7 @@ from psutil import Process, process_iter
 from .sanitizer_util import SanitizerOptions
 
 if TYPE_CHECKING:
-    from collections.abc import Generator, Iterable
+    from collections.abc import Generator, Iterable, Mapping
 
 if system() == "Windows":
     from .lsof import pids_by_file
@@ -39,7 +39,7 @@ __all__ = (
 
 
 def _configure_sanitizers(
-    orig_env: dict[str, str], target_path: Path, log_path: Path
+    orig_env: Mapping[str, str], target_path: Path, log_path: Path
 ) -> dict[str, str]:
     """Copy environment and update default values in *SAN_OPTIONS entries.
     These values are only updated if they are not provided, with the exception of
@@ -53,7 +53,7 @@ def _configure_sanitizers(
     Returns:
         Environment with *SAN_OPTIONS defaults set.
     """
-    env: dict[str, str] = dict(orig_env)
+    env = dict(orig_env)
     # https://github.com/google/sanitizers/wiki/SanitizerCommonFlags
     common_flags = [
         ("abort_on_error", "false"),
@@ -233,7 +233,7 @@ def files_in_use(files: Iterable[Path]) -> Generator[tuple[Path, int, str]]:
 def prepare_environment(
     target_path: Path,
     sanitizer_log: Path,
-    env_mod: dict[str, str | None] | None = None,
+    env_mod: Mapping[str, str | None] | None = None,
 ) -> dict[str, str]:
     """Create environment that can be used when launching the browser.
 
@@ -249,7 +249,7 @@ def prepare_environment(
         Environment to use when launching browser.
     """
     base: dict[str, str | None] = {}
-    env: dict[str, str] = dict(environ)
+    env = dict(environ)
 
     # https://developer.gimp.org/api/2.0/glib/glib-running.html#G_SLICE
     base["G_SLICE"] = "always-malloc"
