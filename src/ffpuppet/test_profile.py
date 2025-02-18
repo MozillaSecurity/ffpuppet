@@ -231,37 +231,30 @@ def test_profile_certutil_missing(mocker, tmp_path):
         Profile(cert_files=[cert], working_path=str(tmp_path))
 
 
-# pylint: disable=protected-access
 def test_profile_install_cert(mocker, tmp_path):
-    """test Profile._install_cert() certutil"""
+    """test Profile.install_cert() certutil"""
     mocker.patch("ffpuppet.profile.certutil_available", autospec=True)
     fake_check = mocker.patch("ffpuppet.profile.check_output", autospec=True)
 
     cert = tmp_path / "cert"
     cert.touch()
-    with Profile(working_path=str(tmp_path)) as profile:
-        fake_check.reset_mock()
-        profile._install_cert(cert, "fake_certutil")
-        assert fake_check.call_count == 1
 
-        fake_check.side_effect = CalledProcessError(1, "test", output=b"error msg")
-        with raises(RuntimeError, match="Install cert: certutil error"):
-            profile._install_cert(cert, "fake_certutil")
+    Profile.install_cert(tmp_path, cert, "fake_certutil")
+    assert fake_check.call_count == 1
+
+    fake_check.side_effect = CalledProcessError(1, "test", output=b"error msg")
+    with raises(RuntimeError, match="Install cert: certutil error"):
+        Profile.install_cert(tmp_path, cert, "fake_certutil")
 
 
-# pylint: disable=protected-access
 def test_profile_init_cert_db(mocker, tmp_path):
-    """test Profile._init_cert_db() certutil"""
+    """test Profile.init_cert_db() certutil"""
     mocker.patch("ffpuppet.profile.certutil_available", autospec=True)
     fake_check = mocker.patch("ffpuppet.profile.check_output", autospec=True)
 
-    with Profile(working_path=str(tmp_path)) as profile:
-        fake_check.reset_mock()
-        profile._init_cert_db("fake_certutil")
-        assert fake_check.call_count == 1
+    Profile.init_cert_db(tmp_path, "fake_certutil")
+    assert fake_check.call_count == 1
 
-        cert = tmp_path / "cert"
-        cert.touch()
-        fake_check.side_effect = CalledProcessError(1, "test", output=b"error msg")
-        with raises(RuntimeError, match="Init cert db: certutil error"):
-            profile._init_cert_db("fake_certutil")
+    fake_check.side_effect = CalledProcessError(1, "test", output=b"error msg")
+    with raises(RuntimeError, match="Init cert db: certutil error"):
+        Profile.init_cert_db(tmp_path, "fake_certutil")

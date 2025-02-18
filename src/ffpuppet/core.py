@@ -680,6 +680,7 @@ class FFPuppet:
                           if its memory usage exceeds the amount specified.
             prefs_js: prefs.js file to install in the Firefox profile.
             extension: Extensions to be installed.
+            cert_files: Certificate files to be installed.
 
         Returns:
             None

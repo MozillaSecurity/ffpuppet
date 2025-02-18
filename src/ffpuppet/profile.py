@@ -54,9 +54,9 @@ class Profile:
                 self._copy_extensions(extensions)
             if cert_files:
                 certutil_bin = certutil_find(browser_bin)
-                self._init_cert_db(certutil_bin)
+                self.init_cert_db(self.path, certutil_bin)
                 for cert in cert_files:
-                    self._install_cert(cert, certutil_bin)
+                    self.install_cert(self.path, cert, certutil_bin)
         except Exception:
             if self.path.exists():
                 rmtree(self.path, ignore_errors=True)
@@ -132,50 +132,6 @@ class Profile:
         if invalid_prefs.is_file():
             invalid_prefs.unlink()
 
-    def _init_cert_db(self, certutil: str) -> None:
-        assert self.path
-        # remove any existing db files to avoid any compatibility issues
-        (self.path / "cert9.db").unlink(missing_ok=True)
-        (self.path / "key4.db").unlink(missing_ok=True)
-        (self.path / "pkcs11.txt").unlink(missing_ok=True)
-        try:
-            check_output(
-                (certutil, "-N", "-d", str(self.path), "--empty-password"),
-                stderr=STDOUT,
-                timeout=10,
-            )
-        except (CalledProcessError, TimeoutExpired) as exc:
-            LOG.error(str(exc))
-            if exc.output:
-                LOG.error(exc.output.decode().strip())
-            raise RuntimeError("Init cert db: certutil error") from None
-
-    def _install_cert(self, cert_file: Path, certutil: str) -> None:
-        assert self.path
-        LOG.debug("installing certificate '%s' with %r", cert_file, certutil)
-        try:
-            check_output(
-                (
-                    certutil,
-                    "-A",
-                    "-d",
-                    str(self.path),
-                    "-t",
-                    "CT,,",
-                    "-n",
-                    "test cert",
-                    "-i",
-                    str(cert_file),
-                ),
-                stderr=STDOUT,
-                timeout=10,
-            )
-        except (CalledProcessError, TimeoutExpired) as exc:
-            LOG.error(str(exc))
-            if exc.output:
-                LOG.error(exc.output.decode().strip())
-            raise RuntimeError("Install cert: certutil error") from None
-
     def add_prefs(self, prefs: dict[str, str]) -> None:
         """Write or append preferences from prefs to prefs.js file in profile_path.
 
@@ -216,6 +172,69 @@ class Profile:
         for missing in missing_prefs:
             LOG.debug("pref not set %r", missing)
         return not missing_prefs
+
+    @staticmethod
+    def init_cert_db(dst: Path, certutil: str) -> None:
+        """Create required certificate database files.
+
+        Args:
+            dst: Path of directory to initialize.
+            certutil: certutil binary.
+
+        Returns:
+            None
+        """
+        # remove any existing db files to avoid any compatibility issues
+        (dst / "cert9.db").unlink(missing_ok=True)
+        (dst / "key4.db").unlink(missing_ok=True)
+        (dst / "pkcs11.txt").unlink(missing_ok=True)
+        try:
+            check_output(
+                (certutil, "-N", "-d", str(dst), "--empty-password"),
+                stderr=STDOUT,
+                timeout=10,
+            )
+        except (CalledProcessError, TimeoutExpired) as exc:
+            LOG.error(str(exc))
+            if exc.output:
+                LOG.error(exc.output.decode().strip())
+            raise RuntimeError("Init cert db: certutil error") from None
+
+    @staticmethod
+    def install_cert(dst: Path, cert_file: Path, certutil: str) -> None:
+        """Install certificate in the database.
+
+        Args:
+            dst: Directory containing database.
+            cert_file: Certificate file to install.
+            certutil: certutil binary.
+
+        Returns:
+            None
+        """
+        LOG.debug("installing certificate '%s' with %r", cert_file, certutil)
+        try:
+            check_output(
+                (
+                    certutil,
+                    "-A",
+                    "-d",
+                    str(dst),
+                    "-t",
+                    "CT,,",
+                    "-n",
+                    "test cert",
+                    "-i",
+                    str(cert_file),
+                ),
+                stderr=STDOUT,
+                timeout=10,
+            )
+        except (CalledProcessError, TimeoutExpired) as exc:
+            LOG.error(str(exc))
+            if exc.output:
+                LOG.error(exc.output.decode().strip())
+            raise RuntimeError("Install cert: certutil error") from None
 
     @property
     def invalid_prefs(self) -> Path | None:
