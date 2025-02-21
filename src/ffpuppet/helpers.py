@@ -162,7 +162,7 @@ def certutil_available(certutil: str) -> bool:
         True if certutil is available for use otherwise False.
     """
     try:
-        check_output([certutil], stderr=STDOUT, timeout=10)
+        check_output([certutil], stderr=STDOUT, timeout=60)
     except CalledProcessError as exc:
         # there are multiple "certutil" tools and one is installed on Windows by default
         # check the help output to make sure we have the correct tool

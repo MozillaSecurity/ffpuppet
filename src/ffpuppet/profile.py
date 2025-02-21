@@ -192,7 +192,7 @@ class Profile:
             check_output(
                 (certutil, "-N", "-d", str(dst), "--empty-password"),
                 stderr=STDOUT,
-                timeout=10,
+                timeout=60,
             )
         except (CalledProcessError, TimeoutExpired) as exc:
             LOG.error(str(exc))
@@ -228,7 +228,7 @@ class Profile:
                     str(cert_file),
                 ),
                 stderr=STDOUT,
-                timeout=10,
+                timeout=60,
             )
         except (CalledProcessError, TimeoutExpired) as exc:
             LOG.error(str(exc))
