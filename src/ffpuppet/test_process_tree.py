@@ -10,12 +10,13 @@ from subprocess import Popen
 from time import sleep
 from unittest import mock
 
-from psutil import AccessDenied, NoSuchProcess, Process, TimeoutExpired
+from psutil import STATUS_ZOMBIE, AccessDenied, NoSuchProcess, Process, TimeoutExpired
 from pytest import mark, raises
 
 from .exceptions import TerminateError
 from .process_tree import (
     ProcessTree,
+    _filter_zombies,
     _last_modified,
     _safe_wait_procs,
     _writing_coverage,
@@ -219,7 +220,7 @@ def test_process_tree_05(mocker, procs, last_mod, writing, is_running, success):
 
 
 def test_last_modified_01(tmp_path):
-    """test ProcessTree._last_modified()"""
+    """test _last_modified()"""
     # scan missing path
     assert _last_modified(tmp_path / "missing") is None
     # scan empty path
@@ -234,7 +235,7 @@ def test_last_modified_01(tmp_path):
 
 
 def test_writing_coverage_01(mocker):
-    """test ProcessTree._writing_coverage()"""
+    """test _writing_coverage()"""
     openfile = namedtuple("openfile", ["path", "fd"])
     # empty list
     assert not _writing_coverage([])
@@ -302,7 +303,7 @@ def test_writing_coverage_01(mocker):
     ],
 )
 def test_safe_wait_procs_01(mocker, wait_side_effect, procs, alive_count, gone_count):
-    """test ProcessTree._safe_wait_procs()"""
+    """test _safe_wait_procs()"""
     mocker.patch("ffpuppet.process_tree.perf_counter", side_effect=count(step=0.25))
     mocker.patch("ffpuppet.process_tree.sleep", autospec=True)
     mocker.patch("ffpuppet.process_tree.wait_procs", side_effect=wait_side_effect)
@@ -310,3 +311,12 @@ def test_safe_wait_procs_01(mocker, wait_side_effect, procs, alive_count, gone_c
     result = _safe_wait_procs(procs, timeout=1)
     assert len(result[0]) == gone_count
     assert len(result[1]) == alive_count
+
+
+def test_filter_zombies_01(mocker):
+    """test _filter_zombies()"""
+    zombie = mocker.Mock(spec_set=Process, pid=123)
+    zombie.status.return_value = STATUS_ZOMBIE
+    procs = tuple(_filter_zombies([zombie, mocker.Mock(spec_set=Process)]))
+    assert len(procs) == 1
+    assert not any(x for x in procs if x.status() == STATUS_ZOMBIE)

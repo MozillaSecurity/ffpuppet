@@ -19,7 +19,14 @@ try:
 except ImportError:
     COVERAGE_SIGNAL = None
 
-from psutil import AccessDenied, NoSuchProcess, Process, TimeoutExpired, wait_procs
+from psutil import (
+    STATUS_ZOMBIE,
+    AccessDenied,
+    NoSuchProcess,
+    Process,
+    TimeoutExpired,
+    wait_procs,
+)
 
 from .exceptions import TerminateError
 
@@ -28,6 +35,23 @@ if TYPE_CHECKING:
     from subprocess import Popen
 
 LOG = getLogger(__name__)
+
+
+def _filter_zombies(procs: Iterable[Process]) -> Generator[Process]:
+    """Filter out zombie processes from a collection of processes.
+
+    Args:
+        procs: Processes to check.
+
+    Yields:
+        Processes that are not zombies.
+    """
+    for proc in procs:
+        with suppress(AccessDenied, NoSuchProcess):
+            if proc.status() == STATUS_ZOMBIE:
+                LOG.debug("filtering zombie: %d - %s", proc.pid, proc.name())
+                continue
+            yield proc
 
 
 def _last_modified(scan_dir: Path) -> float | None:
@@ -88,11 +112,11 @@ def _safe_wait_procs(
     return (gone, alive)
 
 
-def _writing_coverage(procs: list[Process]) -> bool:
+def _writing_coverage(procs: Iterable[Process]) -> bool:
     """Check if any processes have open .gcda files.
 
     Args:
-        procs: List of processes to check.
+        procs: Processes to check.
 
     Returns:
         True if processes with open .gcda files are found.
@@ -278,7 +302,7 @@ class ProcessTree:
         """Processes in the process tree.
 
         Args:
-            recursive: if False only the parent and child processes are returned.
+            recursive: If False only the parent and child processes are returned.
 
         Returns:
             Processes in the process tree.
@@ -312,7 +336,7 @@ class ProcessTree:
                 LOG.debug("attempting to terminate parent (%d)", self.parent.pid)
                 self.parent.terminate()
                 self.parent.wait(timeout=10)
-            procs = _safe_wait_procs(procs, timeout=0)[1]
+            procs = list(_filter_zombies(_safe_wait_procs(procs, timeout=0)[1]))
 
         use_kill = False
         while procs:
@@ -329,7 +353,7 @@ class ProcessTree:
                     else:
                         proc.terminate()
             # wait for processes to terminate
-            procs = _safe_wait_procs(procs, timeout=30)[1]
+            procs = list(_filter_zombies(_safe_wait_procs(procs, timeout=30)[1]))
             if use_kill:
                 break
             use_kill = True
@@ -350,12 +374,9 @@ class ProcessTree:
         Returns:
             Process exit code.
         """
-        try:
-            exit_code = self.parent.wait(timeout=timeout) or 0
-        except (AccessDenied, NoSuchProcess):  # pragma: no cover
-            # this is triggered sometimes when the process goes away
-            exit_code = 0
-        return exit_code
+        with suppress(AccessDenied, NoSuchProcess):
+            return self.parent.wait(timeout=timeout) or 0
+        return 0  # pragma: no cover
 
     def wait_procs(self, timeout: float | None = 0) -> int:
         """Wait for process tree to exit.
