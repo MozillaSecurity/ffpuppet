@@ -15,7 +15,7 @@ def test_check_01(mocker, tmp_path):
     """test CheckLogContents()"""
     test_log = tmp_path / "test.log"
     # input contains token
-    test_log.write_bytes(b"\xF0\x9F\x91\x8Dblah\nfoo\ntest\n123")
+    test_log.write_bytes(b"\xf0\x9f\x91\x8dblah\nfoo\ntest\n123")
     checker = CheckLogContents([str(test_log)], [re_compile("test")])
     assert checker.check()
     with test_log.open("wb") as lfp:

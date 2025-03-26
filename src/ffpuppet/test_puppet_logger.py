@@ -154,7 +154,7 @@ def test_puppet_logger_06(tmp_path):
         plog.add_log("test_2")
         plog_fp_test_2 = plog.get_fp("test_2")
         assert plog_fp_test_2 is not None
-        plog_fp_test_2.write(b"\x00TEST\xFF\xEF")
+        plog_fp_test_2.write(b"\x00TEST\xff\xef")
         # add empty log
         plog.add_log("test_empty")
         # add larger log (not a power of 2 to help catch buffer issues)
