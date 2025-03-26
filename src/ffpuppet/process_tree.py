@@ -337,7 +337,8 @@ class ProcessTree:
                 LOG.debug("attempting to terminate parent (%d)", self.parent.pid)
                 self.parent.terminate()
                 self.parent.wait(timeout=10)
-            procs = list(_filter_zombies(_safe_wait_procs(procs, timeout=0)[1]))
+            # remaining processes should exit if parent process is gone
+            procs = list(_filter_zombies(_safe_wait_procs(procs, timeout=1)[1]))
 
         use_kill = False
         while procs:
