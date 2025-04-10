@@ -526,7 +526,9 @@ def test_ffpuppet_21(mocker, tmp_path, mdsw_available):
         (dst / filename).write_text(src.read_text())
         return dst / filename
 
-    mocker.patch("ffpuppet.core.getenv", return_value="1")
+    debug_dmps = tmp_path / "debug_dmps"
+    debug_dmps.mkdir()
+    mocker.patch("ffpuppet.core.getenv", side_effect=("1", str(debug_dmps), "1"))
     mocker.patch.object(MinidumpParser, "mdsw_available", return_value=mdsw_available)
     mocker.patch.object(MinidumpParser, "create_log", side_effect=_fake_create_log)
     profile = tmp_path / "profile"
@@ -555,6 +557,9 @@ def test_ffpuppet_21(mocker, tmp_path, mdsw_available):
             assert len(tuple((logs / "minidumps").glob("*"))) == 3
         else:
             assert not any(logs.glob("log_minidump_*"))
+    if mdsw_available:
+        # files should still be available after ffp cleanup
+        assert len(tuple(debug_dmps.iterdir())) == 3
 
 
 def test_ffpuppet_22(tmp_path):

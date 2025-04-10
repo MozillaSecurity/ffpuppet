@@ -3,6 +3,7 @@
 # You can obtain one at http://mozilla.org/MPL/2.0/.
 """ffpuppet minidump parser tests"""
 
+from copy import deepcopy
 from json import dumps
 from pathlib import Path
 from subprocess import CompletedProcess
@@ -12,25 +13,10 @@ from pytest import mark
 
 from .minidump_parser import MinidumpParser
 
-MD_UNSYMBOLIZED_AMD64_WIN = {
+MD_BASE_AMD64_WIN = {
     "crash_info": {
         "address": "0x00007ffe4e09af8d",
-        "crashing_thread": 0,
         "type": "EXCEPTION_BREAKPOINT",
-    },
-    "crashing_thread": {
-        "frame_count": 49,
-        "frames": [
-            {
-                "file": None,
-                "frame": 0,
-                "function": None,
-                "function_offset": None,
-                "line": None,
-                "module": "xul.dll",
-                "registers": {"r10": "0x0"},
-            },
-        ],
     },
     "system_info": {
         "cpu_arch": "amd64",
@@ -39,6 +25,23 @@ MD_UNSYMBOLIZED_AMD64_WIN = {
         "os": "Windows NT",
         "os_ver": "10.0.19044",
     },
+}
+
+MD_UNSYMBOLIZED_AMD64_WIN = deepcopy(MD_BASE_AMD64_WIN)
+MD_UNSYMBOLIZED_AMD64_WIN["crash_info"]["crashing_thread"] = 0
+MD_UNSYMBOLIZED_AMD64_WIN["crashing_thread"] = {
+    "frame_count": 49,
+    "frames": [
+        {
+            "file": None,
+            "frame": 0,
+            "function": None,
+            "function_offset": None,
+            "line": None,
+            "module": "xul.dll",
+            "registers": {"r10": "0x0"},
+        },
+    ],
 }
 
 MD_UNSYMBOLIZED_ARM64_MAC = {
@@ -165,54 +168,43 @@ def test_minidump_parser_03(tmp_path, data, reg, operating_system, cpu, crash, f
 
 def test_minidump_parser_04(tmp_path):
     """test MinidumpParser._fmt_output() - symbolized"""
-    data = {
-        "crash_info": {
-            "address": "0x00007ffe4e09af8d",
-            "crashing_thread": 0,
-            "type": "EXCEPTION_BREAKPOINT",
-        },
-        "crashing_thread": {
-            "frames": [
-                {
-                    "file": "file0.cpp",
-                    "frame": 0,
-                    "function": "function00()",
-                    "function_offset": "0x00000000000001ed",
-                    "line": 47,
-                    "module": "xul.dll",
-                    "registers": {
-                        "r10": "0x12345678",
-                        "r11": "0x0badf00d",
-                        "r12": "0x00000000",
-                        "r13": "0x000000dceebfc2e8",
-                    },
+    data = deepcopy(MD_BASE_AMD64_WIN)
+    data["crash_info"]["crashing_thread"] = 0
+    data["crashing_thread"] = {
+        "frames": [
+            {
+                "file": "file0.cpp",
+                "frame": 0,
+                "function": "function00()",
+                "function_offset": "0x00000000000001ed",
+                "line": 47,
+                "module": "xul.dll",
+                "registers": {
+                    "r10": "0x12345678",
+                    "r11": "0x0badf00d",
+                    "r12": "0x00000000",
+                    "r13": "0x000000dceebfc2e8",
                 },
-                {
-                    "file": "file1.cpp",
-                    "frame": 1,
-                    "function": "function01()",
-                    "function_offset": "0x00000000000001bb",
-                    "line": 210,
-                    "module": "xul.dll",
-                },
-                {
-                    "file": "file2.cpp",
-                    "frame": 2,
-                    "function": "function02()",
-                    "function_offset": "0x0000000000000123",
-                    "line": 123,
-                    "module": "xul.dll",
-                },
-            ],
-        },
-        "system_info": {
-            "cpu_arch": "amd64",
-            "cpu_count": 8,
-            "cpu_info": "family 6 model 70 stepping 1",
-            "os": "Windows NT",
-            "os_ver": "10.0.19044",
-        },
+            },
+            {
+                "file": "file1.cpp",
+                "frame": 1,
+                "function": "function01()",
+                "function_offset": "0x00000000000001bb",
+                "line": 210,
+                "module": "xul.dll",
+            },
+            {
+                "file": "file2.cpp",
+                "frame": 2,
+                "function": "function02()",
+                "function_offset": "0x0000000000000123",
+                "line": 123,
+                "module": "xul.dll",
+            },
+        ],
     }
+
     with (tmp_path / "out.txt").open("w+b") as ofp:
         # pylint: disable=protected-access
         MinidumpParser._fmt_output(data, ofp, limit=2)
@@ -289,3 +281,16 @@ def test_minidump_parser_06(tmp_path):
     # add .extra file to prioritize .dmp file
     (tmp_path / "b.extra").write_text('{"MozCrashReason":"foo"}')
     assert MinidumpParser.dmp_files(tmp_path)[0] == (tmp_path / "b.dmp")
+
+
+def test_minidump_parser_missing_crashing_thread(tmp_path):
+    """test MinidumpParser._fmt_output() - missing crashing thread"""
+    with (tmp_path / "out.txt").open("w+b") as ofp:
+        # pylint: disable=protected-access
+        MinidumpParser._fmt_output(MD_BASE_AMD64_WIN, ofp)
+        ofp.seek(0)
+        formatted = ofp.read().rstrip().decode().split("\n")
+    assert len(formatted) == 3
+    assert formatted[0] == "OS|Windows NT|10.0.19044"
+    assert formatted[1] == "CPU|amd64|family 6 model 70 stepping 1|8"
+    assert formatted[2] == "Crash|EXCEPTION_BREAKPOINT|0x00007ffe4e09af8d|?"
