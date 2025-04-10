@@ -75,14 +75,19 @@ class MinidumpParser:
         """
         assert limit > 0
         # generate register information lines
-        frames = data["crashing_thread"]["frames"]
-        reg_lines: list[str] = []
-        for reg, value in frames[0]["registers"].items():
-            # display three registers per line
-            sep = "\t" if (len(reg_lines) + 1) % 3 else "\n"
-            reg_lines.append(f"{reg:>3} = {value}{sep}")
-        out_fp.write("".join(reg_lines).rstrip().encode())
-        out_fp.write(b"\n")
+        try:
+            frames = data["crashing_thread"]["frames"]
+        except KeyError:
+            LOG.warning("No frames available for 'crashing thread'")
+            frames = []
+        if frames:
+            reg_lines: list[str] = []
+            for reg, value in frames[0]["registers"].items():
+                # display three registers per line
+                sep = "\t" if (len(reg_lines) + 1) % 3 else "\n"
+                reg_lines.append(f"{reg:>3} = {value}{sep}")
+            out_fp.write("".join(reg_lines).rstrip().encode())
+            out_fp.write(b"\n")
 
         # generate OS information line
         line = "|".join(
@@ -104,7 +109,7 @@ class MinidumpParser:
         out_fp.write(b"\n")
 
         # generate Crash information line
-        crashing_thread = str(data["crash_info"]["crashing_thread"])
+        crashing_thread = str(data["crash_info"].get("crashing_thread", "?"))
         line = "|".join(
             (
                 "Crash",

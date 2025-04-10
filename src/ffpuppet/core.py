@@ -533,11 +533,17 @@ class FFPuppet:
                     MDSW_URL,
                 )
             elif dmp_files:
+                # use SAVE_DMP to include dmp files in report
                 if getenv("SAVE_DMP") == "1":
                     # save minidump directory contents (.dmp and .extra files)
                     dmps = self._logs.add_path("minidumps")
                     for md_file in (self.profile.path / "minidumps").glob("*"):
                         copy(md_file, dmps)
+                # use DEBUG_DMP to copy dmp files to a known location
+                debug_dmp = Path(getenv("DEBUG_DMP", ""))
+                if debug_dmp.is_dir():
+                    for md_file in (self.profile.path / "minidumps").glob("*"):
+                        copy(md_file, debug_dmp)
                 # check for local build symbols
                 if (self._bin_path.parent / "crashreporter-symbols").is_dir():
                     sym_path = self._bin_path.parent / "crashreporter-symbols"
