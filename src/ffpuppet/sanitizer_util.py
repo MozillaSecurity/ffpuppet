@@ -48,7 +48,7 @@ class SanitizerOptions:
         return len(self._options)
 
     def __str__(self) -> str:
-        return ":".join("=".join(kv) for kv in self)
+        return ":".join(f"{k}={v}" for k, v in self)
 
     def add(self, flag: str, value: str, overwrite: bool = False) -> None:
         """Add sanitizer option flag.
@@ -93,7 +93,7 @@ class SanitizerOptions:
         Returns:
             Value of given flag or None
         """
-        return self._options.get(flag, None)
+        return self._options.get(flag)
 
     @staticmethod
     def is_quoted(token: str) -> bool:
