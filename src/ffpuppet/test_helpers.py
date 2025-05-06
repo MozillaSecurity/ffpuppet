@@ -3,7 +3,6 @@
 # You can obtain one at http://mozilla.org/MPL/2.0/.
 """ffpuppet helpers tests"""
 
-from contextlib import suppress
 from os import getpid
 from pathlib import Path
 from subprocess import CalledProcessError
@@ -26,69 +25,66 @@ from .sanitizer_util import SanitizerOptions
 
 def test_helpers_01(tmp_path):
     """test _configure_sanitizers()"""
-
-    def parse(opt_str):
-        opts = {}
-        for entry in SanitizerOptions.re_delim.split(opt_str):
-            with suppress(ValueError):
-                key, value = entry.split("=", maxsplit=1)
-            opts[key] = value
-        return opts
-
     # test with empty environment
-    env = {}
-    env = _configure_sanitizers(env, tmp_path, "blah")
+    env = _configure_sanitizers({}, tmp_path, "blah")
     assert "ASAN_OPTIONS" in env
-    asan_opts = parse(env["ASAN_OPTIONS"])
-    assert "external_symbolizer_path" not in asan_opts
-    assert "detect_leaks" in asan_opts
-    assert asan_opts["detect_leaks"] == "false"
-    assert asan_opts["log_path"] == "'blah'"
+    opts = SanitizerOptions(env["ASAN_OPTIONS"])
+    assert opts.get("external_symbolizer_path") is None
+    assert opts.get("detect_leaks") == "false"
+    assert opts.get("log_path") == "'blah'"
     assert "LSAN_OPTIONS" in env
     assert "UBSAN_OPTIONS" in env
     # test with presets environment
-    env = {
-        "ASAN_OPTIONS": "detect_leaks=true",
-        "LSAN_OPTIONS": "a=1",
-        "UBSAN_OPTIONS": "",
-    }
-    env = _configure_sanitizers(env, tmp_path, "blah")
+    env = _configure_sanitizers(
+        {
+            "ASAN_OPTIONS": "detect_leaks=true",
+            "LSAN_OPTIONS": "a=1",
+            "UBSAN_OPTIONS": "",
+        },
+        tmp_path,
+        "blah",
+    )
     assert "ASAN_OPTIONS" in env
-    asan_opts = parse(env["ASAN_OPTIONS"])
-    assert "detect_leaks" in asan_opts
-    assert asan_opts["detect_leaks"] == "true"
+    opts = SanitizerOptions(env["ASAN_OPTIONS"])
+    assert opts.get("detect_leaks") == "true"
     assert "LSAN_OPTIONS" in env
     assert "UBSAN_OPTIONS" in env
-    ubsan_opts = parse(env["UBSAN_OPTIONS"])
-    assert "print_stacktrace" in ubsan_opts
+    opts = SanitizerOptions(env["UBSAN_OPTIONS"])
+    assert opts.get("print_stacktrace") is not None
     # test suppression file
     sup = tmp_path / "test.sup"
     sup.touch()
-    env = {"ASAN_OPTIONS": f"suppressions='{sup}'"}
-    env = _configure_sanitizers(env, tmp_path, "blah")
-    asan_opts = parse(env["ASAN_OPTIONS"])
-    assert "suppressions" in asan_opts
+    env = _configure_sanitizers(
+        {"ASAN_OPTIONS": f"suppressions='{sup}'"}, tmp_path, "blah"
+    )
+    opts = SanitizerOptions(env["ASAN_OPTIONS"])
+    assert opts.get("suppressions") is not None
     # test overwrite log_path
-    env = {
-        "ASAN_OPTIONS": "log_path='overwrite'",
-        "TSAN_OPTIONS": "log_path='overwrite'",
-        "UBSAN_OPTIONS": "log_path='overwrite'",
-    }
-    env = _configure_sanitizers(env, tmp_path, "blah")
+    env = _configure_sanitizers(
+        {
+            "ASAN_OPTIONS": "log_path='overwrite'",
+            "TSAN_OPTIONS": "log_path='overwrite'",
+            "UBSAN_OPTIONS": "log_path='overwrite'",
+        },
+        tmp_path,
+        "blah",
+    )
     assert "ASAN_OPTIONS" in env
-    asan_opts = parse(env["ASAN_OPTIONS"])
-    assert asan_opts["log_path"] == "'blah'"
+    opts = SanitizerOptions(env["ASAN_OPTIONS"])
+    assert opts.get("log_path") == "'blah'"
     assert "UBSAN_OPTIONS" in env
-    ubsan_opts = parse(env["UBSAN_OPTIONS"])
-    assert ubsan_opts["log_path"] == "'blah'"
+    opts = SanitizerOptions(env["UBSAN_OPTIONS"])
+    assert opts.get("log_path") == "'blah'"
     # test missing suppression file
-    env = {"ASAN_OPTIONS": "suppressions=not_a_file"}
     with raises(AssertionError, match="missing suppressions file"):
-        _configure_sanitizers(env, tmp_path, "blah")
+        _configure_sanitizers(
+            {"ASAN_OPTIONS": "suppressions=not_a_file"}, tmp_path, "blah"
+        )
     # unquoted path containing ':'
-    env = {"ASAN_OPTIONS": "strip_path_prefix=x:\\foo\\bar"}
-    with raises(AssertionError, match=r"\(strip_path_prefix\) must be quoted"):
-        _configure_sanitizers(env, tmp_path, "blah")
+    with raises(ValueError, match=r"\(strip_path_prefix\) must be quoted"):
+        _configure_sanitizers(
+            {"ASAN_OPTIONS": "strip_path_prefix=x:\\foo\\bar"}, tmp_path, "blah"
+        )
     # multiple options
     options = (
         "opt1=1",
@@ -100,34 +96,29 @@ def test_helpers_01(tmp_path):
         "opt7='/with space/'",
         "opt8='x:\\with a space\\or two'",
     )
-    env = {"ASAN_OPTIONS": ":".join(options)}
-    env = _configure_sanitizers(env, tmp_path, "blah")
-    asan_opts = parse(env["ASAN_OPTIONS"])
+    env = _configure_sanitizers({"ASAN_OPTIONS": ":".join(options)}, tmp_path, "blah")
+    opts = SanitizerOptions(env["ASAN_OPTIONS"])
     for key, value in (x.split(sep="=", maxsplit=1) for x in options):
-        assert asan_opts[key] == value
+        assert opts.get(key) == value
     # test using packaged llvm-symbolizer
     llvm_sym_packed = tmp_path / LLVM_SYMBOLIZER
     llvm_sym_packed.touch()
-    env = {"ASAN_OPTIONS": ":".join(options)}
-    env = _configure_sanitizers(env, tmp_path, "blah")
-    asan_opts = parse(env["ASAN_OPTIONS"])
-    assert "external_symbolizer_path" in asan_opts
-    assert asan_opts["external_symbolizer_path"].strip("'") == str(llvm_sym_packed)
+    env = _configure_sanitizers({"ASAN_OPTIONS": ":".join(options)}, tmp_path, "blah")
+    opts = SanitizerOptions(env["ASAN_OPTIONS"])
+    assert opts.get("external_symbolizer_path").strip("'") == str(llvm_sym_packed)
     # test malformed option pair
-    env = {"ASAN_OPTIONS": "a=b=c:x"}
-    env = _configure_sanitizers(env, tmp_path, "blah")
-    asan_opts = parse(env["ASAN_OPTIONS"])
-    assert asan_opts["a"] == "b=c"
-    assert "x" not in asan_opts
+    env = _configure_sanitizers({"ASAN_OPTIONS": "a=b=c:malformed"}, tmp_path, "blah")
+    opts = SanitizerOptions(env["ASAN_OPTIONS"])
+    assert opts.get("a") == "b=c"
+    assert "malformed" not in str(opts)
     # test ASAN_SYMBOLIZER_PATH
     (tmp_path / "a").mkdir()
     llvm_sym_a = tmp_path / "a" / "llvm-symbolizer"
     llvm_sym_a.touch()
     env = {"ASAN_SYMBOLIZER_PATH": str(llvm_sym_a)}
     env = _configure_sanitizers(env, tmp_path, "blah")
-    asan_opts = parse(env["ASAN_OPTIONS"])
-    assert "external_symbolizer_path" in asan_opts
-    assert asan_opts["external_symbolizer_path"].strip("'") == str(llvm_sym_a)
+    opts = SanitizerOptions(env["ASAN_OPTIONS"])
+    assert opts.get("external_symbolizer_path").strip("'") == str(llvm_sym_a)
     # test ASAN_SYMBOLIZER_PATH override by ASAN_OPTIONS=external_symbolizer_path
     (tmp_path / "b").mkdir()
     llvm_sym_b = tmp_path / "b" / "llvm-symbolizer"
@@ -137,9 +128,8 @@ def test_helpers_01(tmp_path):
         "ASAN_OPTIONS": f"external_symbolizer_path='{llvm_sym_b}'",
     }
     env = _configure_sanitizers(env, tmp_path, "blah")
-    asan_opts = parse(env["ASAN_OPTIONS"])
-    assert "external_symbolizer_path" in asan_opts
-    assert asan_opts["external_symbolizer_path"].strip("'") == str(llvm_sym_b)
+    opts = SanitizerOptions(env["ASAN_OPTIONS"])
+    assert opts.get("external_symbolizer_path").strip("'") == str(llvm_sym_b)
 
 
 def test_helpers_02(tmp_path):
