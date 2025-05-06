@@ -11,7 +11,7 @@ from re import compile as re_compile
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from collections.abc import Generator
+    from collections.abc import Generator, Sequence
 
 LOG = getLogger(__name__)
 
@@ -19,12 +19,18 @@ __author__ = "Tyson Smith"
 __all__ = ("SanitizerOptions",)
 
 
-class SanitizerOptions:  # pylint: disable=missing-docstring
+class SanitizerOptions:
+    """Used to parse, load and manage sanitizer options."""
+
     re_delim = re_compile(r":(?![\\|/])")
 
     __slots__ = ("_options",)
 
     def __init__(self, options: str | None = None) -> None:
+        """
+        Args:
+            options: Sanitizer options string to load.
+        """
         self._options: dict[str, str] = {}
         if options is not None:
             self.load_options(options)
@@ -35,7 +41,7 @@ class SanitizerOptions:  # pylint: disable=missing-docstring
     def __contains__(self, item: str) -> bool:
         return item in self._options
 
-    def __iter__(self) -> Generator[tuple[str, str]]:
+    def __iter__(self) -> Generator[Sequence[str]]:
         yield from self._options.items()
 
     def __len__(self) -> int:
@@ -45,11 +51,11 @@ class SanitizerOptions:  # pylint: disable=missing-docstring
         return ":".join("=".join(kv) for kv in self)
 
     def add(self, flag: str, value: str, overwrite: bool = False) -> None:
-        """Add sanitizer flag.
+        """Add sanitizer option flag.
 
         Args:
-            flag: Flags to set.
-            value: Value to use.
+            flag: Sanitizer option flag to set.
+            value: Value to use. Values containing ':' or ' ' must be quoted.
             overwrite: Overwrite existing value.
 
         Returns:
@@ -69,7 +75,7 @@ class SanitizerOptions:  # pylint: disable=missing-docstring
             flag: Flags to set.
 
         Returns:
-            False if the flag exists and the path does not otherwise False
+            False if the flag exists and the path does not otherwise True.
         """
         if flag in self._options:
             value = self._options[flag]
@@ -116,7 +122,7 @@ class SanitizerOptions:  # pylint: disable=missing-docstring
                 try:
                     self.add(*option.split("=", maxsplit=1))
                 except TypeError:  # noqa: PERF203
-                    LOG.warning("Malformed option %r", option)
+                    LOG.warning("Malformed sanitizer option %r", option)
 
     def pop(self, flag: str) -> str | None:
         """Pop sanitizer flag.
