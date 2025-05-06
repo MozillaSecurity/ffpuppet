@@ -3,7 +3,7 @@
 # You can obtain one at http://mozilla.org/MPL/2.0/.
 """ffpuppet sanitizer_util tests"""
 
-from pytest import mark
+from pytest import mark, raises
 
 from .sanitizer_util import SanitizerOptions
 
@@ -34,7 +34,7 @@ from .sanitizer_util import SanitizerOptions
         ),
     ],
 )
-def test_sanitizer_options_01(init, add, result, overwrite):
+def test_sanitizer_options_parsing_adding(init, add, result, overwrite):
     """test SanitizerOptions() - parsing and adding"""
     opts = SanitizerOptions(init)
     for key, value in add.items():
@@ -57,7 +57,49 @@ def test_sanitizer_options_01(init, add, result, overwrite):
         assert not result[-1]
 
 
-def test_sanitizer_options_02():
+def test_sanitizer_load_options():
+    """test SanitizerOptions.load_options -"""
+    opts = SanitizerOptions()
+    # empty
+    assert not opts
+    assert len(opts) == 0
+    # single options
+    opts.load_options("a=1")
+    assert opts
+    assert len(opts) == 1
+    assert opts.pop("a") == "1"
+    # multiple options
+    opts.load_options("a=1:b=2")
+    assert len(opts) == 2
+    assert opts.pop("a") == "1"
+    assert opts.pop("b") == "2"
+    # malformed option
+    opts.load_options("foo")
+    assert len(opts) == 0
+    # malformed option with valid option
+    opts.load_options("a=1:foo")
+    assert len(opts) == 1
+    assert opts.pop("a") == "1"
+
+
+@mark.parametrize(
+    "flag, value, msg",
+    [
+        # empty flag name
+        ("", "test", r"Flag name cannot be empty"),
+        # missing quotes with ':'
+        ("test", "a:b", r"'a:b' \(test\) must be quoted"),
+        # missing quotes with ' '
+        ("test", "a b", r"'a b' \(test\) must be quoted"),
+    ],
+)
+def test_sanitizer_options_invalid_add(flag, value, msg):
+    """test SanitizerOptions() -"""
+    with raises(ValueError, match=msg):
+        SanitizerOptions().add(flag, value)
+
+
+def test_sanitizer_options_get_pop():
     """test SanitizerOptions() - get() and pop()"""
     opts = SanitizerOptions()
     assert opts.get("missing") is None
@@ -67,7 +109,7 @@ def test_sanitizer_options_02():
     assert opts.get("exists") is None
 
 
-def test_sanitizer_options_03(tmp_path):
+def test_sanitizer_options_check_path(tmp_path):
     """test SanitizerOptions() - check_path()"""
     opts = SanitizerOptions()
     # test missing key
@@ -82,7 +124,7 @@ def test_sanitizer_options_03(tmp_path):
     assert not opts.check_path("file")
 
 
-def test_sanitizer_options_04():
+def test_sanitizer_options_is_quoted():
     """test SanitizerOptions.is_quoted()"""
     assert SanitizerOptions.is_quoted("'quoted'")
     assert SanitizerOptions.is_quoted('"quoted"')

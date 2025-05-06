@@ -61,9 +61,10 @@ class SanitizerOptions:
         Returns:
             None
         """
-        assert flag
-        if ":" in value or " " in value:
-            assert self.is_quoted(value), f"{value} ({flag}) must be quoted"
+        if not flag:
+            raise ValueError("Flag name cannot be empty")
+        if (":" in value or " " in value) and not self.is_quoted(value):
+            raise ValueError(f"'{value}' ({flag}) must be quoted")
         if flag not in self._options or overwrite:
             self._options[flag] = value
 
