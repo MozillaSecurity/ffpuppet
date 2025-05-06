@@ -29,6 +29,9 @@ class SanitizerOptions:  # pylint: disable=missing-docstring
         if options is not None:
             self.load_options(options)
 
+    def __bool__(self) -> bool:
+        return any(self._options)
+
     def __contains__(self, item: str) -> bool:
         return item in self._options
 
