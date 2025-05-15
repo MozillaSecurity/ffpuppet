@@ -19,7 +19,7 @@ from typing import IO, TYPE_CHECKING
 from .helpers import warn_open
 
 if TYPE_CHECKING:
-    from collections.abc import Generator, KeysView
+    from collections.abc import Generator
 
 LOG = getLogger(__name__)
 
@@ -88,16 +88,16 @@ class PuppetLogger:  # pylint: disable=missing-docstring
         path.mkdir()
         return path
 
-    def available_logs(self) -> KeysView[str]:
-        """List of IDs for the available logs.
+    def available_logs(self) -> frozenset[str]:
+        """IDs for the available logs.
 
         Args:
             None
 
         Returns:
-            A list containing log IDs.
+            All available log IDs.
         """
-        return self._logs.keys()
+        return frozenset(self._logs.keys())
 
     def clean_up(self, ignore_errors: bool = False) -> None:
         """Remove log files from disk.

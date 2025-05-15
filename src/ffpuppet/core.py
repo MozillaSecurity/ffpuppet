@@ -274,8 +274,8 @@ class FFPuppet:
         assert token
         self._abort_tokens.add(re_compile(token))
 
-    def available_logs(self) -> list[str]:
-        """List of IDs for the currently available logs.
+    def available_logs(self) -> frozenset[str]:
+        """IDs for the currently available logs.
 
         Args:
             None
@@ -283,7 +283,7 @@ class FFPuppet:
         Returns:
             All log IDs.
         """
-        return list(self._logs.available_logs())
+        return self._logs.available_logs()
 
     def build_launch_cmd(
         self, bin_path: str, additional_args: Sequence[str] | None = None
