@@ -661,7 +661,7 @@ def test_ffpuppet_24(mocker, tmp_path):
         assert "--disable-cpuid-features-ext" in cmd
         # RR
         ffp._dbg = Debugger.RR
-        mocker.patch.dict(os.environ, {"RR_CHAOS": "1"})
+        mocker.patch.dict(os.environ, {"RR_CHAOS": "1", "RR_ASAN": "1", "RR_TSAN": "1"})
         cmd = ffp.build_launch_cmd("bin_path")
         assert len(cmd) > 2
         assert cmd[0] == "rr"

@@ -396,6 +396,10 @@ class FFPuppet:
                 "rr",
                 "record",
             ]
+            if getenv("RR_ASAN") == "1":
+                rr_cmd.append("--asan")
+            if getenv("RR_TSAN") == "1":
+                rr_cmd.append("--tsan")
             if getenv("RR_CHAOS") == "1":
                 rr_cmd.append("--chaos")
             if self._dbg == Debugger.PERNOSCO:
