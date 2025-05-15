@@ -192,7 +192,7 @@ class PuppetLogger:  # pylint: disable=missing-docstring
             LOG.warning("log_id '%s' does not exist", log_id)
             return None
         if log_fp.name is None or not isfile(log_fp.name):
-            raise OSError(f"log file {log_fp.name!r} does not exist")
+            raise FileNotFoundError(f"Log file not found: {log_fp.name}")
         return log_fp
 
     def log_length(self, log_id: str) -> int | None:

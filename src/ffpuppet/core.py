@@ -342,7 +342,9 @@ class FFPuppet:
             sup_file = getenv("VALGRIND_SUP_PATH")
             if sup_file is not None:
                 if not isfile(sup_file):
-                    raise OSError(f"Missing Valgrind suppressions '{sup_file}'")
+                    raise FileNotFoundError(
+                        f"Missing Valgrind suppressions '{sup_file}'"
+                    )
                 LOG.debug("using Valgrind suppressions '%s'", sup_file)
                 valgrind_cmd.append(f"--suppressions={sup_file}")
 
