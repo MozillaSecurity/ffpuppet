@@ -174,7 +174,7 @@ def certutil_available(certutil: str) -> bool:
             return True
     except OSError as exc:
         LOG.debug(str(exc))
-    LOG.debug("%r is not suitable for use", certutil)
+    LOG.debug("'%s' is not suitable for use", certutil)
     return False
 
 
@@ -300,11 +300,11 @@ def prepare_environment(
     for env_name, env_value in base.items():
         if env_value is None:
             if env_name in env:
-                LOG.debug("removing env var %r", env_name)
+                LOG.debug("removing env var '%s'", env_name)
                 del env[env_name]
             continue
         if env_name in optional and env_name in env:
-            LOG.debug("skipping optional env var %r", env_name)
+            LOG.debug("skipping optional env var '%s'", env_name)
             continue
         env[env_name] = env_value
 
@@ -344,7 +344,7 @@ def wait_on_files(
         if deadline <= perf_counter():
             LOG.debug("wait_on_files() timeout (%ds)", timeout)
             for path, pid, name in open_iter:
-                LOG.debug("%r open by %r (%d)", str(path), name, pid)
+                LOG.debug("'%s' open by '%s' (%d)", path, name, pid)
             break
         if not any(open_iter):
             all_closed = True
@@ -364,4 +364,4 @@ def warn_open(path: Path) -> None:
         None
     """
     for file_path, pid, name in files_in_use(path.iterdir()):
-        LOG.warning("%r open by %r (%d)", str(file_path), name, pid)
+        LOG.warning("'%s' open by '%s' (%d)", file_path, name, pid)

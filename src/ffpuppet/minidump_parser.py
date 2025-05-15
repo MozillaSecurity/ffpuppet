@@ -177,7 +177,7 @@ class MinidumpParser:
             TemporaryFile(dir=self._storage, prefix="mdsw_out_") as out_fp,
             TemporaryFile(dir=self._storage, prefix="mdsw_err_") as err_fp,
         ):
-            LOG.debug("running %r", " ".join(cmd))
+            LOG.debug("running '%s'", " ".join(cmd))
             try:
                 run(cmd, check=True, stderr=err_fp, stdout=out_fp, timeout=timeout)
                 out_fp.seek(0)
@@ -254,7 +254,7 @@ class MinidumpParser:
         current_version = result.stdout.strip().split()[-1].decode()
         if current_version.count(".") != 2:
             LOG.error(
-                "Unknown minidump-stackwalk version: %r",
+                "Unknown minidump-stackwalk version: '%s'",
                 result.stdout.decode(errors="ignore"),
             )
             return False
@@ -264,12 +264,12 @@ class MinidumpParser:
                 break
             if int(cver) < int(mver):
                 LOG.error(
-                    "minidump-stackwalk %r is unsupported (minimum %r)",
+                    "minidump-stackwalk '%s' is unsupported (minimum '%s')",
                     current_version,
                     min_version,
                 )
                 return False
-        LOG.debug("detected minidump-stackwalk version %r", current_version)
+        LOG.debug("detected minidump-stackwalk version '%s'", current_version)
         return True
 
 
