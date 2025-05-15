@@ -225,7 +225,7 @@ def test_puppet_logger_08(tmp_path):
         SpooledTemporaryFile(max_size=2048) as log_fp,
     ):
         plog.add_log("test", logfp=log_fp)
-        with raises(OSError, match="log file None does not exist"):
+        with raises(FileNotFoundError, match="Log file not found: None"):
             plog.get_fp("test")
 
 
