@@ -243,8 +243,8 @@ def prepare_environment(
         sanitizer_log: Location to write sanitizer logs. Log prefix set
                        with ASAN_OPTIONS=log_path=<sanitizer_log>.
         env_mod: Environment modifier. Add, remove and update entries
-                 in the prepared environment. Add and update by setting
-                 value (str) and remove by setting entry value to None.
+                 in the prepared environment. Add/update by setting
+                 value or remove entry by setting value to None.
 
     Returns:
         Environment to use when launching browser.
@@ -324,12 +324,12 @@ def wait_on_files(
     poll_rate: float = 1.0,
     timeout: float = 60,
 ) -> bool:
-    """Wait for specified files to no longer be in use by any process.
+    """Wait while specified files are in use.
 
     Args:
         wait_files: Files that must no longer be open by a process.
-        poll_rate: Amount of time in seconds to wait between checks.
-        timeout: Amount of time in seconds to poll.
+        poll_rate: Time in seconds to wait between checks.
+        timeout: Maximum number of seconds to wait.
 
     Returns:
         True if all files were closed within given time otherwise False.
