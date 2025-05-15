@@ -189,7 +189,7 @@ class FFPuppet:
                     return True
 
         except OSError:
-            LOG.debug("failed to scan log %r", str(report))
+            LOG.debug("failed to scan log '%s'", report)
 
         return False
 
@@ -340,10 +340,10 @@ class FFPuppet:
             ]
 
             sup_file = getenv("VALGRIND_SUP_PATH")
-            if sup_file:
+            if sup_file is not None:
                 if not isfile(sup_file):
-                    raise OSError(f"Missing Valgrind suppressions {sup_file!r}")
-                LOG.debug("using Valgrind suppressions: %r", sup_file)
+                    raise OSError(f"Missing Valgrind suppressions '{sup_file}'")
+                LOG.debug("using Valgrind suppressions '%s'", sup_file)
                 valgrind_cmd.append(f"--suppressions={sup_file}")
 
             cmd = valgrind_cmd + cmd
@@ -462,7 +462,7 @@ class FFPuppet:
         Returns:
             None
         """
-        LOG.debug("close(force_close=%r) called", force_close)
+        LOG.debug("close(force_close=%s) called", force_close)
         assert self._launches > -1, "clean_up() has been called"
         if self.reason is not None:
             # make sure browser logs are closed
@@ -632,7 +632,7 @@ class FFPuppet:
             in a valid functioning state otherwise False.
         """
         if self.reason is not None:
-            LOG.debug("reason is set to %r", self.reason.name)
+            LOG.debug("reason is set to '%s'", self.reason.name)
             return False
         if self._proc_tree is None or not self._proc_tree.is_running():
             LOG.debug("ProcessTree.is_running() returned False")
@@ -642,7 +642,7 @@ class FFPuppet:
             return False
         for check in self._checks:
             if check.check():
-                LOG.debug("%r check abort conditions met", check.name)
+                LOG.debug("'%s' check abort conditions met", check.name)
                 return False
         return True
 
@@ -703,12 +703,12 @@ class FFPuppet:
         # need the path to help find symbols
         self._bin_path = bin_path.parent
 
-        LOG.debug("requested location: %r", location)
         if location is not None:
+            LOG.debug("requested location '%s'", location)
             if isfile(location):
                 location = f"file:///{pathname2url(realpath(location)).lstrip('/')}"
             elif re_match(r"http(s)?://", location, IGNORECASE) is None:
-                raise OSError(f"Cannot find {location!r}")
+                raise OSError(f"Cannot find '{location}'")
 
         # clean up existing log files
         self._logs.reset()
@@ -785,7 +785,7 @@ class FFPuppet:
             stderr.flush()
             # launch the browser
             launch_timeout = max(launch_timeout, self.LAUNCH_TIMEOUT_MIN)
-            LOG.debug("launching (%ds) %r", launch_timeout, " ".join(cmd))
+            LOG.debug("launching (%ds) '%s'", launch_timeout, " ".join(cmd))
             self.reason = None
             creationflags = 0
             if is_windows:
@@ -902,7 +902,7 @@ class FFPuppet:
         Returns:
             None
         """
-        LOG.debug("save_logs('%s', logs_only=%r)", dest, logs_only)
+        LOG.debug("save_logs('%s', logs_only=%s)", dest, logs_only)
         assert self._launches > -1, "clean_up() has been called"
         assert self._logs.closed, "Logs are still in use. Call close() first!"
         self._logs.save_logs(

@@ -82,7 +82,7 @@ class PuppetLogger:  # pylint: disable=missing-docstring
         assert not self.closed
         assert self.path is not None
         path = self.path / name
-        LOG.debug("adding path %r as '%s'", name, path)
+        LOG.debug("adding path '%s' as '%s'", name, path)
         path.mkdir()
         return path
 
@@ -189,7 +189,7 @@ class PuppetLogger:  # pylint: disable=missing-docstring
         try:
             log_fp = self._logs[log_id]
         except KeyError:
-            LOG.warning("log_id %r does not exist", log_id)
+            LOG.warning("log_id '%s' does not exist", log_id)
             return None
         if log_fp.name is None or not isfile(log_fp.name):
             raise OSError(f"log file {log_fp.name!r} does not exist")
