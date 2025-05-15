@@ -86,8 +86,8 @@ def _configure_sanitizers(
     # different defaults per OS
     # asan_config.add("alloc_dealloc_mismatch", "false")
     asan_config.add("check_initialization_order", "true")
-    # https://bugzil.la/1057551
-    # asan_config.add("detect_stack_use_after_return", "true")
+    # stack UAR detection works as of clang 18
+    asan_config.add("detect_stack_use_after_return", "true")
     # asan_config.add("detect_stack_use_after_scope", "true")
     asan_config.add("detect_invalid_pointer_pairs", "1")
     asan_config.add("detect_leaks", "false")
