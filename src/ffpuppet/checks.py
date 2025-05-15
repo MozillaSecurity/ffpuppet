@@ -34,9 +34,9 @@ class Check(ABC):
     Check base class
     """
 
-    name: str | None = None
+    name: str
 
-    __slots__ = ("message",)
+    __slots__ = ("message", "name")
 
     def __init__(self) -> None:
         self.message: str | None = None
