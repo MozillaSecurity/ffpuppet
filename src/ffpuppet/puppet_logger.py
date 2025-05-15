@@ -65,7 +65,9 @@ class PuppetLogger:  # pylint: disable=missing-docstring
         assert log_id not in self._logs
         assert not self.closed
         if logfp is None:
-            logfp = PuppetLogger.open_unique(base_dir=str(self.path))
+            logfp = PuppetLogger.open_unique(
+                base_dir=str(self.path) if self.path else None
+            )
         self._logs[log_id] = logfp
         return logfp
 
