@@ -1,7 +1,7 @@
 FFPuppet
 ========
 
-[![Task Status](https://community-tc.services.mozilla.com/api/github/v1/repository/MozillaSecurity/ffpuppet/master/badge.svg)](https://community-tc.services.mozilla.com/api/github/v1/repository/MozillaSecurity/ffpuppet/master/latest)
+[![CI](https://github.com/MozillaSecurity/ffpuppet/actions/workflows/ci.yml/badge.svg)](https://github.com/MozillaSecurity/ffpuppet/actions/workflows/ci.yml)
 [![codecov](https://codecov.io/gh/MozillaSecurity/ffpuppet/branch/master/graph/badge.svg)](https://codecov.io/gh/MozillaSecurity/ffpuppet)
 [![Matrix](https://img.shields.io/badge/chat-%23fuzzing-green?logo=matrix)](https://matrix.to/#/#fuzzing:mozilla.org)
 [![PyPI](https://img.shields.io/pypi/v/ffpuppet)](https://pypi.org/project/ffpuppet)
