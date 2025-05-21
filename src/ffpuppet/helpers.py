@@ -5,11 +5,11 @@
 
 from __future__ import annotations
 
+import sys
 from contextlib import suppress
 from logging import getLogger
 from os import environ
 from pathlib import Path
-from platform import system
 from subprocess import STDOUT, CalledProcessError, check_output
 from time import perf_counter, sleep
 from typing import TYPE_CHECKING
@@ -21,11 +21,15 @@ from .sanitizer_util import SanitizerOptions
 if TYPE_CHECKING:
     from collections.abc import Generator, Iterable, Mapping
 
-if system() == "Windows":
+if sys.platform == "win32":
     from .lsof import pids_by_file
 
-CERTUTIL = "certutil.exe" if system() == "Windows" else "certutil"
-LLVM_SYMBOLIZER = "llvm-symbolizer.exe" if system() == "Windows" else "llvm-symbolizer"
+    IS_WINDOWS = True
+else:
+    IS_WINDOWS = False
+
+CERTUTIL = "certutil.exe" if IS_WINDOWS else "certutil"
+LLVM_SYMBOLIZER = "llvm-symbolizer.exe" if IS_WINDOWS else "llvm-symbolizer"
 LOG = getLogger(__name__)
 
 __author__ = "Tyson Smith"
@@ -210,7 +214,7 @@ def files_in_use(files: Iterable[Path]) -> Generator[tuple[Path, int, str]]:
         # WARNING: Process.open_files() has issues on Windows!
         # https://psutil.readthedocs.io/en/latest/#psutil.Process.open_files
         # use an alternative implementation instead
-        if system() == "Windows":
+        if sys.platform == "win32":
             for open_file, pids in pids_by_file().items():
                 for check_file in files:
                     # samefile() can raise if either file cannot be accessed
