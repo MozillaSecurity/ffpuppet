@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import ctypes
 import ctypes.wintypes
+import sys
 from pathlib import Path
 
 DUPLICATE_SAME_ACCESS = 2
@@ -21,6 +22,9 @@ SYSTEM_HANDLE_INFORMATION_CLASS = 0x10
 
 __all__ = ("pids_by_file",)
 __author__ = "Jesse Schwartzentruber"
+
+
+assert sys.platform == "win32"
 
 
 def nt_status(status: int) -> int:
@@ -44,8 +48,8 @@ def create_winerror(function: str) -> OSError:  # pragma: no cover
     Returns:
         OSError representing a windows error from fall to a given function.
     """
-    errno = ctypes.GetLastError()  # type: ignore[attr-defined]
-    desc = f"{ctypes.FormatError()} ({function})"  # type: ignore[attr-defined]
+    errno = ctypes.GetLastError()
+    desc = f"{ctypes.FormatError()} ({function})"
     return OSError(errno, desc, None, errno)
 
 
@@ -77,7 +81,7 @@ def nt_query_system_handle_information_ex() -> ctypes.Structure:
     """
     buf_size = 64 * 1024
     buf = ctypes.create_string_buffer(buf_size)
-    ntdll = ctypes.windll.ntdll  # type: ignore[attr-defined]
+    ntdll = ctypes.windll.ntdll
     while True:
         status = ntdll.NtQuerySystemInformation(
             SYSTEM_EXTENDED_HANDLE_INFORMATION_CLASS,
@@ -118,7 +122,7 @@ def pid_handle_to_filename(
         Path the handle represents
         or None if error occurred and `raise_for_error` is False
     """
-    kernel32 = ctypes.windll.kernel32  # type: ignore[attr-defined]
+    kernel32 = ctypes.windll.kernel32
     buf_size = MAX_PATH * 2 + 1
     buf = ctypes.create_string_buffer(buf_size)
     process_handle = kernel32.OpenProcess(PROCESS_DUP_HANDLE, False, pid)
@@ -150,7 +154,7 @@ def pid_handle_to_filename(
             raise create_winerror("OpenProcess")  # pragma: no cover
         ftype = kernel32.GetFileType(hnd)
         if ftype == FILE_TYPE_UNKNOWN:
-            code = ctypes.GetLastError()  # type: ignore[attr-defined]
+            code = ctypes.GetLastError()
             if code != NO_ERROR:
                 if not raise_for_error:
                     kernel32.SetLastError(0)
@@ -194,7 +198,6 @@ def pids_by_file() -> dict[Path, set[int]]:
 
 
 if __name__ == "__main__":  # pragma: no cover
-    import sys
 
     def main() -> None:
         """test main"""

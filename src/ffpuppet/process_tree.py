@@ -5,20 +5,13 @@
 
 from __future__ import annotations
 
+import sys
 from contextlib import suppress
 from logging import getLogger
 from os import getenv
 from pathlib import Path
-from platform import system
 from time import perf_counter, sleep
 from typing import TYPE_CHECKING, Callable, cast
-
-try:
-    from signal import SIGUSR1, Signals
-
-    COVERAGE_SIGNAL: Signals | None = SIGUSR1
-except ImportError:
-    COVERAGE_SIGNAL = None
 
 from psutil import (
     STATUS_ZOMBIE,
@@ -34,6 +27,16 @@ from .exceptions import TerminateError
 if TYPE_CHECKING:
     from collections.abc import Generator, Iterable
     from subprocess import Popen
+
+if sys.platform != "win32":
+    from signal import SIGUSR1, Signals  # pylint: disable=no-name-in-module
+
+    COVERAGE_SIGNAL: Signals | None = SIGUSR1
+    IS_WINDOWS = False
+else:
+    COVERAGE_SIGNAL = None
+    IS_WINDOWS = True
+
 
 LOG = getLogger(__name__)
 
@@ -143,7 +146,7 @@ class ProcessTree:
     def __init__(self, proc: Popen[bytes]) -> None:
         self._launcher: Process | None = None
         # only perform the launcher check on Windows
-        self._launcher_check = system() == "Windows"
+        self._launcher_check = IS_WINDOWS
         self._proc = proc
         self.parent: Process = Process(proc.pid)
 
@@ -190,7 +193,7 @@ class ProcessTree:
         assert getenv("GCOV_PREFIX"), "GCOV_PREFIX not set"
         # coverage output can take a few seconds to start and complete
         assert timeout > 5
-        cov_path = Path(getenv("GCOV_PREFIX"))  # type: ignore[arg-type]
+        cov_path = Path(getenv("GCOV_PREFIX", ""))
         last_mdate = _last_modified(cov_path) or 0
         signaled = 0
         # send COVERAGE_SIGNAL (SIGUSR1) to browser processes

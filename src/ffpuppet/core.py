@@ -5,7 +5,8 @@
 
 from __future__ import annotations
 
-from contextlib import suppress
+# use sys.platform for mypy
+import sys
 from enum import IntEnum, unique
 from logging import getLogger
 from os import X_OK, access, getenv
@@ -17,15 +18,8 @@ from re import compile as re_compile
 from re import match as re_match
 from shutil import copy, copyfileobj
 from subprocess import Popen, check_output
-from sys import executable
 from typing import TYPE_CHECKING
 from urllib.request import pathname2url
-
-with suppress(ImportError):
-    # pylint: disable=ungrouped-imports
-    from subprocess import CREATE_NEW_PROCESS_GROUP  # type: ignore[attr-defined]
-
-    CREATE_SUSPENDED = 0x00000004
 
 from .bootstrapper import Bootstrapper
 from .checks import CheckLogContents, CheckLogSize, CheckMemoryUsage
@@ -40,9 +34,20 @@ from .puppet_logger import PuppetLogger
 if TYPE_CHECKING:
     from collections.abc import Generator, Iterable, Sequence
 
-if system() == "Windows":
+if sys.platform == "win32":
+    # pylint: disable=ungrouped-imports
+    from subprocess import CREATE_NEW_PROCESS_GROUP
+
     # config_job_object is only available on Windows
     from .job_object import config_job_object, resume_suspended_process
+
+    CREATE_SUSPENDED = 0x00000004
+    CREATION_FLAGS = CREATE_NEW_PROCESS_GROUP
+    IS_WINDOWS = True
+else:
+    CREATE_SUSPENDED = 0
+    CREATION_FLAGS = 0
+    IS_WINDOWS = False
 
 
 # Note: ignore 245 for now to avoid getting flooded with OOMs that don't
@@ -301,7 +306,7 @@ class FFPuppet:
         # this is used by the test framework
         cmd: list[str] = []
         if bin_path.lower().endswith(".py"):
-            cmd.append(executable)
+            cmd.append(sys.executable)
         cmd += [bin_path, "-new-instance"]
         cmd.extend(self._display.args)
         if self.profile is not None:
@@ -607,7 +612,7 @@ class FFPuppet:
         Returns:
             None
         """
-        if system() != "Linux":  # pragma: no cover
+        if sys.platform != "linux":  # pragma: no cover
             raise NotImplementedError("dump_coverage() is not available")
         if self._proc_tree and not self._proc_tree.dump_coverage(timeout=timeout):
             LOG.warning("Timeout writing coverage data")
@@ -760,8 +765,7 @@ class FFPuppet:
             }
 
             launch_args = [bootstrapper.location]
-            is_windows = system() == "Windows"
-            if is_windows:
+            if IS_WINDOWS:
                 # disable launcher process
                 launch_args.append("-no-deelevate")
                 launch_args.append("-wait-for-browser")
@@ -793,11 +797,9 @@ class FFPuppet:
             launch_timeout = max(launch_timeout, self.LAUNCH_TIMEOUT_MIN)
             LOG.debug("launching (%ds) '%s'", launch_timeout, " ".join(cmd))
             self.reason = None
-            creationflags = 0
-            if is_windows:
-                creationflags |= CREATE_NEW_PROCESS_GROUP
-                if memory_limit:
-                    creationflags |= CREATE_SUSPENDED
+            creationflags = CREATION_FLAGS
+            if memory_limit and IS_WINDOWS:
+                creationflags |= CREATE_SUSPENDED
             # pylint: disable=consider-using-with
             proc = Popen(
                 cmd,
@@ -813,15 +815,16 @@ class FFPuppet:
                 stdout=self._logs.get_fp("stdout"),
             )
             self._proc_tree = ProcessTree(proc)
-            # pylint: disable=possibly-used-before-assignment
-            if memory_limit and is_windows:
-                LOG.debug("configuring job object")
-                # pylint: disable=no-member,protected-access
-                config_job_object(
-                    proc._handle,  # type: ignore[attr-defined]
-                    memory_limit,
-                )
-                resume_suspended_process(proc.pid)
+            if sys.platform == "win32":
+                # pylint: disable=possibly-used-before-assignment
+                if memory_limit:
+                    LOG.debug("configuring job object")
+                    # pylint: disable=no-member,protected-access
+                    config_job_object(
+                        proc._handle,  # type: ignore[attr-defined]
+                        memory_limit,
+                    )
+                    resume_suspended_process(proc.pid)
             bootstrapper.wait(self.is_healthy, timeout=launch_timeout, url=location)
             # check if launcher process is in use
             if self._proc_tree.launcher is not None:
@@ -855,7 +858,7 @@ class FFPuppet:
             self._checks.append(
                 CheckLogSize(log_limit, logs_fp_stderr.name, logs_fp_stdout.name)
             )
-        if memory_limit and not is_windows:
+        if memory_limit and not IS_WINDOWS:
             # memory limit is enforced with config_job_object on Windows
             self._checks.append(
                 CheckMemoryUsage(proc.pid, memory_limit, self._proc_tree.processes)
