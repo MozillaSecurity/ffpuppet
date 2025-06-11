@@ -43,7 +43,6 @@ disable = [
     "too-many-nested-blocks",
     "too-many-positional-arguments",
     "too-many-statements",
-    "unspecified-encoding",
 ]
 
 [tool.pylint.typecheck]

@@ -4,7 +4,8 @@
 """ffpuppet puppet logger tests"""
 # pylint: disable=protected-access
 
-import os
+from os import stat
+from os.path import isfile
 from tempfile import SpooledTemporaryFile
 from time import sleep
 
@@ -20,10 +21,10 @@ def test_puppet_logger_01(tmp_path):
     assert not plog._logs
     assert plog.path is not None
     assert plog.path.is_dir()
-    assert plog._base is not None
-    assert any(os.scandir(plog._base))
+    assert plog._base == str(tmp_path)
+    assert any(tmp_path.iterdir())
     plog.close()
-    assert any(os.scandir(plog._base))
+    assert any(tmp_path.iterdir())
     assert plog.closed
     with raises(AssertionError):
         plog.add_log("test")
@@ -40,7 +41,7 @@ def test_puppet_logger_02(tmp_path):
         assert "test_new" in plog.available_logs()
         plog_fp_test_new = plog.get_fp("test_new")
         assert plog_fp_test_new is not None
-        assert os.path.isfile(plog_fp_test_new.name)
+        assert isfile(plog_fp_test_new.name)
         with (tmp_path / "test_existing.txt").open("w+b") as in_fp:
             in_fp.write(b"blah")
             plog.add_log("test_existing", logfp=in_fp)
@@ -48,7 +49,7 @@ def test_puppet_logger_02(tmp_path):
         assert len(tuple(plog.files)) == 2
         plog_fp_test_existing = plog.get_fp("test_existing")
         assert plog_fp_test_existing is not None
-        assert os.path.isfile(plog_fp_test_existing.name)
+        assert isfile(plog_fp_test_existing.name)
         assert plog.log_length("test_new") == 0
         assert plog.log_length("test_existing") == 4
 
@@ -60,12 +61,12 @@ def test_puppet_logger_03(tmp_path):
         assert not plog._logs
         assert plog.path is not None
         assert plog.path.is_dir()
-        assert plog._base is not None
-        assert any(os.scandir(plog._base))
+        assert plog._base == str(tmp_path)
+        assert any(tmp_path.iterdir())
         plog.add_log("test_new")
         plog.clean_up()
         assert plog.closed
-        assert not any(os.scandir(plog._base))
+        assert not any(tmp_path.iterdir())
         assert plog.path is None
         assert plog.closed
         assert not plog._logs
@@ -81,8 +82,8 @@ def test_puppet_logger_04(tmp_path):
         assert not plog._logs
         assert plog.path is not None
         assert plog.path.is_dir()
-        assert plog._base is not None
-        assert len(os.listdir(plog._base)) == 1
+        assert plog._base == str(tmp_path)
+        assert len(tuple(tmp_path.iterdir())) == 1
 
 
 def test_puppet_logger_05(tmp_path):
@@ -173,9 +174,9 @@ def test_puppet_logger_06(tmp_path):
         assert len(plog.available_logs()) == 4
         assert len(tuple(dest.iterdir())) == 4
         # verify all data was copied
-        assert os.stat(plog_fp_test_1.name).st_size == 12
-        assert os.stat(plog_fp_test_2.name).st_size == 7
-        assert os.stat(plog_fp_test_3.name).st_size == 500 * 1234
+        assert stat(plog_fp_test_1.name).st_size == 12
+        assert stat(plog_fp_test_2.name).st_size == 7
+        assert stat(plog_fp_test_3.name).st_size == 500 * 1234
 
 
 def test_puppet_logger_07(mocker, tmp_path):
