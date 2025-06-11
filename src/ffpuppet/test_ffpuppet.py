@@ -465,33 +465,28 @@ def test_ffpuppet_20(tmp_path):
         assert ffp._logs.path is not None
         test_logs = [ffp._logs.path / f"{ffp._logs.PREFIX_SAN}.{i}" for i in range(4)]
         # ignore benign ASan warning
-        with test_logs[0].open("w") as log_fp:
-            log_fp.write("==123==WARNING: Symbolizer buffer too small")
+        test_logs[0].write_text("==123==WARNING: Symbolizer buffer too small")
         assert ffp.is_healthy()
         # small log with nothing interesting
-        with test_logs[1].open("w") as log_fp:
-            log_fp.write("SHORT LOG\n")
-            log_fp.write("filler line")
-        # crash on another thread
-        with test_logs[2].open("w") as log_fp:
-            log_fp.write("GOOD LOG\n")
-            log_fp.write(
-                "==70811==ERROR: AddressSanitizer:"
-                " SEGV on unknown address 0x00000BADF00D"
-                " (pc 0x7f4c0bb54c67 bp 0x7f4c07bea380 sp 0x7f4c07bea360 T0)\n"
-            )  # must be 2nd line
-            for _ in range(4):  # pad out to 6 lines
-                log_fp.write("filler line\n")
+        test_logs[1].write_text("SHORT LOG\nfiller line")
+        # crash on another thread (error log must start on 2nd line)
+        test_logs[2].write_text(
+            "GOOD LOG\n"
+            "==70811==ERROR: AddressSanitizer: SEGV on unknown address 0x00000BADF00D "
+            "(pc 0x7f4c0bb54c67 bp 0x7f4c07bea380 sp 0x7f4c07bea360 T0)\n"
+            # pad out to 6 lines
+            "filler line\nfiller line\nfiller line\n"
+            "filler line\nfiller line\nfiller line\n"
+        )
         # child log that should be ignored (created when parent crashes)
-        with test_logs[3].open("w") as log_fp:
-            log_fp.write("BAD LOG\n")
-            log_fp.write(
-                "==70811==ERROR: AddressSanitizer:"
-                " SEGV on unknown address 0x000000000000"
-                " (pc 0x7f4c0bb54c67 bp 0x7f4c07bea380 sp 0x7f4c07bea360 T2)\n"
-            )  # must be 2nd line
-            for _ in range(4):  # pad out to 6 lines
-                log_fp.write("filler line\n")
+        test_logs[3].write_text(
+            "BAD LOG\n"
+            "==70811==ERROR: AddressSanitizer: SEGV on unknown address 0x000000000000 "
+            "(pc 0x7f4c0bb54c67 bp 0x7f4c07bea380 sp 0x7f4c07bea360 T2)\n"
+            # pad out to 6 lines
+            "filler line\nfiller line\nfiller line\n"
+            "filler line\nfiller line\nfiller line\n"
+        )
         assert not ffp.is_healthy()
         assert ffp.is_running()
         # close fake browser process before calling close to avoid hang
@@ -504,15 +499,15 @@ def test_ffpuppet_20(tmp_path):
         assert len(logfiles) == 6
         for logfile in logfiles:
             if "log_ffp_asan_" not in str(logfile):
-                assert logfile.name in ("log_stderr.txt", "log_stdout.txt")
+                assert logfile.name in {"log_stderr.txt", "log_stdout.txt"}
                 continue
             with logfile.open("r") as log_fp:
-                assert log_fp.readline() in (
+                assert log_fp.readline() in {
                     "BAD LOG\n",
                     "GOOD LOG\n",
                     "SHORT LOG\n",
                     "==123==WARNING: Symbolizer buffer too small",
-                )
+                }
     assert not any(f.is_file() for f in test_logs)
 
 
@@ -856,13 +851,12 @@ def test_ffpuppet_28():
     with FFPuppet() as ffp:
         ffp.launch(TESTFF_BIN)
         assert ffp._logs.path is not None
-        san_log = f"{ffp._logs.path / ffp._logs.PREFIX_SAN}.1"
+        san_log = ffp._logs.path / f"{ffp._logs.PREFIX_SAN}.1"
         assert not ffp._logs.watching
         # ignore benign ASan warning
-        with open(san_log, "w") as log_fp:
-            log_fp.write("==123==WARNING: Symbolizer buffer too small")
+        san_log.write_text("==123==WARNING: Symbolizer buffer too small")
         assert ffp.is_healthy()
-        assert san_log in ffp._logs.watching
+        assert str(san_log) in ffp._logs.watching
         ffp.close()
         assert ffp.reason == Reason.CLOSED
 
