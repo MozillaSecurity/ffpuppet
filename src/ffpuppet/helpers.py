@@ -270,8 +270,6 @@ def prepare_environment(
     base["MOZ_DISABLE_CONTENT_SANDBOX"] = "1"
     base["MOZ_DISABLE_GMP_SANDBOX"] = "1"
     base["MOZ_DISABLE_GPU_SANDBOX"] = "1"
-    base["MOZ_DISABLE_NPAPI_SANDBOX"] = "1"
-    base["MOZ_DISABLE_PDFIUM_SANDBOX"] = "1"
     base["MOZ_DISABLE_RDD_SANDBOX"] = "1"
     base["MOZ_DISABLE_SOCKET_PROCESS_SANDBOX"] = "1"
     base["MOZ_DISABLE_UTILITY_SANDBOX"] = "1"
