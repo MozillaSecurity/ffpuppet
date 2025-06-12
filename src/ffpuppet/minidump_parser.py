@@ -18,7 +18,6 @@ MDSW_URL = "https://lib.rs/crates/minidump-stackwalk"
 SYMS_URL = "https://symbols.mozilla.org/"
 
 __author__ = "Tyson Smith"
-__all__ = ("MinidumpParser",)
 
 
 class MinidumpParser:

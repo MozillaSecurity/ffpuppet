@@ -20,7 +20,6 @@ STATUS_INFO_LENGTH_MISMATCH = 0xC0000004
 SYSTEM_EXTENDED_HANDLE_INFORMATION_CLASS = 0x40
 SYSTEM_HANDLE_INFORMATION_CLASS = 0x10
 
-__all__ = ("pids_by_file",)
 __author__ = "Jesse Schwartzentruber"
 
 

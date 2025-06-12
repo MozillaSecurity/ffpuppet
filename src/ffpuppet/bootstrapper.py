@@ -23,7 +23,6 @@ if TYPE_CHECKING:
 LOG = getLogger(__name__)
 
 __author__ = "Tyson Smith"
-__all__ = ("Bootstrapper",)
 
 
 class Bootstrapper:  # pylint: disable=missing-docstring

@@ -26,8 +26,6 @@ LOG = getLogger(__name__)
 __author__ = "Tyson Smith"
 __credits__ = ["Tyson Smith"]
 
-__all__ = ("PuppetLogger",)
-
 
 class PuppetLogger:  # pylint: disable=missing-docstring
     BUF_SIZE = 0x10000  # buffer size used to copy logs
