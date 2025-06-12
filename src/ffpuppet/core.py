@@ -58,7 +58,6 @@ BENIGN_EXIT_CODES = frozenset((0, 1, 2, 9, 15, 245))
 LOG = getLogger(__name__)
 
 __author__ = "Tyson Smith"
-__all__ = ("Debugger", "FFPuppet", "Reason")
 
 
 @unique
