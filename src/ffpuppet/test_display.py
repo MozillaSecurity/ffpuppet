@@ -36,3 +36,23 @@ def test_xvfb_missing_deps(mocker):
     mocker.patch("ffpuppet.display.Xvfb", side_effect=NameError("test"))
     with raises(NameError):
         XvfbDisplay()
+
+
+@mark.skipif(system() != "Linux", reason="Only supported on Linux")
+@mark.parametrize(
+    "resolution, expected_width, expected_height",
+    (
+        (None, 1280, 1024),
+        ("1920x1080", 1920, 1080),
+        ("a", 1280, 1024),
+    ),
+)
+def test_xvfb_resolution(mocker, resolution, expected_width, expected_height):
+    """test XvfbDisplay() XVFB_RESOLUTION"""
+    xvfb = mocker.patch("ffpuppet.display.Xvfb", autospec=True)
+    mocker.patch.dict(
+        "ffpuppet.display.environ",
+        {} if resolution is None else {"XVFB_RESOLUTION": resolution},
+    )
+    XvfbDisplay()
+    xvfb.assert_called_with(width=expected_width, height=expected_height)
