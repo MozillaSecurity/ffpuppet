@@ -8,6 +8,7 @@ from __future__ import annotations
 from contextlib import suppress
 from enum import Enum, auto, unique
 from logging import getLogger
+from os import environ
 from platform import system
 from types import MappingProxyType
 from typing import TYPE_CHECKING
@@ -74,8 +75,18 @@ class XvfbDisplay(Display):
     def __init__(self) -> None:
         super().__init__()
         self.env = MappingProxyType({"MOZ_ENABLE_WAYLAND": "0"})
+        resolution = environ.get("XVFB_RESOLUTION")
+        width = 1280
+        height = 1024
+        if resolution is not None:
+            try:
+                w_str, h_str = resolution.lower().split("x")
+                width, height = int(w_str), int(h_str)
+            except ValueError:
+                LOG.warning("Invalid XVFB_RESOLUTION '%s'", resolution)
+        LOG.debug("xvfb resolution: %dx%d", width, height)
         try:
-            self._xvfb: Xvfb | None = Xvfb(width=1280, height=1024)
+            self._xvfb: Xvfb | None = Xvfb(width=width, height=height)
         except NameError:
             LOG.error("Missing xvfbwrapper")
             raise
