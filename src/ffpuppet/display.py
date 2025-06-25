@@ -5,7 +5,6 @@
 
 from __future__ import annotations
 
-from contextlib import suppress
 from enum import Enum, auto, unique
 from logging import getLogger
 from os import environ
@@ -13,8 +12,8 @@ from platform import system
 from types import MappingProxyType
 from typing import TYPE_CHECKING
 
-with suppress(ImportError):
-    from xvfbwrapper import Xvfb
+if system() == "Linux":
+    from xvfbwrapper import Xvfb  # pylint: disable=import-error
 
 if TYPE_CHECKING:
     from collections.abc import Mapping, Sequence
