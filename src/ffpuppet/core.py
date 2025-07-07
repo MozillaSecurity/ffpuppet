@@ -30,6 +30,7 @@ from .minidump_parser import MDSW_URL, MinidumpParser
 from .process_tree import ProcessTree
 from .profile import Profile
 from .puppet_logger import PuppetLogger
+from .sanitizer_util import symbolize_log
 
 if TYPE_CHECKING:
     from collections.abc import Generator, Iterable, Sequence
@@ -55,6 +56,7 @@ else:
 # https://bugzil.la/1370520
 # Ignore -9 to avoid false positives due to system OOM killer
 BENIGN_EXIT_CODES = frozenset((0, 1, 2, 9, 15, 245))
+LLVM_SYMBOLIZER = "llvm-symbolizer.exe" if IS_WINDOWS else "llvm-symbolizer"
 LOG = getLogger(__name__)
 
 __author__ = "Tyson Smith"
@@ -570,6 +572,21 @@ class FFPuppet:
                         with md_txt.open("rb") as md_fp:
                             copyfileobj(md_fp, self._logs.add_log(md_txt.stem))
 
+            # symbolize sanitizer logs
+            if self._logs.path is not None:
+                sanitizer_logs = tuple(
+                    self._logs.path.glob(f"{self._logs.PREFIX_SAN}*")
+                )
+                if sanitizer_logs:
+                    llvm_sym: str | None = None
+                    if (self._bin_path / LLVM_SYMBOLIZER).exists():
+                        llvm_sym = str(self._bin_path / LLVM_SYMBOLIZER)
+                        LOG.debug("found packaged llvm-symbolizer")
+                    LOG.debug("symbolizing sanitizer logs")
+                    for entry in sanitizer_logs:
+                        if not symbolize_log(entry, llvm_symbolizer=llvm_sym):
+                            LOG.warning("Failed to symbolize '%s'", entry)
+
             stderr_fp = self._logs.get_fp("stderr")
             if stderr_fp:
                 stderr_fp.write(
@@ -805,7 +822,6 @@ class FFPuppet:
                 bufsize=0,  # unbuffered (for log scanners)
                 creationflags=creationflags,
                 env=prepare_environment(
-                    self._bin_path,
                     self._logs.path / self._logs.PREFIX_SAN,
                     env_mod=env_mod,
                 ),

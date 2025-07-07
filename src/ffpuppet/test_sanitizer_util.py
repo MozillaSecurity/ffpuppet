@@ -3,9 +3,11 @@
 # You can obtain one at http://mozilla.org/MPL/2.0/.
 """ffpuppet sanitizer_util tests"""
 
+from subprocess import CalledProcessError, TimeoutExpired
+
 from pytest import mark, raises
 
-from .sanitizer_util import SanitizerOptions
+from .sanitizer_util import SanitizerOptions, symbolize_log
 
 
 @mark.parametrize(
@@ -133,3 +135,22 @@ def test_sanitizer_options_is_quoted():
     assert not SanitizerOptions.is_quoted("not'quoted'")
     assert not SanitizerOptions.is_quoted("'test\"")
     assert not SanitizerOptions.is_quoted("'")
+
+
+def test_symbolize_log(mocker, tmp_path):
+    """test symbolize_log()"""
+    fake_run = mocker.patch("ffpuppet.sanitizer_util.run", autospec=True)
+    log = tmp_path / "foo.txt"
+    log.write_text("foo")
+    # default built in llvm-symbolizer
+    assert symbolize_log(log)
+    # specify llvm-symbolizer
+    llvm_sym = tmp_path / "fake-llvm-symbolizer"
+    llvm_sym.touch()
+    assert symbolize_log(log, llvm_sym)
+    # symbolizer tool failed
+    fake_run.side_effect = CalledProcessError(1, mocker.Mock())
+    assert not symbolize_log(log, llvm_sym)
+    # symbolizer tool hung
+    fake_run.side_effect = TimeoutExpired(1, mocker.Mock())
+    assert not symbolize_log(log, llvm_sym)

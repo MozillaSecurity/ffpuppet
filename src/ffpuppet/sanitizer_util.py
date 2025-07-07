@@ -6,13 +6,22 @@
 from __future__ import annotations
 
 from logging import getLogger
+from os import environ
 from os.path import exists
+from pathlib import Path
 from re import compile as re_compile
+from shutil import copyfileobj
+from subprocess import CalledProcessError, TimeoutExpired, run
+from sys import executable
+from tempfile import TemporaryFile
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from collections.abc import Generator, Sequence
 
+# included from:
+# https://github.com/llvm/llvm-project/blob/main/compiler-rt/lib/asan/scripts/
+ASAN_SYMBOLIZER = str(Path(__file__).parent / "asan_symbolizer.py")
 LOG = getLogger(__name__)
 
 __author__ = "Tyson Smith"
@@ -134,3 +143,45 @@ class SanitizerOptions:
             Value of given flag or None
         """
         return self._options.pop(flag, None)
+
+
+def symbolize_log(
+    log: Path,
+    llvm_symbolizer: str | None = None,
+    timeout: int = 120,
+) -> bool:
+    """Symbolize a sanitizer log.
+
+    Args:
+        log: Log file to symbolize.
+        llvm_symbolizer: Binary to use. System installed binary is used by default.
+        timeout: Time limit for symbolizer process.
+
+    Returns:
+        True if symbolizer process ran successfully otherwise False.
+    """
+    assert timeout > 0
+    env = dict(environ)
+    if "LLVM_SYMBOLIZER_PATH" not in environ and llvm_symbolizer is not None:
+        env["LLVM_SYMBOLIZER_PATH"] = llvm_symbolizer
+    with TemporaryFile("wb+") as tmp_fp:
+        with log.open("rb") as log_fp:
+            try:
+                run(
+                    (executable, ASAN_SYMBOLIZER, "-d"),
+                    env=env,
+                    stdin=log_fp,
+                    stdout=tmp_fp,
+                    check=True,
+                    timeout=timeout,
+                )
+            except CalledProcessError:
+                return False
+            except TimeoutExpired:
+                # this should NEVER happen
+                LOG.warning("Symbolizer process did not complete in %ds", timeout)
+                return False
+        tmp_fp.seek(0)
+        with log.open("wb") as log_fp:
+            copyfileobj(tmp_fp, log_fp)
+    return True
