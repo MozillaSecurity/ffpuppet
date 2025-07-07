@@ -29,22 +29,20 @@ else:
     IS_WINDOWS = False
 
 CERTUTIL = "certutil.exe" if IS_WINDOWS else "certutil"
-LLVM_SYMBOLIZER = "llvm-symbolizer.exe" if IS_WINDOWS else "llvm-symbolizer"
 LOG = getLogger(__name__)
 
 __author__ = "Tyson Smith"
 
 
 def _configure_sanitizers(
-    orig_env: Mapping[str, str], target_path: Path, log_path: Path
+    orig_env: Mapping[str, str], log_path: Path
 ) -> dict[str, str]:
     """Copy environment and update default values in *SAN_OPTIONS entries.
     These values are only updated if they are not provided, with the exception of
     'log_path'. 'log_path' is used by FFPuppet to detect results.
 
     Args:
-        env: Current environment.
-        target_path: Directory containing browser binary.
+        orig_env: Current environment.
         log_path: Location to write sanitizer logs to.
 
     Returns:
@@ -56,22 +54,20 @@ def _configure_sanitizers(
         ("abort_on_error", "false"),
         ("allocator_may_return_null", "true"),
         ("disable_coredump", "true"),
-        ("exitcode", "77"),  # use unique exitcode to help identify missed reports
-        ("handle_abort", "true"),  # if true, abort_on_error=false to prevent hangs
-        ("handle_sigbus", "true"),  # set to be safe
-        ("handle_sigfpe", "true"),  # set to be safe
-        ("handle_sigill", "true"),  # set to be safe
-        ("symbolize", "true"),
+        # use unique exitcode to help identify missed reports
+        ("exitcode", "77"),
+        # if true, abort_on_error=false to prevent hangs
+        ("handle_abort", "true"),
+        # set to be safe
+        ("handle_sigbus", "true"),
+        # set to be safe
+        ("handle_sigfpe", "true"),
+        # set to be safe
+        ("handle_sigill", "true"),
+        # do not automatically symbolize
+        # this should be done after to avoid hitting memory limitations
+        ("symbolize", "false"),
     ]
-    # set llvm-symbolizer path
-    # *SAN_OPTIONS=external_symbolizer_path takes priority if it is defined in env
-    llvm_sym = Path(env.get("ASAN_SYMBOLIZER_PATH") or target_path / LLVM_SYMBOLIZER)
-    if llvm_sym.is_file():
-        # add *SAN_OPTIONS=external_symbolizer_path
-        common_flags.append(("external_symbolizer_path", f"'{llvm_sym}'"))
-    else:
-        # assume system llvm-symbolizer will be used
-        LOG.debug("external llvm-symbolizer not found (%s)", llvm_sym)
 
     # setup Address Sanitizer options ONLY if not set manually in environment
     # https://github.com/google/sanitizers/wiki/AddressSanitizerFlags
@@ -228,14 +224,12 @@ def files_in_use(files: Iterable[Path]) -> Generator[tuple[Path, int, str]]:
 
 
 def prepare_environment(
-    target_path: Path,
     sanitizer_log: Path,
     env_mod: Mapping[str, str | None] | None = None,
 ) -> dict[str, str]:
     """Create environment that can be used when launching the browser.
 
     Args:
-        target_path: Directory containing the Firefox binary.
         sanitizer_log: Location to write sanitizer logs. Log prefix set
                        with ASAN_OPTIONS=log_path=<sanitizer_log>.
         env_mod: Environment modifier. Add, remove and update entries
@@ -308,7 +302,7 @@ def prepare_environment(
         env.pop("MOZ_CRASHREPORTER_NO_REPORT", None)
         env.pop("MOZ_CRASHREPORTER_SHUTDOWN", None)
 
-    env = _configure_sanitizers(env, target_path, sanitizer_log)
+    env = _configure_sanitizers(env, sanitizer_log)
     # filter environment to avoid leaking sensitive information
     return {k: v for k, v in env.items() if "_SECRET" not in k}
 

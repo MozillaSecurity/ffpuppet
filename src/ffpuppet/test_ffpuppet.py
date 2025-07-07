@@ -17,7 +17,7 @@ from psutil import Process
 from pytest import mark, raises
 
 from .bootstrapper import Bootstrapper
-from .core import Debugger, FFPuppet, ProcessTree, Reason
+from .core import LLVM_SYMBOLIZER, Debugger, FFPuppet, ProcessTree, Reason
 from .exceptions import (
     BrowserExecutionError,
     BrowserTerminatedError,
@@ -458,8 +458,11 @@ def test_ffpuppet_19(tmp_path):
         )
 
 
-def test_ffpuppet_20(tmp_path):
+def test_ffpuppet_20(mocker, tmp_path):
     """test collecting and cleaning up ASan logs"""
+    fake_symbolize = mocker.patch("ffpuppet.core.symbolize_log", autospec=True)
+    # add fake llvm-symbolizer for coverage
+    (TESTFF_BIN.parent / LLVM_SYMBOLIZER).touch()
     with FFPuppet() as ffp:
         ffp.launch(TESTFF_BIN)
         assert ffp._logs.path is not None
@@ -493,6 +496,8 @@ def test_ffpuppet_20(tmp_path):
         ffp._proc_tree.terminate()
         ffp.close()
         assert ffp.reason == Reason.ALERT
+        assert fake_symbolize.call_count > 0
+        assert fake_symbolize.call_args.kwargs["llvm_symbolizer"] is not None
         logs = tmp_path / "logs"
         ffp.save_logs(logs)
         logfiles = tuple(logs.iterdir())
