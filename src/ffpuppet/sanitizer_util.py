@@ -21,7 +21,7 @@ if TYPE_CHECKING:
 
 # included from:
 # https://github.com/llvm/llvm-project/blob/main/compiler-rt/lib/asan/scripts/
-ASAN_SYMBOLIZER = str(Path(__file__).parent / "asan_symbolizer.py")
+ASAN_SYMBOLIZE = str(Path(__file__).parent / "asan_symbolize.py")
 LOG = getLogger(__name__)
 
 __author__ = "Tyson Smith"
@@ -162,13 +162,14 @@ def symbolize_log(
     """
     assert timeout > 0
     env = dict(environ)
+    # don't override
     if "LLVM_SYMBOLIZER_PATH" not in environ and llvm_symbolizer is not None:
         env["LLVM_SYMBOLIZER_PATH"] = llvm_symbolizer
     with TemporaryFile("wb+") as tmp_fp:
         with log.open("rb") as log_fp:
             try:
                 run(
-                    (executable, ASAN_SYMBOLIZER, "-d"),
+                    (executable, ASAN_SYMBOLIZE, "-d"),
                     env=env,
                     stdin=log_fp,
                     stdout=tmp_fp,
