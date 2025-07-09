@@ -460,8 +460,9 @@ def test_ffpuppet_19(tmp_path):
 
 def test_ffpuppet_20(mocker, tmp_path):
     """test collecting and cleaning up ASan logs"""
-    fake_symbolize = mocker.patch("ffpuppet.core.symbolize_log", autospec=True)
-    # add fake llvm-symbolizer for coverage
+    # return False to increase test coverage, does not affect the test otherwise
+    fake_symbolize = mocker.patch("ffpuppet.core.symbolize_log", return_value=False)
+    # add fake llvm-symbolizer for test coverage
     (TESTFF_BIN.parent / LLVM_SYMBOLIZER).touch()
     with FFPuppet() as ffp:
         ffp.launch(TESTFF_BIN)
