@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [tool.coverage.run]
 omit = [
-    "*/asan_symbolizer.py",
+    "*/asan_symbolize.py",
     "*/__main__.py",
     "*/test_*",
     "*/build/*",
@@ -28,7 +28,7 @@ show_error_codes = true
 
 [tool.pylint]
 ignore = [
-    "asan_symbolizer.py",
+    "asan_symbolize.py",
 ]
 
 [tool.pylint.format]
@@ -56,7 +56,7 @@ ignored-modules = ["pytest"]
 log_level = "DEBUG"
 
 [tool.ruff]
-exclude = ["asan_symbolizer.py"]
+exclude = ["asan_symbolize.py"]
 fix = true
 target-version = "py39"
 
