@@ -581,8 +581,11 @@ class FFPuppet:
                     llvm_sym: str | None = None
                     if (self._bin_path / LLVM_SYMBOLIZER).exists():
                         llvm_sym = str(self._bin_path / LLVM_SYMBOLIZER)
-                        LOG.debug("found packaged llvm-symbolizer")
-                    LOG.debug("symbolizing sanitizer logs")
+                    LOG.debug(
+                        "found packaged LLVM_SYMBOLIZER: %s, symbolizing logs: %d",
+                        llvm_sym is not None,
+                        len(sanitizer_logs),
+                    )
                     for entry in sanitizer_logs:
                         if not symbolize_log(entry, llvm_symbolizer=llvm_sym):
                             LOG.warning("Failed to symbolize '%s'", entry)
