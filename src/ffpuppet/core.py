@@ -555,8 +555,8 @@ class FFPuppet:
                     for md_file in (self.profile.path / "minidumps").glob("*"):
                         copy(md_file, dmps)
                 # use DEBUG_DMP to copy dmp files to a known location
-                debug_dmp = Path(getenv("DEBUG_DMP", ""))
-                if debug_dmp.is_dir():
+                debug_dmp = getenv("DEBUG_DMP")
+                if debug_dmp:
                     for md_file in (self.profile.path / "minidumps").glob("*"):
                         copy(md_file, debug_dmp)
                 # check for local build symbols
