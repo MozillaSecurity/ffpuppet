@@ -8,6 +8,7 @@ from __future__ import annotations
 import sys
 from contextlib import suppress
 from logging import getLogger
+from mmap import ACCESS_READ, mmap
 from os import environ
 from pathlib import Path
 from subprocess import STDOUT, CalledProcessError, check_output
@@ -28,14 +29,16 @@ if sys.platform == "win32":
 else:
     IS_WINDOWS = False
 
+__author__ = "Tyson Smith"
+
 CERTUTIL = "certutil.exe" if IS_WINDOWS else "certutil"
 LOG = getLogger(__name__)
 
-__author__ = "Tyson Smith"
-
 
 def _configure_sanitizers(
-    orig_env: Mapping[str, str], log_path: Path
+    orig_env: Mapping[str, str],
+    log_path: Path,
+    symbolize: bool = False,
 ) -> dict[str, str]:
     """Copy environment and update default values in *SAN_OPTIONS entries.
     These values are only updated if they are not provided, with the exception of
@@ -44,13 +47,15 @@ def _configure_sanitizers(
     Args:
         orig_env: Current environment.
         log_path: Location to write sanitizer logs to.
+        symbolize: Enable automatic symbolizing. This should only used when required to
+            minimize memory usage.
 
     Returns:
         Environment with *SAN_OPTIONS defaults set.
     """
     env = dict(orig_env)
     # https://github.com/google/sanitizers/wiki/SanitizerCommonFlags
-    common_flags = [
+    common_flags = (
         ("abort_on_error", "false"),
         ("allocator_may_return_null", "true"),
         ("disable_coredump", "true"),
@@ -64,10 +69,7 @@ def _configure_sanitizers(
         ("handle_sigfpe", "true"),
         # set to be safe
         ("handle_sigill", "true"),
-        # do not automatically symbolize
-        # this should be done after to avoid hitting memory limitations
-        ("symbolize", "false"),
-    ]
+    )
 
     # setup Address Sanitizer options ONLY if not set manually in environment
     # https://github.com/google/sanitizers/wiki/AddressSanitizerFlags
@@ -99,6 +101,7 @@ def _configure_sanitizers(
     asan_config.add("strict_init_order", "true")
     # temporarily revert to default (false) until https://bugzil.la/1767068 is fixed
     # asan_config.add("strict_string_checks", "true")
+    asan_config.add("symbolize", "1" if symbolize else "0")
     env["ASAN_OPTIONS"] = str(asan_config)
 
     # setup Leak Sanitizer options ONLY if not set manually in environment
@@ -126,6 +129,7 @@ def _configure_sanitizers(
     tsan_config.add("log_path", f"'{log_path}'", overwrite=True)
     # This is an experimental feature added in Bug 1792757
     tsan_config.add("rss_limit_heap_profile", "true")
+    tsan_config.add("symbolize", "1" if symbolize else "0")
     env["TSAN_OPTIONS"] = str(tsan_config)
 
     # setup Undefined Behavior Sanitizer options ONLY if not set manually in environment
@@ -140,6 +144,7 @@ def _configure_sanitizers(
     ubsan_config.add("log_path", f"'{log_path}'", overwrite=True)
     ubsan_config.add("print_stacktrace", "1")
     ubsan_config.add("report_error_type", "1")
+    ubsan_config.add("symbolize", "1" if symbolize else "0")
     env["UBSAN_OPTIONS"] = str(ubsan_config)
 
     return env
@@ -186,6 +191,28 @@ def certutil_find(browser_bin: Path | None = None) -> str:
     return CERTUTIL
 
 
+def detect_sanitizer(binary: Path) -> str | None:
+    """Detect sanitizer instrumentation in browser build.
+
+    Args:
+        binary: Location of browser binary.
+
+    Returns:
+        Name of sanitizer in use or None.
+    """
+    with (
+        binary.open("rb") as bin_fp,
+        mmap(bin_fp.fileno(), 0, access=ACCESS_READ) as bmm,
+    ):
+        if bmm.find(b"__tsan_") != -1:
+            return "tsan"
+        if bmm.find(b"__asan_") != -1:
+            return "asan"
+        if bmm.find(b"__ubsan_") != -1:
+            return "ubsan"
+    return None
+
+
 def files_in_use(files: Iterable[Path]) -> Generator[tuple[Path, int, str]]:
     """Check if any of the given files are open.
     WARNING: This can be slow on Windows.
@@ -226,6 +253,7 @@ def files_in_use(files: Iterable[Path]) -> Generator[tuple[Path, int, str]]:
 def prepare_environment(
     sanitizer_log: Path,
     env_mod: Mapping[str, str | None] | None = None,
+    sanitizer: str | None = None,
 ) -> dict[str, str]:
     """Create environment that can be used when launching the browser.
 
@@ -235,6 +263,7 @@ def prepare_environment(
         env_mod: Environment modifier. Add, remove and update entries
                  in the prepared environment. Add/update by setting
                  value or remove entry by setting value to None.
+        sanitizer: Sanitizer in use.
 
     Returns:
         Environment to use when launching browser.
@@ -302,7 +331,9 @@ def prepare_environment(
         env.pop("MOZ_CRASHREPORTER_NO_REPORT", None)
         env.pop("MOZ_CRASHREPORTER_SHUTDOWN", None)
 
-    env = _configure_sanitizers(env, sanitizer_log)
+    # automatically symbolize traces when TSan is in use
+    # it is required for runtime TSan suppressions
+    env = _configure_sanitizers(env, sanitizer_log, symbolize=sanitizer == "tsan")
     # filter environment to avoid leaking sensitive information
     return {k: v for k, v in env.items() if "_SECRET" not in k}
 

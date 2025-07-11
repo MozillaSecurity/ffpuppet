@@ -14,6 +14,7 @@ from .helpers import (
     _configure_sanitizers,
     certutil_available,
     certutil_find,
+    detect_sanitizer,
     files_in_use,
     prepare_environment,
     wait_on_files,
@@ -33,6 +34,13 @@ def test_helpers_01(tmp_path):
     assert opts.get("log_path") == f"'{tmp_path}'"
     assert "LSAN_OPTIONS" in env
     assert "UBSAN_OPTIONS" in env
+    # test symbolize
+    env = _configure_sanitizers({}, tmp_path, symbolize=False)
+    assert "symbolize=0" in env["ASAN_OPTIONS"]
+    assert "symbolize=0" in env["TSAN_OPTIONS"]
+    env = _configure_sanitizers({}, tmp_path, symbolize=True)
+    assert "symbolize=1" in env["ASAN_OPTIONS"]
+    assert "symbolize=1" in env["TSAN_OPTIONS"]
     # test with presets environment
     env = _configure_sanitizers(
         {
@@ -239,3 +247,19 @@ def test_certutil_find_01(tmp_path):
     certutil_bin.parent.mkdir()
     certutil_bin.touch()
     assert certutil_find(browser_bin) == str(certutil_bin)
+
+
+@mark.parametrize(
+    "bin_content, result",
+    [
+        (b"_foo", None),
+        (b"foo __asan_foo", "asan"),
+        (b"foo __tsan_foo", "tsan"),
+        (b"foo __ubsan_foo", "ubsan"),
+    ],
+)
+def test_detect_sanitizer_01(tmp_path, bin_content, result):
+    """test detect_sanitizer()"""
+    binary = tmp_path / "file.bin"
+    binary.write_bytes(bin_content)
+    assert detect_sanitizer(binary) == result
