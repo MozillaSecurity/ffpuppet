@@ -13,6 +13,21 @@ from subprocess import CalledProcessError, TimeoutExpired, run
 from tempfile import TemporaryFile, mkdtemp
 from typing import IO, Any
 
+EXTRA_FIELDS = (
+    # android only
+    "CrashType",
+    # Reason why the cycle collector crashed.
+    "CycleCollector",
+    # usually assertions message
+    "MozCrashReason",
+    # Set if the crash was the result of a hang, with a value which describes the
+    # type of hang (e.g. "ui" or "shutdown").
+    "Hang",
+    # Set before a content process crashes because of an IPC channel error, holds
+    # a description of the error.
+    "ipc_channel_error",
+    "ShutdownReason",
+)
 LOG = getLogger(__name__)
 MDSW_URL = "https://lib.rs/crates/minidump-stackwalk"
 SYMS_URL = "https://symbols.mozilla.org/"
@@ -60,13 +75,44 @@ class MinidumpParser:
         return cmd
 
     @staticmethod
-    def _fmt_output(data: dict[str, Any], out_fp: IO[bytes], limit: int = 150) -> None:
+    def _metadata(dmp: Path, fields: tuple[str, ...]) -> dict[str, str]:
+        """Collect metadata from .extra file.
+
+        Args:
+            dmp: Matching minidump file.
+            fields: Fields to collect if available.
+
+        Returns:
+            Metadata from .extra file.
+        """
+        extra = dmp.with_suffix(".extra")
+        metadata: dict[str, str] = {}
+        if extra.is_file():
+            with extra.open("r") as extra_fp:
+                try:
+                    extra_data = load(extra_fp)
+                except JSONDecodeError:
+                    LOG.warning("Invalid json in: %s", extra)
+                    return {}
+            for entry in fields:
+                if entry in extra_data:
+                    metadata[entry] = str(extra_data[entry])
+        return metadata
+
+    @staticmethod
+    def _fmt_output(
+        data: dict[str, Any],
+        out_fp: IO[bytes],
+        metadata: dict[str, str],
+        limit: int = 150,
+    ) -> None:
         """Write summarized contents of a minidump to a file in a format that is
         consumable by FuzzManager.
 
         Args:
-            md_data: Minidump contents.
+            data: Minidump contents.
             out_fp: Formatted content destination.
+            metadata: Extra file contents.
             limit: Maximum number of stack frames to include.
 
         Returns:
@@ -86,6 +132,11 @@ class MinidumpParser:
                 sep = "\t" if (len(reg_lines) + 1) % 3 else "\n"
                 reg_lines.append(f"{reg:>3} = {value}{sep}")
             out_fp.write("".join(reg_lines).rstrip().encode())
+            out_fp.write(b"\n")
+
+        # include metadata
+        for entry in metadata.items():
+            out_fp.write("|".join(entry).encode())
             out_fp.write(b"\n")
 
         # generate OS information line
@@ -170,6 +221,10 @@ class MinidumpParser:
         """
         assert filename
         assert timeout >= 0
+
+        # collect data from .extra file if it exists
+        metadata = self._metadata(src, EXTRA_FIELDS)
+
         cmd = self._cmd(src)
         dst = self._storage / filename
         with (
@@ -182,7 +237,7 @@ class MinidumpParser:
                 out_fp.seek(0)
                 # load json, format data and write log
                 with dst.open("wb") as log_fp:
-                    self._fmt_output(load(out_fp), log_fp)
+                    self._fmt_output(load(out_fp), log_fp, metadata)
             except (CalledProcessError, JSONDecodeError, TimeoutExpired) as exc:
                 if isinstance(exc, CalledProcessError):
                     msg = f"minidump-stackwalk failed ({exc.returncode})"
