@@ -1,6 +1,7 @@
 # This Source Code Form is subject to the terms of the Mozilla Public
 # License, v. 2.0. If a copy of the MPL was not distributed with this file,
 # You can obtain one at http://mozilla.org/MPL/2.0/.
+# pylint: disable=protected-access
 """ffpuppet minidump parser tests"""
 
 from copy import deepcopy
@@ -91,7 +92,6 @@ def test_minidump_parser_01(mocker, tmp_path, symbols):
     mocker.patch.object(MinidumpParser, "MDSW_BIN", "minidump-stackwalk")
     with MinidumpParser(symbols=tmp_path if symbols else None) as parser:
         assert parser
-        # pylint: disable=protected-access
         cmd = parser._cmd(tmp_path)
         assert cmd
         assert "minidump-stackwalk" in cmd
@@ -118,7 +118,6 @@ def test_minidump_parser_02(mocker, code, token, timeout):
     """test MinidumpParser.create_log()"""
     mocker.patch.object(MinidumpParser, "_cmd", return_value=[executable, "-c", code])
     with MinidumpParser() as parser:
-        # pylint: disable=protected-access
         assert parser._storage.is_dir()
         output = parser.create_log(Path("foo.dmp"), "minidump_00.txt", timeout=timeout)
         assert output
@@ -154,8 +153,7 @@ def test_minidump_parser_02(mocker, code, token, timeout):
 def test_minidump_parser_03(tmp_path, data, reg, operating_system, cpu, crash, frame):
     """test MinidumpParser._fmt_output() - un-symbolized"""
     with (tmp_path / "out.txt").open("w+b") as ofp:
-        # pylint: disable=protected-access
-        MinidumpParser._fmt_output(data, ofp, limit=2)
+        MinidumpParser._fmt_output(data, ofp, {}, limit=2)
         ofp.seek(0)
         formatted = ofp.read().rstrip().decode().split("\n")
     assert len(formatted) == 5
@@ -206,19 +204,19 @@ def test_minidump_parser_04(tmp_path):
     }
 
     with (tmp_path / "out.txt").open("w+b") as ofp:
-        # pylint: disable=protected-access
-        MinidumpParser._fmt_output(data, ofp, limit=2)
+        MinidumpParser._fmt_output(data, ofp, {"metadata": "foo"}, limit=2)
         ofp.seek(0)
         formatted = ofp.read().rstrip().decode().split("\n")
-    assert len(formatted) == 8
+    assert len(formatted) == 9
     assert formatted[0] == "r10 = 0x12345678\tr11 = 0x0badf00d\tr12 = 0x00000000"
     assert formatted[1] == "r13 = 0x000000dceebfc2e8"
-    assert formatted[2] == "OS|Windows NT|10.0.19044"
-    assert formatted[3] == "CPU|amd64|family 6 model 70 stepping 1|8"
-    assert formatted[4] == "Crash|EXCEPTION_BREAKPOINT|0x00007ffe4e09af8d|0"
-    assert formatted[5] == "0|0|xul.dll|function00()|file0.cpp|47|0x1ed"
-    assert formatted[6] == "0|1|xul.dll|function01()|file1.cpp|210|0x1bb"
-    assert formatted[7] == "WARNING: Hit stack size output limit!"
+    assert formatted[2] == "metadata|foo"
+    assert formatted[3] == "OS|Windows NT|10.0.19044"
+    assert formatted[4] == "CPU|amd64|family 6 model 70 stepping 1|8"
+    assert formatted[5] == "Crash|EXCEPTION_BREAKPOINT|0x00007ffe4e09af8d|0"
+    assert formatted[6] == "0|0|xul.dll|function00()|file0.cpp|47|0x1ed"
+    assert formatted[7] == "0|1|xul.dll|function01()|file1.cpp|210|0x1bb"
+    assert formatted[8] == "WARNING: Hit stack size output limit!"
 
 
 @mark.parametrize(
@@ -294,11 +292,23 @@ def test_minidump_parser_06(tmp_path):
 def test_minidump_parser_missing_crashing_thread(tmp_path):
     """test MinidumpParser._fmt_output() - missing crashing thread"""
     with (tmp_path / "out.txt").open("w+b") as ofp:
-        # pylint: disable=protected-access
-        MinidumpParser._fmt_output(MD_BASE_AMD64_WIN, ofp)
+        MinidumpParser._fmt_output(MD_BASE_AMD64_WIN, ofp, {})
         ofp.seek(0)
         formatted = ofp.read().rstrip().decode().split("\n")
     assert len(formatted) == 3
     assert formatted[0] == "OS|Windows NT|10.0.19044"
     assert formatted[1] == "CPU|amd64|family 6 model 70 stepping 1|8"
     assert formatted[2] == "Crash|EXCEPTION_BREAKPOINT|0x00007ffe4e09af8d|?"
+
+
+def test_minidump_parser_metadata(tmp_path):
+    """test MinidumpParser._metadata()"""
+    # collect metadata from .extra file
+    (tmp_path / "out.extra").write_text(dumps({"a": "1", "b": "2", "c": "3"}))
+    result = MinidumpParser._metadata(tmp_path / "out.dmp", ("a", "c"))
+    assert "a" in result
+    assert "b" not in result
+    assert "c" in result
+    # invalid .extra file
+    (tmp_path / "out.extra").write_text("!")
+    assert not MinidumpParser._metadata(tmp_path / "out.dmp", ("a", "c"))
