@@ -281,6 +281,14 @@ def test_minidump_parser_06(tmp_path):
     # add .extra file to prioritize .dmp file
     (tmp_path / "b.extra").write_text('{"MozCrashReason":"foo"}')
     assert MinidumpParser.dmp_files(tmp_path)[0] == (tmp_path / "b.dmp")
+    (tmp_path / "b.extra").unlink()
+    # add .extra file to prioritize .dmp file
+    (tmp_path / "c-browser.dmp").write_text("c-browser")
+    (tmp_path / "c.extra").write_text('{"additional_minidumps":"browser"}')
+    assert MinidumpParser.dmp_files(tmp_path)[0] == (tmp_path / "c-browser.dmp")
+    # corrupt (bad json) .extra file
+    (tmp_path / "c.extra").write_text("!")
+    assert MinidumpParser.dmp_files(tmp_path)
 
 
 def test_minidump_parser_missing_crashing_thread(tmp_path):
