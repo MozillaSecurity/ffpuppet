@@ -213,16 +213,23 @@ class MinidumpParser:
         Returns:
             Dump files.
         """
+        prioritize: set[str] = set()
+        for entry in sorted(src_dir.glob("*.extra")):
+            with entry.open("r") as out_fp:
+                try:
+                    extra_data = load(out_fp)
+                except JSONDecodeError:
+                    extra_data = {}
+                    LOG.debug("invalid json in: %s", extra_data)
+            if "additional_minidumps" in extra_data:
+                for other in extra_data["additional_minidumps"].split(","):
+                    prioritize.add(f"{entry.stem}-{other}.dmp")
+            elif "MozCrashReason" in extra_data:
+                prioritize.add(f"{entry.stem}.dmp")
+
         dmps: list[Path] = []
         for dmp in sorted(src_dir.glob("*.dmp"), key=lambda x: x.stat().st_mtime):
-            try:
-                # check .extra file for MozCrashReason entry
-                with dmp.with_suffix(".extra").open() as out_fp:
-                    has_reason = load(out_fp).get("MozCrashReason") is not None
-            except (FileNotFoundError, JSONDecodeError):
-                has_reason = False
-            # prioritize dmp with MozCrashReason
-            if has_reason:
+            if dmp.name in prioritize:
                 dmps.insert(0, dmp)
             else:
                 dmps.append(dmp)
