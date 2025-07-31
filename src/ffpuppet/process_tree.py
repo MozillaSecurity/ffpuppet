@@ -93,7 +93,7 @@ def _safe_wait_procs(
         remaining = None if deadline is None else max(deadline - perf_counter(), 0)
         with suppress(AccessDenied):
             return cast(
-                tuple[list[Process], list[Process]],
+                "tuple[list[Process], list[Process]]",
                 wait_procs(procs, timeout=remaining, callback=callback),
             )
         if deadline is not None and deadline <= perf_counter():
