@@ -239,7 +239,7 @@ class FFPuppet:
         Returns:
             None
         """
-        LOG.debug("checking %s support", dbg)
+        LOG.debug("checking debugger support: %s", dbg.name)
         if dbg == Debugger.GDB:
             if system() != "Linux":
                 raise OSError("GDB is only supported on Linux")
