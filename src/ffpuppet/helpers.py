@@ -331,9 +331,10 @@ def prepare_environment(
         env.pop("MOZ_CRASHREPORTER_NO_REPORT", None)
         env.pop("MOZ_CRASHREPORTER_SHUTDOWN", None)
 
-    # automatically symbolize traces when TSan is in use
+    # symbolize traces in process on Windows or when TSan is in use
     # it is required for runtime TSan suppressions
-    env = _configure_sanitizers(env, sanitizer_log, symbolize=sanitizer == "tsan")
+    in_process = IS_WINDOWS or sanitizer == "tsan"
+    env = _configure_sanitizers(env, sanitizer_log, symbolize=in_process)
     # filter environment to avoid leaking sensitive information
     return {k: v for k, v in env.items() if "_SECRET" not in k}
 
