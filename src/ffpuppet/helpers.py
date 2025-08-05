@@ -15,7 +15,7 @@ from subprocess import STDOUT, CalledProcessError, check_output
 from time import perf_counter, sleep
 from typing import TYPE_CHECKING
 
-from psutil import Process, process_iter
+from psutil import AccessDenied, NoSuchProcess, Process, process_iter
 
 from .sanitizer_util import SanitizerOptions
 
@@ -237,7 +237,8 @@ def files_in_use(files: Iterable[Path]) -> Generator[tuple[Path, int, str]]:
                     with suppress(OSError):
                         if check_file.samefile(open_file):
                             for pid in pids:
-                                yield open_file, pid, Process(pid).name()
+                                with suppress(AccessDenied, NoSuchProcess):
+                                    yield open_file, pid, Process(pid).name()
         else:
             for proc in process_iter(["pid", "name", "open_files"]):
                 if not proc.info["open_files"]:
