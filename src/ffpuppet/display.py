@@ -85,7 +85,7 @@ class XvfbDisplay(Display):
                 LOG.warning("Invalid XVFB_RESOLUTION '%s'", resolution)
         LOG.debug("xvfb resolution: %dx%d", width, height)
         try:
-            self._xvfb: Xvfb | None = Xvfb(width=width, height=height)
+            self._xvfb: Xvfb | None = Xvfb(width=width, height=height, timeout=60)
         except NameError:
             LOG.error("Missing xvfbwrapper")
             raise
