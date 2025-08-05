@@ -55,4 +55,4 @@ def test_xvfb_resolution(mocker, resolution, expected_width, expected_height):
         {} if resolution is None else {"XVFB_RESOLUTION": resolution},
     )
     XvfbDisplay()
-    xvfb.assert_called_with(width=expected_width, height=expected_height)
+    xvfb.assert_called_with(width=expected_width, height=expected_height, timeout=60)
