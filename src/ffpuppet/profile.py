@@ -5,13 +5,14 @@
 
 from __future__ import annotations
 
+from argparse import ArgumentParser
 from json import load as json_load
-from logging import getLogger
+from logging import DEBUG, INFO, basicConfig, getLogger
 from pathlib import Path
 from shutil import copyfile, copytree, rmtree
 from subprocess import STDOUT, CalledProcessError, TimeoutExpired, check_output
 from tempfile import mkdtemp
-from time import time
+from time import strftime, time
 from typing import TYPE_CHECKING
 from xml.etree import ElementTree
 
@@ -43,8 +44,9 @@ class Profile:
     ) -> None:
         if cert_files and not certutil_available(certutil_find(browser_bin)):
             raise OSError("NSS certutil not found")
-
-        self.path: Path | None = Path(mkdtemp(dir=working_path, prefix="ffprofile_"))
+        self.path: Path | None = Path(
+            mkdtemp(dir=working_path, prefix=strftime("ffprofile_%Y%m%d-%H%M%S_"))
+        )
         try:
             if template is not None:
                 self._copy_template(template)
@@ -71,12 +73,12 @@ class Profile:
     def __str__(self) -> str:
         return str(self.path)
 
-    def _add_times_json(self) -> None:
+    def _add_times_json(self, overwrite: bool = True) -> None:
         assert self.path
-        # times.json only needs to be created when using a custom prefs.js
         times_json = self.path / "times.json"
-        if not times_json.is_file():
-            times_json.write_text(f'{{"created":{int(time()) * 1000}}}')
+        if overwrite or not times_json.is_file():
+            # times.json only needs to be created when using a custom prefs.js
+            times_json.write_text(f'{{"created":{int(time() * 1000)}}}')
 
     def _copy_extensions(self, extensions: Iterable[Path]) -> None:
         assert self.path
@@ -142,8 +144,7 @@ class Profile:
             None
         """
         assert self.path
-        if not (self.path / "prefs.js").is_file():
-            self._add_times_json()
+        self._add_times_json(overwrite=False)
         with (self.path / "prefs.js").open("a") as prefs_fp:
             # make sure there is a newline before appending to prefs.js
             prefs_fp.write("\n")
@@ -266,3 +267,31 @@ class Profile:
             if self.path.exists():
                 LOG.error("Failed to remove profile '%s'", self.path)
             self.path = None
+
+
+def create_profile() -> None:
+    """Command line tool to create a Firefox profile.
+
+    Args:
+        None
+
+     Returns:
+        None
+    """
+    parser = ArgumentParser(description="Create a Firefox Profile")
+    parser.add_argument("--debug", action="store_true", help="Display debug output.")
+    parser.add_argument(
+        "-o", "--output", default=Path.cwd(), type=Path, help="Location to new profile."
+    )
+    parser.add_argument("-p", "--prefs", type=Path, help="Prefs.js file")
+    args = parser.parse_args()
+
+    # set output verbosity
+    if args.debug:
+        basicConfig(format="[%(levelname).1s] %(message)s", level=DEBUG)
+    else:
+        basicConfig(format="%(message)s", level=INFO)
+
+    # create a profile
+    profile = Profile(prefs_file=args.prefs, working_path=args.output)
+    LOG.info("Created profile: %s", profile.path)
