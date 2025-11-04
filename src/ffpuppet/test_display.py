@@ -4,6 +4,7 @@
 """display.py tests"""
 
 from platform import system
+from subprocess import TimeoutExpired
 
 from pytest import mark, raises
 
@@ -55,4 +56,15 @@ def test_xvfb_resolution(mocker, resolution, expected_width, expected_height):
         {} if resolution is None else {"XVFB_RESOLUTION": resolution},
     )
     XvfbDisplay()
+    assert xvfb.return_value.start.call_count == 1
     xvfb.assert_called_with(width=expected_width, height=expected_height, timeout=60)
+
+
+@mark.skipif(system() != "Linux", reason="Only supported on Linux")
+def test_xvfb_stop_hang(mocker):
+    """test XvfbDisplay.stop hang"""
+    xvfb = mocker.patch("ffpuppet.display.Xvfb")
+    xvfb.return_value.stop.side_effect = TimeoutExpired(["foo"], 1)
+    display = XvfbDisplay()
+    display.close()
+    assert xvfb.return_value.proc.kill.call_count == 1
