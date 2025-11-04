@@ -299,7 +299,7 @@ class ProcessTree:
         except NoSuchProcess:
             LOG.debug("called poll() on process that does not exist")
             return 0
-        except TimeoutExpired:
+        except (AccessDenied, TimeoutExpired):
             return None
 
     def processes(self, recursive: bool = False) -> list[Process]:
