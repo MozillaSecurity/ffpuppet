@@ -9,6 +9,7 @@ from enum import Enum, auto, unique
 from logging import getLogger
 from os import environ
 from platform import system
+from subprocess import TimeoutExpired
 from types import MappingProxyType
 from typing import TYPE_CHECKING
 
@@ -93,7 +94,11 @@ class XvfbDisplay(Display):
 
     def close(self) -> None:
         if self._xvfb is not None:
-            self._xvfb.stop()
+            try:
+                self._xvfb.stop()
+            except TimeoutExpired:
+                if self._xvfb.proc is not None:
+                    self._xvfb.proc.kill()
             self._xvfb = None
 
 
