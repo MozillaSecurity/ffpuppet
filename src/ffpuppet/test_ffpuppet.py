@@ -951,3 +951,22 @@ def test_ffpuppet_33(mocker, port):
         with raises(LaunchError):
             ffp.launch(TESTFF_BIN, marionette=port, location=srv.get_addr())
         assert ffp.marionette is None
+
+
+@mark.skipif(system() == "Windows", reason="Unsupported on Windows")
+def test_ffpuppet_34(mocker, tmp_path):
+    """test FFPuppet.close() with add log permission error"""
+    mocker.patch("ffpuppet.core.Popen", autospec=True)
+    fake_tree = mocker.patch("ffpuppet.core.ProcessTree", autospec=True)
+    fake_tree.return_value.wait_procs.return_value = 0
+    fake_bts = mocker.patch("ffpuppet.core.Bootstrapper", autospec=True)
+    fake_bts.create.return_value.location = "http://fake.location"
+    with FFPuppet() as ffp:
+        ffp.launch(TESTFF_BIN)
+        san_log = ffp._logs.path / f"{ffp._logs.PREFIX_SAN}.1"
+        san_log.touch()
+        san_log.chmod(S_IWRITE)
+        ffp.close()
+        ffp.save_logs(tmp_path)
+        # only stderr and stdout should exist
+        assert len(tuple(tmp_path.iterdir())) == 2

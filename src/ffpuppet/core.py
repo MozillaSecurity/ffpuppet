@@ -537,7 +537,10 @@ class FFPuppet:
                     )
             # collect logs (excluding minidumps)
             for log_path in self._crashreports(skip_md=True, skip_benign=False):
-                self._logs.add_log(log_path.name, log_path.open("rb"))
+                try:
+                    self._logs.add_log(log_path.name, log_path.open("rb"))
+                except PermissionError:  # noqa: PERF203
+                    LOG.warning("Cannot collect open log '%s'", log_path.name)
             assert self.profile is not None
             assert self.profile.path is not None
             assert self._bin_path is not None

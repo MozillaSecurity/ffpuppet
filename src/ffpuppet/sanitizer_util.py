@@ -166,8 +166,8 @@ def symbolize_log(
     if "LLVM_SYMBOLIZER_PATH" not in environ and llvm_symbolizer is not None:
         env["LLVM_SYMBOLIZER_PATH"] = llvm_symbolizer
     with TemporaryFile("wb+") as tmp_fp:
-        with log.open("rb") as log_fp:
-            try:
+        try:
+            with log.open("rb") as log_fp:
                 run(
                     (executable, ASAN_SYMBOLIZE, "-d"),
                     env=env,
@@ -176,12 +176,15 @@ def symbolize_log(
                     check=True,
                     timeout=timeout,
                 )
-            except CalledProcessError:
-                return False
-            except TimeoutExpired:
-                # this should NEVER happen
-                LOG.warning("Symbolizer process did not complete in %ds", timeout)
-                return False
+        except CalledProcessError:
+            return False
+        except (FileNotFoundError, PermissionError) as exc:
+            LOG.debug("failed to open sanitizer log: %s", exc)
+            return False
+        except TimeoutExpired:
+            # this *should* never happen
+            LOG.warning("Symbolizer process did not complete in %ds", timeout)
+            return False
         tmp_fp.seek(0)
         with log.open("wb") as log_fp:
             copyfileobj(tmp_fp, log_fp)
