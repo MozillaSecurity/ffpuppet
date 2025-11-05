@@ -154,3 +154,7 @@ def test_symbolize_log(mocker, tmp_path):
     # symbolizer tool hung
     fake_run.side_effect = TimeoutExpired(1, mocker.Mock())
     assert not symbolize_log(log, llvm_sym)
+    # symbolizer log is not available (or permission error)
+    fake_run.reset_mock()
+    log.unlink()
+    assert not symbolize_log(log, llvm_sym)
