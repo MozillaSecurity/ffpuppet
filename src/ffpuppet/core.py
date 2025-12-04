@@ -950,7 +950,7 @@ class FFPuppet:
             dest,
             logs_only=logs_only,
             bin_path=self._bin_path,
-            rr_pack=getenv("RR_PACK") == "1",
+            rr_pack=getenv("RR_PACK", "1") == "1",
         )
 
     def wait(self, timeout: float | None = None) -> bool:
