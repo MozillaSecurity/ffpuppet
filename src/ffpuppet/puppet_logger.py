@@ -246,7 +246,7 @@ class PuppetLogger:  # pylint: disable=missing-docstring
         dest: Path,
         logs_only: bool = False,
         bin_path: Path | None = None,
-        rr_pack: bool = False,
+        rr_pack: bool = True,
     ) -> None:
         """The browser logs will be saved to dest. This can only be called
         after close() has been called.
