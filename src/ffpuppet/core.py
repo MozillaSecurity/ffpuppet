@@ -411,6 +411,8 @@ class FFPuppet:
                 rr_cmd.append("--tsan")
             if getenv("RR_CHAOS") == "1":
                 rr_cmd.append("--chaos")
+            if getenv("RR_INTEL_PT") == "1":
+                rr_cmd.append("--intel-pt")
             if self._dbg == Debugger.PERNOSCO:
                 rr_cmd += [
                     "--disable-cpuid-features-ext",

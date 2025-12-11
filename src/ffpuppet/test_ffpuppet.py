@@ -661,14 +661,34 @@ def test_ffpuppet_24(mocker, tmp_path):
         assert cmd[0] == "rr"
         assert "--chaos" not in cmd
         assert "--disable-cpuid-features-ext" in cmd
-        # RR
+        # RR without env vars
         ffp._dbg = Debugger.RR
-        mocker.patch.dict(os.environ, {"RR_CHAOS": "1", "RR_ASAN": "1", "RR_TSAN": "1"})
         cmd = ffp.build_launch_cmd("bin_path")
         assert len(cmd) > 2
         assert cmd[0] == "rr"
-        assert "--chaos" in cmd
+        assert "--asan" not in cmd
+        assert "--chaos" not in cmd
+        assert "--intel-pt" not in cmd
+        assert "--tsan" not in cmd
         assert "--disable-cpuid-features-ext" not in cmd
+        # RR
+        ffp._dbg = Debugger.RR
+        mocker.patch.dict(
+            os.environ,
+            {
+                "RR_ASAN": "1",
+                "RR_CHAOS": "1",
+                "RR_INTEL_PT": "1",
+                "RR_TSAN": "1",
+            },
+        )
+        cmd = ffp.build_launch_cmd("bin_path")
+        assert len(cmd) > 2
+        assert cmd[0] == "rr"
+        assert "--asan" in cmd
+        assert "--chaos" in cmd
+        assert "--intel-pt" in cmd
+        assert "--tsan" in cmd
         # Valgrind
         ffp._dbg = Debugger.VALGRIND
         mocker.patch.dict(os.environ, {"VALGRIND_SUP_PATH": "blah"})
