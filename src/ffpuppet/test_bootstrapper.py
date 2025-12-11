@@ -154,25 +154,22 @@ def test_bootstrapper_07():
     """test Bootstrapper.wait() with a fake browser"""
 
     def _fake_browser(port, payload_size=5120):
-        conn = socket()
-        # 50 x 0.1 = 5 seconds
-        conn.settimeout(0.1)
-        # open connection
-        for attempt in reversed(range(50)):
-            try:
-                conn.connect(("127.0.0.1", port))
-                break
-            except socket_timeout:
-                if not attempt:
-                    raise
-        # send request and receive response
-        try:
+        with socket() as conn:
+            # 50 x 0.1 = 5 seconds
+            conn.settimeout(0.1)
+            # open connection
+            for attempt in reversed(range(50)):
+                try:
+                    conn.connect(("127.0.0.1", port))
+                    break
+                except socket_timeout:
+                    if not attempt:
+                        raise
+            # send request and receive response
             conn.settimeout(10)
             conn.sendall(b"A" * payload_size)
             conn.send(b"")
             conn.recv(8192)
-        finally:
-            conn.close()
 
     with Bootstrapper.create() as bts:
         browser_thread = Thread(target=_fake_browser, args=(bts.port,))
