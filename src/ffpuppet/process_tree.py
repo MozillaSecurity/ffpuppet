@@ -11,7 +11,7 @@ from logging import getLogger
 from os import getenv
 from pathlib import Path
 from time import perf_counter, sleep
-from typing import TYPE_CHECKING, Callable, cast
+from typing import TYPE_CHECKING, cast
 
 from psutil import (
     STATUS_ZOMBIE,
@@ -25,7 +25,7 @@ from psutil import (
 from .exceptions import TerminateError
 
 if TYPE_CHECKING:
-    from collections.abc import Generator, Iterable
+    from collections.abc import Callable, Generator, Iterable
     from subprocess import Popen
 
 if sys.platform != "win32":
