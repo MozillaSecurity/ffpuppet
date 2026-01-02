@@ -4,10 +4,6 @@
 """ffpuppet bootstrapper tests"""
 # pylint: disable=protected-access
 
-# as of python 3.10 socket.timeout was made an alias of TimeoutError
-# pylint: disable=ungrouped-imports
-from socket import timeout as socket_timeout  # isort: skip
-
 from itertools import repeat
 from socket import socket
 from threading import Thread
@@ -61,7 +57,7 @@ def test_bootstrapper_03(mocker):
     """test Bootstrapper.wait() failure waiting for request"""
     fake_sock = mocker.MagicMock(spec_set=socket)
     fake_conn = mocker.Mock(spec_set=socket)
-    fake_conn.recv.side_effect = socket_timeout
+    fake_conn.recv.side_effect = TimeoutError
     fake_sock.accept.return_value = (fake_conn, None)
     mocker.patch("ffpuppet.bootstrapper.select", return_value=([fake_sock], None, None))
     with Bootstrapper(fake_sock) as bts:
@@ -85,7 +81,7 @@ def test_bootstrapper_04(mocker):
     fake_sock = mocker.MagicMock(spec_set=socket)
     fake_conn = mocker.Mock(spec_set=socket)
     fake_conn.recv.return_value = "A"
-    fake_conn.sendall.side_effect = socket_timeout
+    fake_conn.sendall.side_effect = TimeoutError
     fake_sock.accept.return_value = (fake_conn, None)
     mocker.patch("ffpuppet.bootstrapper.select", return_value=([fake_sock], None, None))
     with Bootstrapper(fake_sock) as bts:
@@ -127,13 +123,13 @@ def test_bootstrapper_05(mocker):
         # with a redirect url
         ("http://127.0.0.1:9999/test.html", ("foo",), 1),
         # request size matches buffer size
-        (None, ("A" * Bootstrapper.BUF_SIZE, socket_timeout), 1),
+        (None, ("A" * Bootstrapper.BUF_SIZE, TimeoutError), 1),
         # large request
         (None, ("A" * Bootstrapper.BUF_SIZE, "foo"), 1),
         # slow startup
-        (None, (socket_timeout, socket_timeout, "foo"), 1),
+        (None, (TimeoutError, TimeoutError, "foo"), 1),
         # slow failed startup with retry
-        (None, (socket_timeout, "", "foo"), 2),
+        (None, (TimeoutError, "", "foo"), 2),
     ],
 )
 def test_bootstrapper_06(mocker, redirect, recv, closed):
@@ -162,7 +158,7 @@ def test_bootstrapper_07():
                 try:
                     conn.connect(("127.0.0.1", port))
                     break
-                except socket_timeout:
+                except TimeoutError:
                     if not attempt:
                         raise
             # send request and receive response

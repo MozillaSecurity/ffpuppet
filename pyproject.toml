@@ -58,7 +58,7 @@ log_level = "DEBUG"
 [tool.ruff]
 exclude = ["asan_symbolize.py"]
 fix = true
-target-version = "py39"
+target-version = "py310"
 
 [tool.ruff.lint]
 select = [

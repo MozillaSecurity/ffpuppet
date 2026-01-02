@@ -9,16 +9,12 @@ from logging import getLogger
 from select import select
 from socket import SO_REUSEADDR, SOL_SOCKET, socket
 from time import perf_counter, sleep
-from typing import TYPE_CHECKING, Callable
-
-# as of python 3.10 socket.timeout was made an alias of TimeoutError
-# pylint: disable=ungrouped-imports,wrong-import-order
-from socket import timeout as socket_timeout  # isort: skip
+from typing import TYPE_CHECKING
 
 from .exceptions import BrowserTerminatedError, BrowserTimeoutError, LaunchError
 
 if TYPE_CHECKING:
-    from collections.abc import Iterable
+    from collections.abc import Callable, Iterable
 
 LOG = getLogger(__name__)
 
@@ -217,7 +213,7 @@ class Bootstrapper:  # pylint: disable=missing-docstring
                     try:
                         count_recv = len(conn.recv(self.BUF_SIZE))
                         total_recv += count_recv
-                    except socket_timeout:
+                    except TimeoutError:
                         # use -1 to indicate timeout
                         count_recv = -1
                     if count_recv == self.BUF_SIZE:
@@ -250,7 +246,7 @@ class Bootstrapper:  # pylint: disable=missing-docstring
             LOG.debug("sending response (redirect: %s)", url)
             try:
                 conn.sendall(resp.encode("ascii"))
-            except socket_timeout:
+            except TimeoutError:
                 resp_timeout = True
             else:
                 resp_timeout = False
