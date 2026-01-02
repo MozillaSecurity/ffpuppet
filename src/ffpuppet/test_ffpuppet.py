@@ -396,7 +396,7 @@ def test_ffpuppet_16(tmp_path):
     with (
         FFPuppet() as ffp,
         HTTPTestServer() as srv,
-        raises(LaunchError, match="'.+?' is invalid"),
+        raises(LaunchError, match=r"'.+?' is invalid"),
     ):
         ffp.launch(TESTFF_BIN, location=srv.get_addr(), prefs_js=prefs)
 
