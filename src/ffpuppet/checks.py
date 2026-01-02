@@ -8,12 +8,12 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from os import SEEK_SET, stat
 from platform import system
-from typing import IO, TYPE_CHECKING, Callable
+from typing import IO, TYPE_CHECKING
 
 from psutil import AccessDenied, NoSuchProcess, Process
 
 if TYPE_CHECKING:
-    from collections.abc import Iterable
+    from collections.abc import Callable, Iterable
     from re import Pattern
 
 __author__ = "Tyson Smith"
