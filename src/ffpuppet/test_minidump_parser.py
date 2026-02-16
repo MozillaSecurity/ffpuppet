@@ -228,6 +228,12 @@ def test_minidump_parser_04(tmp_path):
             "minidump-stackwalk",
             True,
         ),
+        # minidump-stackwalk major version is higher
+        (
+            (CompletedProcess([], 0, stdout=b"minidump-stackwalk 1.0.0\n"),),
+            "minidump-stackwalk",
+            True,
+        ),
         # minidump-stackwalk is matches minimum version
         (
             (CompletedProcess([], 0, stdout=b"minidump-stackwalk 0.15.2\n"),),

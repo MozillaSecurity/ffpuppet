@@ -320,16 +320,15 @@ class MinidumpParser:
             )
             return False
         # version check
-        for cver, mver in zip(current_version.split("."), min_version.split(".")):
-            if int(cver) > int(mver):
-                break
-            if int(cver) < int(mver):
-                LOG.error(
-                    "minidump-stackwalk '%s' is unsupported (minimum '%s')",
-                    current_version,
-                    min_version,
-                )
-                return False
+        current = tuple(int(x) for x in current_version.split("."))
+        minimum = tuple(int(x) for x in min_version.split("."))
+        if current < minimum:
+            LOG.error(
+                "minidump-stackwalk '%s' is unsupported (minimum '%s')",
+                current_version,
+                min_version,
+            )
+            return False
         LOG.debug("detected minidump-stackwalk version '%s'", current_version)
         return True
 
