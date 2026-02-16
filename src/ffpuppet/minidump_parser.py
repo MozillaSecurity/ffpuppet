@@ -275,7 +275,7 @@ class MinidumpParser:
                     extra_data = load(out_fp)
                 except JSONDecodeError:
                     extra_data = {}
-                    LOG.debug("invalid json in: %s", extra_data)
+                    LOG.debug("invalid json in: %s", entry)
             if "additional_minidumps" in extra_data:
                 for other in extra_data["additional_minidumps"].split(","):
                     prioritize.add(f"{entry.stem}-{other}.dmp")
