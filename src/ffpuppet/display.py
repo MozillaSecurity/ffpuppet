@@ -5,16 +5,27 @@
 
 from __future__ import annotations
 
+# use sys.platform for mypy
+import sys
 from enum import Enum, auto, unique
 from logging import getLogger
-from os import environ
-from platform import system
-from subprocess import TimeoutExpired
+from os import environ, getpid
+from pathlib import Path
+from shutil import which
+from subprocess import DEVNULL, Popen, TimeoutExpired
+from time import perf_counter, sleep
 from types import MappingProxyType
 from typing import TYPE_CHECKING
 
-if system() == "Linux":
-    from xvfbwrapper import Xvfb  # pylint: disable=import-error
+if sys.platform != "win32":
+    # pylint: disable=ungrouped-imports,no-name-in-module
+    from os import getuid
+
+
+if sys.platform == "linux":
+    # pylint: disable=import-error
+    from xvfbwrapper import Xvfb
+
 
 if TYPE_CHECKING:
     from collections.abc import Mapping, Sequence
@@ -29,8 +40,25 @@ class DisplayMode(Enum):
 
     DEFAULT = auto()
     HEADLESS = auto()
-    if system() == "Linux":
+    if sys.platform == "linux":
+        WESTON = auto()
         XVFB = auto()
+
+
+def _parse_resolution(width: int = 1280, height: int = 1024) -> tuple[int, int]:
+    """Parse display resolution from XVFB_RESOLUTION env var.
+
+    Returns:
+        Tuple of (width, height).
+    """
+    resolution = environ.get("XVFB_RESOLUTION")
+    if resolution is not None:
+        try:
+            w_str, h_str = resolution.lower().split("x")
+            width, height = int(w_str), int(h_str)
+        except ValueError:
+            LOG.warning("Invalid XVFB_RESOLUTION '%s'", resolution)
+    return width, height
 
 
 class Display:
@@ -67,46 +95,96 @@ class HeadlessDisplay(Display):
         self.args = ("-headless",)
 
 
-class XvfbDisplay(Display):
-    """Xvfb display mode."""
+if sys.platform == "linux":
 
-    __slots__ = ("_xvfb",)
+    class WestonDisplay(Display):
+        """Weston (Wayland) headless display mode."""
 
-    def __init__(self) -> None:
-        super().__init__()
-        self.env = MappingProxyType({"MOZ_ENABLE_WAYLAND": "0"})
-        resolution = environ.get("XVFB_RESOLUTION")
-        width = 1280
-        height = 1024
-        if resolution is not None:
+        __slots__ = ("_weston",)
+
+        def __init__(self) -> None:
+            super().__init__()
+            weston_bin = which("weston")
+            if weston_bin is None:
+                raise RuntimeError("weston not found")
+            width, height = _parse_resolution()
+            LOG.debug("weston resolution: %dx%d", width, height)
+            socket_name = f"wayland-ffpuppet-{getpid()}"
+            self.env = MappingProxyType(
+                {"WAYLAND_DISPLAY": socket_name, "MOZ_ENABLE_WAYLAND": "1"}
+            )
+            # pylint: disable=consider-using-with
+            self._weston: Popen[bytes] | None = Popen(
+                [
+                    weston_bin,
+                    "--backend=headless",
+                    f"--socket={socket_name}",
+                    f"--width={width}",
+                    f"--height={height}",
+                ],
+                start_new_session=True,
+                stderr=DEVNULL,
+                stdout=DEVNULL,
+            )
+            # wait for the socket file to appear
+            # pylint: disable=possibly-used-before-assignment
+            runtime_dir = Path(environ.get("XDG_RUNTIME_DIR", f"/run/user/{getuid()}"))
+            socket_path = runtime_dir / socket_name
+            deadline = perf_counter() + 10
+            while not socket_path.exists():
+                if self._weston.poll() is not None:
+                    self._weston = None
+                    raise RuntimeError("weston process exited early")
+                if perf_counter() >= deadline:
+                    self.close()
+                    raise RuntimeError(
+                        f"Timed out waiting for weston socket: {socket_path}"
+                    )
+                sleep(0.1)
+
+        def close(self) -> None:
+            if self._weston is not None:
+                self._weston.terminate()
+                try:
+                    self._weston.wait(timeout=10)
+                except TimeoutExpired:
+                    self._weston.kill()
+                    self._weston.wait()
+                self._weston = None
+
+    class XvfbDisplay(Display):
+        """Xvfb headless display mode."""
+
+        __slots__ = ("_xvfb",)
+
+        def __init__(self) -> None:
+            super().__init__()
+            self.env = MappingProxyType({"MOZ_ENABLE_WAYLAND": "0"})
+            width, height = _parse_resolution()
+            LOG.debug("xvfb resolution: %dx%d", width, height)
             try:
-                w_str, h_str = resolution.lower().split("x")
-                width, height = int(w_str), int(h_str)
-            except ValueError:
-                LOG.warning("Invalid XVFB_RESOLUTION '%s'", resolution)
-        LOG.debug("xvfb resolution: %dx%d", width, height)
-        try:
-            self._xvfb: Xvfb | None = Xvfb(width=width, height=height, timeout=60)
-        except NameError:
-            LOG.error("Missing xvfbwrapper")
-            raise
-        self._xvfb.start()
+                self._xvfb: Xvfb | None = Xvfb(width=width, height=height, timeout=60)
+            except NameError:
+                LOG.error("Missing xvfbwrapper")
+                raise
+            self._xvfb.start()
 
-    def close(self) -> None:
-        if self._xvfb is not None:
-            try:
-                self._xvfb.stop()
-            except TimeoutExpired:
-                if self._xvfb.proc is not None:
-                    self._xvfb.proc.kill()
-            self._xvfb = None
+        def close(self) -> None:
+            if self._xvfb is not None:
+                try:
+                    self._xvfb.stop()
+                except TimeoutExpired:
+                    if self._xvfb.proc is not None:
+                        self._xvfb.proc.kill()
+                self._xvfb = None
 
 
 _displays: dict[DisplayMode, type[Display]] = {
     DisplayMode.DEFAULT: Display,
     DisplayMode.HEADLESS: HeadlessDisplay,
 }
-if system() == "Linux":
+if sys.platform == "linux":
+    _displays[DisplayMode.WESTON] = WestonDisplay
     _displays[DisplayMode.XVFB] = XvfbDisplay
 
 DISPLAYS = MappingProxyType(_displays)
