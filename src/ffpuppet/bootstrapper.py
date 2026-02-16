@@ -66,7 +66,7 @@ class Bootstrapper:  # pylint: disable=missing-docstring
         """Verify port value is in valid range.
 
         Args:
-            None
+            value: Port number to verify.
 
         Returns:
             bool
@@ -130,7 +130,7 @@ class Bootstrapper:  # pylint: disable=missing-docstring
             try:
                 sock.bind(("127.0.0.1", port))
                 sock.listen()
-            except (OSError, PermissionError) as exc:
+            except OSError as exc:
                 LOG.debug("%s: %s", type(exc).__name__, exc)
                 sock.close()
                 sleep(0.1)
