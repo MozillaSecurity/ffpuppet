@@ -17,7 +17,7 @@ from tempfile import TemporaryFile
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from collections.abc import Generator, Sequence
+    from collections.abc import Iterator
 
 # included from:
 # https://github.com/llvm/llvm-project/blob/main/compiler-rt/lib/asan/scripts/
@@ -49,7 +49,7 @@ class SanitizerOptions:
     def __contains__(self, item: str) -> bool:
         return item in self._options
 
-    def __iter__(self) -> Generator[Sequence[str]]:
+    def __iter__(self) -> Iterator[tuple[str, str]]:
         yield from self._options.items()
 
     def __len__(self) -> int:
