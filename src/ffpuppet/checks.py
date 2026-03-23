@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
+from dataclasses import dataclass
 from os import SEEK_SET, stat
 from platform import system
 from typing import IO, TYPE_CHECKING
@@ -20,13 +21,11 @@ __author__ = "Tyson Smith"
 __credits__ = ["Tyson Smith"]
 
 
+@dataclass(eq=False, slots=True)
 class _LogContentsCheckState:
-    __slots__ = ("buffer", "fname", "offset")
-
-    def __init__(self, fname: str) -> None:
-        self.fname: str = fname
-        self.buffer: bytes = b""
-        self.offset: int = 0
+    fname: str
+    buffer: bytes = b""
+    offset: int = 0
 
 
 class Check(ABC):
