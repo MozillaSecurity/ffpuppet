@@ -144,9 +144,9 @@ class CheckLogSize(Check):
         if total_size > self.limit:
             self.message = (
                 f"LOG_SIZE_LIMIT_EXCEEDED: {total_size:,}\n"
-                f"Limit: {self.limit:,} ({self.limit / 1_048_576}MB)\n"
-                f"stderr log: {err_size:,} ({err_size / 1_048_576}MB)\n"
-                f"stdout log: {out_size:,} ({out_size / 1_048_576}MB)\n"
+                f"Limit: {self.limit:,} ({self.limit / 1_048_576:0.1f}MB)\n"
+                f"stderr log: {err_size:,} ({err_size / 1_048_576:0.1f}MB)\n"
+                f"stdout log: {out_size:,} ({out_size / 1_048_576:0.1f}MB)\n"
             )
         return self.message is not None
 
@@ -201,7 +201,7 @@ class CheckMemoryUsage(Check):
         if total_usage >= self.limit:
             msg = [
                 f"MEMORY_LIMIT_EXCEEDED: {total_usage:,}\n",
-                f"Limit: {self.limit:,} ({self.limit / 1_048_576}MB)\n",
+                f"Limit: {self.limit:,} ({self.limit / 1_048_576:0.1f}MB)\n",
                 f"Parent PID: {self.pid}\n",
             ]
             for pid, usage in proc_info:
