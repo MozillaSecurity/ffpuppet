@@ -10,7 +10,7 @@ from threading import Thread
 
 from pytest import mark, raises
 
-from .bootstrapper import Bootstrapper
+from .bootstrapper import BLOCKED_PORTS, BUF_SIZE, Bootstrapper
 from .exceptions import BrowserTerminatedError, BrowserTimeoutError, LaunchError
 
 
@@ -21,7 +21,7 @@ def test_bootstrapper_01():
         assert bts.location.startswith("http://127.0.0.1:")
         assert int(bts.location.rsplit(":", maxsplit=1)[-1]) >= 1024
         assert bts.port >= 1024
-        assert bts.port not in Bootstrapper.BLOCKED_PORTS
+        assert bts.port not in BLOCKED_PORTS
         bts.close()
 
 
@@ -123,9 +123,9 @@ def test_bootstrapper_05(mocker):
         # with a redirect url
         ("http://127.0.0.1:9999/test.html", ("foo",), 1),
         # request size matches buffer size
-        (None, ("A" * Bootstrapper.BUF_SIZE, TimeoutError), 1),
+        (None, ("A" * BUF_SIZE, TimeoutError), 1),
         # large request
-        (None, ("A" * Bootstrapper.BUF_SIZE, "foo"), 1),
+        (None, ("A" * BUF_SIZE, "foo"), 1),
         # slow startup
         (None, (TimeoutError, TimeoutError, "foo"), 1),
         # slow failed startup with retry
@@ -201,7 +201,7 @@ def test_bootstrapper_09(mocker):
     """test Bootstrapper() - blocked ports"""
     fake_sock = mocker.MagicMock(spec_set=socket)
     fake_sock.getsockname.side_effect = (
-        (None, next(iter(Bootstrapper.BLOCKED_PORTS))),
+        (None, next(iter(BLOCKED_PORTS))),
         (None, 12345),
     )
     mocker.patch("ffpuppet.bootstrapper.socket", return_value=fake_sock)
