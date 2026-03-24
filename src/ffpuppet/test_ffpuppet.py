@@ -16,7 +16,6 @@ from time import sleep
 from psutil import Process
 from pytest import mark, raises
 
-from .bootstrapper import Bootstrapper
 from .core import LLVM_SYMBOLIZER, Debugger, FFPuppet, ProcessTree, Reason
 from .exceptions import (
     BrowserExecutionError,
@@ -27,7 +26,6 @@ from .exceptions import (
 from .minidump_parser import MinidumpParser
 from .profile import Profile
 
-Bootstrapper.POLL_WAIT = 0.2
 TESTFF_BIN = Path(__file__).parent / "resources" / "testff.py"
 
 

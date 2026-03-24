@@ -16,43 +16,49 @@ from .exceptions import BrowserTerminatedError, BrowserTimeoutError, LaunchError
 if TYPE_CHECKING:
     from collections.abc import Callable, Iterable
 
-LOG = getLogger(__name__)
-
 __author__ = "Tyson Smith"
 
 
-class Bootstrapper:  # pylint: disable=missing-docstring
-    # see: searchfox.org/mozilla-central/source/netwerk/base/nsIOService.cpp
-    # include ports above 1023
-    BLOCKED_PORTS = frozenset(
-        (
-            1719,
-            1720,
-            1723,
-            2049,
-            3659,
-            4045,
-            5060,
-            5061,
-            6000,
-            6566,
-            6665,
-            6666,
-            6667,
-            6668,
-            6669,
-            6697,
-            10080,
-        )
+LOG = getLogger(__name__)
+# see: searchfox.org/mozilla-central/source/netwerk/base/nsIOService.cpp
+# include ports above 1023
+BLOCKED_PORTS = frozenset(
+    (
+        1719,
+        1720,
+        1723,
+        2049,
+        3659,
+        4045,
+        5060,
+        5061,
+        6000,
+        6566,
+        6665,
+        6666,
+        6667,
+        6668,
+        6669,
+        6697,
+        10080,
     )
-    # receive buffer size
-    BUF_SIZE = 4096
-    # duration of initial blocking socket operations
-    POLL_WAIT = 1.0
+)
+# receive buffer size
+BUF_SIZE = 4096
+# duration of initial blocking socket operations
+POLL_WAIT = 1.0
 
-    __slots__ = ("_socket",)
 
-    def __init__(self, sock: socket) -> None:
+class Bootstrapper:  # pylint: disable=missing-docstring
+    __slots__ = ("_buf_size", "_poll_wait", "_socket")
+
+    def __init__(
+        self, sock: socket, buf_size: int = BUF_SIZE, poll_wait: float = POLL_WAIT
+    ) -> None:
+        assert buf_size > 0
+        assert poll_wait > 0
+        self._buf_size = buf_size
+        self._poll_wait = poll_wait
         self._socket = sock
 
     def __enter__(self) -> Bootstrapper:
@@ -192,7 +198,7 @@ class Bootstrapper:  # pylint: disable=missing-docstring
         try:
             LOG.debug("waiting for browser connection...")
             while conn is None:
-                readable, _, _ = select([self._socket], (), (), self.POLL_WAIT)
+                readable, _, _ = select([self._socket], (), (), self._poll_wait)
                 if self._socket not in readable:
                     # no connections ready for reading
                     if not cb_continue():
@@ -211,12 +217,12 @@ class Bootstrapper:  # pylint: disable=missing-docstring
                 LOG.debug("waiting for browser request...")
                 while True:
                     try:
-                        count_recv = len(conn.recv(self.BUF_SIZE))
+                        count_recv = len(conn.recv(self._buf_size))
                         total_recv += count_recv
                     except TimeoutError:
                         # use -1 to indicate timeout
                         count_recv = -1
-                    if count_recv == self.BUF_SIZE:
+                    if count_recv == self._buf_size:
                         # check if there is more to read
                         continue
                     if total_recv:
