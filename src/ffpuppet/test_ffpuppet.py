@@ -118,7 +118,8 @@ def test_ffpuppet_01():
 )
 def test_ffpuppet_02(mocker, exc_type):
     """test launch failures"""
-    mocker.patch("ffpuppet.core.Popen", autospec=True)
+    fake_popen = mocker.patch("ffpuppet.core.Popen", autospec=True)
+    fake_popen.return_value.pid = 1234
     mocker.patch("ffpuppet.core.ProcessTree", autospec=True)
     fake_bts = mocker.patch("ffpuppet.core.Bootstrapper", autospec=True)
     fake_bts.create.return_value.location = "http://fake.location"
@@ -363,7 +364,8 @@ def test_ffpuppet_13(tmp_path):
 def test_ffpuppet_14(mocker, tmp_path, debugger, dbg_bin, version):
     """test launching with debuggers"""
     mocker.patch("ffpuppet.core.check_output", autospec=True, return_value=version)
-    mocker.patch("ffpuppet.core.Popen", autospec=True)
+    fake_popen = mocker.patch("ffpuppet.core.Popen", autospec=True)
+    fake_popen.return_value.pid = 1234
     mocker.patch("ffpuppet.core.ProcessTree", autospec=True)
     mocker.patch("ffpuppet.core.system", autospec=True, return_value="Linux")
     fake_bts = mocker.patch("ffpuppet.core.Bootstrapper", autospec=True)
@@ -974,7 +976,8 @@ def test_ffpuppet_33(mocker, port):
 @mark.skipif(system() == "Windows", reason="Unsupported on Windows")
 def test_ffpuppet_34(mocker, tmp_path):
     """test FFPuppet.close() with add log permission error"""
-    mocker.patch("ffpuppet.core.Popen", autospec=True)
+    fake_popen = mocker.patch("ffpuppet.core.Popen", autospec=True)
+    fake_popen.return_value.pid = 1234
     fake_tree = mocker.patch("ffpuppet.core.ProcessTree", autospec=True)
     fake_tree.return_value.wait_procs.return_value = 0
     fake_bts = mocker.patch("ffpuppet.core.Bootstrapper", autospec=True)

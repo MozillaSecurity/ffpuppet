@@ -848,7 +848,7 @@ class FFPuppet:
                 stderr=stderr,
                 stdout=self._logs.get_fp("stdout"),
             )
-            self._proc_tree = ProcessTree(proc)
+            self._proc_tree = ProcessTree(proc.pid)
             if sys.platform == "win32":
                 # pylint: disable=possibly-used-before-assignment
                 if memory_limit:
@@ -860,6 +860,7 @@ class FFPuppet:
                     )
                     resume_suspended_process(proc.pid)
             bootstrapper.wait(self.is_healthy, timeout=launch_timeout, url=location)
+            self._proc_tree.detect_launcher()
             # check if launcher process is in use
             if self._proc_tree.launcher is not None:
                 LOG.debug("browser launcher pid %d", self._proc_tree.launcher.pid)
@@ -900,10 +901,7 @@ class FFPuppet:
         if self._abort_tokens:
             self._checks.append(
                 CheckLogContents(
-                    [
-                        logs_fp_stderr.name,
-                        logs_fp_stdout.name,
-                    ],
+                    (logs_fp_stderr.name, logs_fp_stdout.name),
                     self._abort_tokens,
                 )
             )
