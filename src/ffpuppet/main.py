@@ -331,6 +331,7 @@ def main(argv: list[str] | None = None) -> None:
         LOG.info("Ctrl+C detected.")
     except LaunchError as exc:
         LOG.error("Launch failed: %s", exc)
+        LOG.error("Use --display-logs or --save-all to review logs")
     finally:
         LOG.info("Shutting down...")
         ffp.close()

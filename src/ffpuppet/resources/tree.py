@@ -72,6 +72,8 @@ def main(args: Namespace) -> int:
                 cmd.append("--port")
                 cmd.append(str(srv.getsockname()[1]))
                 cmd.append("-contentproc")
+                cmd.append("-parentPid")
+                cmd.append(str(getpid()))
                 # pylint: disable=consider-using-with
                 child_procs = tuple(Popen(cmd) for _ in range(args.procs))
                 # wait for processes to launch
@@ -117,6 +119,7 @@ if __name__ == "__main__":
     parser.add_argument("--port", type=int)
     parser.add_argument("-contentproc", action="store_true", help="fake browser arg")
     parser.add_argument("-no-deelevate", action="store_true", help="fake browser arg")
+    parser.add_argument("-parentPid", type=int, help="fake browser arg")
 
     basicConfig(
         datefmt="%H:%M:%S",

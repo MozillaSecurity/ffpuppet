@@ -19,6 +19,7 @@ from psutil import (
     NoSuchProcess,
     Process,
     TimeoutExpired,
+    process_iter,
     wait_procs,
 )
 
@@ -26,16 +27,13 @@ from .exceptions import TerminateError
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Generator, Iterable
-    from subprocess import Popen
 
 if sys.platform != "win32":
     from signal import SIGUSR1, Signals  # pylint: disable=no-name-in-module
 
     COVERAGE_SIGNAL: Signals | None = SIGUSR1
-    IS_WINDOWS = False
 else:
     COVERAGE_SIGNAL = None
-    IS_WINDOWS = True
 
 
 LOG = getLogger(__name__)
@@ -141,14 +139,100 @@ class ProcessTree:
         python -> firefox (parent) -> firefox (content procs)
     """
 
-    __slots__ = ("_launcher", "_launcher_check", "_proc", "parent")
+    __slots__ = ("launcher", "parent")
 
-    def __init__(self, proc: Popen[bytes]) -> None:
-        self._launcher: Process | None = None
-        # only perform the launcher check on Windows
-        self._launcher_check = IS_WINDOWS
-        self._proc = proc
-        self.parent: Process = Process(proc.pid)
+    def __init__(self, pid: int) -> None:
+        self.launcher: Process | None = None
+        self.parent = Process(pid)
+
+    @staticmethod
+    def _browser_parent_pid(proc: Process) -> int | None:
+        with suppress(AccessDenied, NoSuchProcess, IndexError, ValueError):
+            cmd = proc.cmdline()
+            if "-contentproc" in cmd:
+                idx = cmd.index("-parentPid")
+                return int(cmd[idx + 1])
+        return None
+
+    def detect_launcher(self) -> None:
+        """Check if launcher process exists. This could include a debugger or
+        the launcher process. This should be called after bootstrap once the browser
+        has launched.
+
+        Args:
+            None
+
+        Returns:
+            None.
+        """
+        if self.launcher is None:
+            try:
+                # search for browser parent process info
+                for child in self.parent.children(recursive=True):
+                    parent_pid = self._browser_parent_pid(child)
+                    if parent_pid is not None:
+                        parent = Process(parent_pid)
+                        # check if debugger or launcher processes is in use
+                        if parent.pid != self.parent.pid:
+                            self.launcher = self.parent
+                            self.parent = parent
+                            break
+            except (AccessDenied, NoSuchProcess):  # pragma: no cover
+                LOG.debug("failed to detect launcher")
+
+    def processes(self) -> list[Process]:
+        """Processes in the process tree.
+
+        Args:
+            None
+
+        Returns:
+            Processes in the process tree.
+        """
+        procs: list[Process] = []
+        subprocs: list[Process] | None = None
+        if self.launcher is not None and self._poll(self.launcher) is None:
+            procs.append(self.launcher)
+        if self._poll(self.parent) is None:
+            procs.append(self.parent)
+            subprocs = self._recursive_process_scan()
+        if subprocs is None:
+            subprocs = list(self._full_system_scan())
+        procs.extend(subprocs)
+        return procs
+
+    def _recursive_process_scan(self) -> list[Process] | None:
+        """Scan the parent process recursively for running browser processes.
+        This may included the actual parent process if detect_launcher() was not called.
+
+        Args:
+            None
+
+        Returns:
+            Browser processes.
+        """
+        with suppress(AccessDenied, NoSuchProcess):
+            # mypy complains when returning result directly
+            procs: list[Process] = self.parent.children(recursive=True)
+            return procs
+        return None
+
+    def _full_system_scan(self) -> Generator[Process]:
+        """Scan all running processes for browser content processes.
+        This should be used when the parent process is no longer running to detect
+        lingering content processes.
+
+        Args:
+            None
+
+        Yields:
+            Browser content processes.
+        """
+        for proc in process_iter(["pid", "cmdline"]):
+            parent_pid = self._browser_parent_pid(proc)
+            if parent_pid is not None and parent_pid == self.parent.pid:
+                with suppress(AccessDenied, NoSuchProcess):
+                    yield Process(proc.pid)
 
     def cpu_usage(self) -> Generator[tuple[int, float]]:
         """Collect percentage of CPU usage per process.
@@ -249,41 +333,6 @@ class ProcessTree:
         """
         return self._poll(self.parent) is None
 
-    @property
-    def launcher(self) -> Process | None:
-        """Inspect process tree and identity the browser launcher and parent processes.
-
-        Args:
-            None
-
-        Returns:
-            None
-        """
-        if self._launcher_check and self._launcher is None:
-            try:
-                cmd = self.parent.cmdline()
-            except (AccessDenied, NoSuchProcess):  # pragma: no cover
-                LOG.debug("call to self.parent.cmdline() failed")
-                cmd = []
-            # check if launcher process is in use
-            if "-no-deelevate" in cmd:
-                launcher_children = self.parent.children(recursive=False)
-                # launcher should only have one child process
-                if len(launcher_children) == 1:
-                    LOG.debug("launcher process detected")
-                    self._launcher = self.parent
-                    self.parent = launcher_children[0]
-                else:
-                    # this is expected behaviour when setting:
-                    # - `browser.launcherProcess.enabled=false`
-                    # it can also happen for unknown reasons...
-                    LOG.debug(
-                        "using launcher as parent, %d child proc(s) detected",
-                        len(launcher_children),
-                    )
-                self._launcher_check = False
-        return self._launcher
-
     @staticmethod
     def _poll(proc: Process) -> int | None:
         """Poll a given process.
@@ -302,24 +351,6 @@ class ProcessTree:
         except (AccessDenied, TimeoutExpired):
             return None
 
-    def processes(self, recursive: bool = False) -> list[Process]:
-        """Processes in the process tree.
-
-        Args:
-            recursive: If False only the parent and child processes are returned.
-
-        Returns:
-            Processes in the process tree.
-        """
-        procs: list[Process] = []
-        if self.launcher is not None and self._poll(self.launcher) is None:
-            procs.append(self.launcher)
-        if self._poll(self.parent) is None:
-            procs.append(self.parent)
-        with suppress(AccessDenied, NoSuchProcess):
-            procs.extend(self.parent.children(recursive=recursive))
-        return procs
-
     def terminate(self) -> None:
         """Call terminate() on browser processes. If terminate() fails try kill().
 
@@ -329,20 +360,19 @@ class ProcessTree:
         Returns:
             None
         """
-        procs = self.processes(recursive=True)
+        procs = self.processes()
         if not procs:
             LOG.debug("no processes to terminate")
             return
-
         # try terminating the parent process first, this should be all that is needed
         if self._poll(self.parent) is None:
             with suppress(AccessDenied, NoSuchProcess, TimeoutExpired):
                 LOG.debug("attempting to terminate parent (%d)", self.parent.pid)
                 self.parent.terminate()
                 self.parent.wait(timeout=10)
-            # remaining processes should exit if parent process is gone
-            procs = list(_filter_zombies(_safe_wait_procs(procs, timeout=1)[1]))
-
+        # remaining processes should exit if parent process is gone
+        _safe_wait_procs(procs, timeout=1)
+        procs = list(_filter_zombies(self.processes()))
         use_kill = False
         while procs:
             LOG.debug(
@@ -358,7 +388,8 @@ class ProcessTree:
                     else:
                         proc.terminate()
             # wait for processes to terminate
-            procs = list(_filter_zombies(_safe_wait_procs(procs, timeout=30)[1]))
+            _safe_wait_procs(procs, timeout=30)
+            procs = list(_filter_zombies(self.processes()))
             if use_kill:
                 break
             use_kill = True
