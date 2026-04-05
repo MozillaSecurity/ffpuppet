@@ -743,6 +743,10 @@ class FFPuppet:
 
         # need the path to help find symbols
         self._bin_path = bin_path.parent
+        llvm_sym: str | None = None
+        if (self._bin_path / LLVM_SYMBOLIZER).exists():
+            llvm_sym = str(self._bin_path / LLVM_SYMBOLIZER)
+            LOG.debug("found llvm_symbolizer: %s", llvm_sym)
 
         if location is not None:
             LOG.debug("requested location '%s'", location)
@@ -843,6 +847,7 @@ class FFPuppet:
                     self._logs.path / self._logs.PREFIX_SAN,
                     env_mod=env_mod,
                     sanitizer=detected_sanitizer,
+                    llvm_symbolizer=llvm_sym,
                 ),
                 shell=False,
                 stderr=stderr,
