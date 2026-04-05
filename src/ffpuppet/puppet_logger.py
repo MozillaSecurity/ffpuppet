@@ -41,6 +41,7 @@ class PuppetLogger:  # pylint: disable=missing-docstring
         self._rr_packed = False
         self.closed = True
         self.path: Path | None = None
+        # TODO: remove "watching"
         self.watching: dict[str, int] = {}
         self.reset()
 
