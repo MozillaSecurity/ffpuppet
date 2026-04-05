@@ -39,6 +39,7 @@ def _configure_sanitizers(
     orig_env: Mapping[str, str],
     log_path: Path,
     symbolize: bool = False,
+    llvm_symbolizer: str | None = None,
 ) -> dict[str, str]:
     """Copy environment and update default values in *SAN_OPTIONS entries.
     These values are only updated if they are not provided, with the exception of
@@ -49,13 +50,14 @@ def _configure_sanitizers(
         log_path: Location to write sanitizer logs to.
         symbolize: Enable automatic symbolizing. This should only used when required to
             minimize memory usage.
+        llvm_symbolizer: Path to llvm_symbolizer binary.
 
     Returns:
         Environment with *SAN_OPTIONS defaults set.
     """
     env = dict(orig_env)
     # https://github.com/google/sanitizers/wiki/SanitizerCommonFlags
-    common_flags = (
+    common_flags = [
         ("abort_on_error", "false"),
         ("allocator_may_return_null", "true"),
         ("disable_coredump", "true"),
@@ -69,7 +71,13 @@ def _configure_sanitizers(
         ("handle_sigfpe", "true"),
         # set to be safe
         ("handle_sigill", "true"),
-    )
+    ]
+    if symbolize:
+        common_flags.append(("symbolize", "1"))
+        if llvm_symbolizer is not None:
+            common_flags.append(("external_symbolizer_path", f"'{llvm_symbolizer}'"))
+    else:
+        common_flags.append(("symbolize", "0"))
 
     # setup Address Sanitizer options ONLY if not set manually in environment
     # https://github.com/google/sanitizers/wiki/AddressSanitizerFlags
@@ -101,7 +109,6 @@ def _configure_sanitizers(
     asan_config.add("strict_init_order", "true")
     # temporarily revert to default (false) until https://bugzil.la/1767068 is fixed
     # asan_config.add("strict_string_checks", "true")
-    asan_config.add("symbolize", "1" if symbolize else "0")
     env["ASAN_OPTIONS"] = str(asan_config)
 
     # setup Leak Sanitizer options ONLY if not set manually in environment
@@ -117,6 +124,8 @@ def _configure_sanitizers(
     # setup Thread Sanitizer options ONLY if not set manually in environment
     tsan_config = SanitizerOptions(env.get("TSAN_OPTIONS"))
     assert tsan_config.check_path("suppressions"), "missing suppressions file"
+    for flag in common_flags:
+        tsan_config.add(*flag)
     tsan_config.add("halt_on_error", "1")
     # hard_rss_limit_mb requires background thread so only works on Linux for now...
     # see https://github.com/llvm/llvm-project/blob/main/compiler-rt/lib/
@@ -129,7 +138,6 @@ def _configure_sanitizers(
     tsan_config.add("log_path", f"'{log_path}'", overwrite=True)
     # This is an experimental feature added in Bug 1792757
     tsan_config.add("rss_limit_heap_profile", "true")
-    tsan_config.add("symbolize", "1" if symbolize else "0")
     env["TSAN_OPTIONS"] = str(tsan_config)
 
     # setup Undefined Behavior Sanitizer options ONLY if not set manually in environment
@@ -144,7 +152,6 @@ def _configure_sanitizers(
     ubsan_config.add("log_path", f"'{log_path}'", overwrite=True)
     ubsan_config.add("print_stacktrace", "1")
     ubsan_config.add("report_error_type", "1")
-    ubsan_config.add("symbolize", "1" if symbolize else "0")
     env["UBSAN_OPTIONS"] = str(ubsan_config)
 
     return env
@@ -255,6 +262,7 @@ def prepare_environment(
     sanitizer_log: Path,
     env_mod: Mapping[str, str | None] | None = None,
     sanitizer: str | None = None,
+    llvm_symbolizer: str | None = None,
 ) -> dict[str, str]:
     """Create environment that can be used when launching the browser.
 
@@ -265,6 +273,7 @@ def prepare_environment(
                  in the prepared environment. Add/update by setting
                  value or remove entry by setting value to None.
         sanitizer: Sanitizer in use.
+        llvm_symbolizer: Path to llvm_symbolizer binary.
 
     Returns:
         Environment to use when launching browser.
@@ -335,7 +344,9 @@ def prepare_environment(
     # symbolize traces in process on Windows or when TSan is in use
     # it is required for runtime TSan suppressions
     in_process = IS_WINDOWS or sanitizer == "tsan"
-    env = _configure_sanitizers(env, sanitizer_log, symbolize=in_process)
+    env = _configure_sanitizers(
+        env, sanitizer_log, symbolize=in_process, llvm_symbolizer=llvm_symbolizer
+    )
     # filter environment to avoid leaking sensitive information
     return {k: v for k, v in env.items() if "_SECRET" not in k}
 

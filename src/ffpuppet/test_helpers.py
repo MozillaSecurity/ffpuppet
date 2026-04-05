@@ -41,6 +41,17 @@ def test_helpers_01(tmp_path):
     env = _configure_sanitizers({}, tmp_path, symbolize=True)
     assert "symbolize=1" in env["ASAN_OPTIONS"]
     assert "symbolize=1" in env["TSAN_OPTIONS"]
+    # test llvm_symbolizer with symbolize=True
+    sym_path = "/path/to/llvm-symbolizer"
+    env = _configure_sanitizers({}, tmp_path, symbolize=True, llvm_symbolizer=sym_path)
+    for san in ("ASAN_OPTIONS", "TSAN_OPTIONS", "UBSAN_OPTIONS"):
+        opts = SanitizerOptions(env[san])
+        assert opts.get("external_symbolizer_path") == f"'{sym_path}'"
+    # test llvm_symbolizer is not set when symbolize=False
+    env = _configure_sanitizers({}, tmp_path, symbolize=False, llvm_symbolizer=sym_path)
+    for san in ("ASAN_OPTIONS", "TSAN_OPTIONS", "UBSAN_OPTIONS"):
+        opts = SanitizerOptions(env[san])
+        assert opts.get("external_symbolizer_path") is None
     # test with presets environment
     env = _configure_sanitizers(
         {
