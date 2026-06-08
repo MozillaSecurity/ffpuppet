@@ -26,6 +26,7 @@ EXTRA_FIELDS = (
     # Set before a content process crashes because of an IPC channel error, holds
     # a description of the error.
     "ipc_channel_error",
+    "ProcessType",
     "ShutdownReason",
 )
 LOG = getLogger(__name__)
@@ -155,6 +156,12 @@ class MinidumpParser:
                 str(data["system_info"]["cpu_count"]),
             )
         )
+        out_fp.write(line.encode())
+        out_fp.write(b"\n")
+
+        # include PID if available
+        crashing_pid = str(data.get("pid", "unknown"))
+        line = f"PID|{crashing_pid}"
         out_fp.write(line.encode())
         out_fp.write(b"\n")
 
