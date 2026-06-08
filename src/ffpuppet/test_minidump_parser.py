@@ -30,6 +30,7 @@ MD_BASE_AMD64_WIN = {
 
 MD_UNSYMBOLIZED_AMD64_WIN = deepcopy(MD_BASE_AMD64_WIN)
 MD_UNSYMBOLIZED_AMD64_WIN["crash_info"]["crashing_thread"] = 0
+MD_UNSYMBOLIZED_AMD64_WIN["pid"] = 1337
 MD_UNSYMBOLIZED_AMD64_WIN["crashing_thread"] = {
     "frame_count": 49,
     "frames": [
@@ -51,6 +52,7 @@ MD_UNSYMBOLIZED_ARM64_MAC = {
         "crashing_thread": 0,
         "type": "EXC_BAD_ACCESS / KERN_INVALID_ADDRESS",
     },
+    "pid": 9001,
     "crashing_thread": {
         "frame_count": 32,
         "frames": [
@@ -128,7 +130,7 @@ def test_minidump_parser_02(mocker, code, token, timeout):
 
 
 @mark.parametrize(
-    "data, reg, operating_system, cpu, crash, frame",
+    "data, reg, operating_system, cpu, pid, crash, frame",
     [
         # Windows - x86_64 / AMD64
         (
@@ -136,6 +138,7 @@ def test_minidump_parser_02(mocker, code, token, timeout):
             "r10 = 0x0",
             "OS|Windows NT|10.0.19044",
             "CPU|amd64|family 6 model 70 stepping 1|8",
+            "PID|1337",
             "Crash|EXCEPTION_BREAKPOINT|0x00007ffe4e09af8d|0",
             "0|0|xul.dll||||",
         ),
@@ -145,23 +148,34 @@ def test_minidump_parser_02(mocker, code, token, timeout):
             " x1 = 0x0000000000000001\t x2 = 0x0000000000000002",
             "OS|Mac OS X|13.0.1 22A400",
             "CPU|arm64||8",
+            "PID|9001",
             "Crash|EXC_BAD_ACCESS / KERN_INVALID_ADDRESS|0x0000000000000000|0",
             "0|0|XUL||||",
         ),
     ],
 )
-def test_minidump_parser_03(tmp_path, data, reg, operating_system, cpu, crash, frame):
+def test_minidump_parser_03(
+    tmp_path,
+    data,
+    reg,
+    operating_system,
+    cpu,
+    pid,
+    crash,
+    frame,
+):
     """test MinidumpParser._fmt_output() - un-symbolized"""
     with (tmp_path / "out.txt").open("w+b") as ofp:
         MinidumpParser._fmt_output(data, ofp, {}, limit=2)
         ofp.seek(0)
         formatted = ofp.read().rstrip().decode().split("\n")
-    assert len(formatted) == 5
+    assert len(formatted) == 6
     assert formatted[0] == reg
     assert formatted[1] == operating_system
     assert formatted[2] == cpu
-    assert formatted[3] == crash
-    assert formatted[4] == frame
+    assert formatted[3] == pid
+    assert formatted[4] == crash
+    assert formatted[5] == frame
 
 
 def test_minidump_parser_04(tmp_path):
@@ -207,16 +221,17 @@ def test_minidump_parser_04(tmp_path):
         MinidumpParser._fmt_output(data, ofp, {"metadata": "foo"}, limit=2)
         ofp.seek(0)
         formatted = ofp.read().rstrip().decode().split("\n")
-    assert len(formatted) == 9
+    assert len(formatted) == 10
     assert formatted[0] == "r10 = 0x12345678\tr11 = 0x0badf00d\tr12 = 0x00000000"
     assert formatted[1] == "r13 = 0x000000dceebfc2e8"
     assert formatted[2] == "metadata|foo"
     assert formatted[3] == "OS|Windows NT|10.0.19044"
     assert formatted[4] == "CPU|amd64|family 6 model 70 stepping 1|8"
-    assert formatted[5] == "Crash|EXCEPTION_BREAKPOINT|0x00007ffe4e09af8d|0"
-    assert formatted[6] == "0|0|xul.dll|function00()|file0.cpp|47|0x1ed"
-    assert formatted[7] == "0|1|xul.dll|function01()|file1.cpp|210|0x1bb"
-    assert formatted[8] == "WARNING: Hit stack size output limit!"
+    assert formatted[5] == "PID|unknown"
+    assert formatted[6] == "Crash|EXCEPTION_BREAKPOINT|0x00007ffe4e09af8d|0"
+    assert formatted[7] == "0|0|xul.dll|function00()|file0.cpp|47|0x1ed"
+    assert formatted[8] == "0|1|xul.dll|function01()|file1.cpp|210|0x1bb"
+    assert formatted[9] == "WARNING: Hit stack size output limit!"
 
 
 @mark.parametrize(
@@ -295,16 +310,17 @@ def test_minidump_parser_06(tmp_path):
     assert MinidumpParser.dmp_files(tmp_path)
 
 
-def test_minidump_parser_missing_crashing_thread(tmp_path):
-    """test MinidumpParser._fmt_output() - missing crashing thread"""
+def test_minidump_parser_missing_crashing_thread_and_pid(tmp_path):
+    """test MinidumpParser._fmt_output() - missing crashing thread and pid"""
     with (tmp_path / "out.txt").open("w+b") as ofp:
         MinidumpParser._fmt_output(MD_BASE_AMD64_WIN, ofp, {})
         ofp.seek(0)
         formatted = ofp.read().rstrip().decode().split("\n")
-    assert len(formatted) == 3
+    assert len(formatted) == 4
     assert formatted[0] == "OS|Windows NT|10.0.19044"
     assert formatted[1] == "CPU|amd64|family 6 model 70 stepping 1|8"
-    assert formatted[2] == "Crash|EXCEPTION_BREAKPOINT|0x00007ffe4e09af8d|?"
+    assert formatted[2] == "PID|unknown"
+    assert formatted[3] == "Crash|EXCEPTION_BREAKPOINT|0x00007ffe4e09af8d|?"
 
 
 def test_minidump_parser_metadata(tmp_path):
