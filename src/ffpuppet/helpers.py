@@ -33,6 +33,17 @@ __author__ = "Tyson Smith"
 
 CERTUTIL = "certutil.exe" if IS_WINDOWS else "certutil"
 LOG = getLogger(__name__)
+# Firefox checks these by presence, not value, so they must be removed (not set
+# to "0") to leave sandboxing enabled.
+SANDBOX_ENV_VARS = (
+    "MOZ_DISABLE_CONTENT_SANDBOX",
+    "MOZ_DISABLE_GMP_SANDBOX",
+    "MOZ_DISABLE_GPU_SANDBOX",
+    "MOZ_DISABLE_RDD_SANDBOX",
+    "MOZ_DISABLE_SOCKET_PROCESS_SANDBOX",
+    "MOZ_DISABLE_UTILITY_SANDBOX",
+    "MOZ_DISABLE_VR_SANDBOX",
+)
 
 
 def _configure_sanitizers(
@@ -263,6 +274,7 @@ def prepare_environment(
     env_mod: Mapping[str, str | None] | None = None,
     sanitizer: str | None = None,
     llvm_symbolizer: str | None = None,
+    disable_sandboxing: bool = True,
 ) -> dict[str, str]:
     """Create environment that can be used when launching the browser.
 
@@ -274,6 +286,7 @@ def prepare_environment(
                  value or remove entry by setting value to None.
         sanitizer: Sanitizer in use.
         llvm_symbolizer: Path to llvm_symbolizer binary.
+        disable_sandboxing: Disable the browser sandbox.
 
     Returns:
         Environment to use when launching browser.
@@ -292,13 +305,8 @@ def prepare_environment(
     base["MOZ_CRASHREPORTER_NO_REPORT"] = "1"
     # shutdown all processes when a crash is detected
     base["MOZ_CRASHREPORTER_SHUTDOWN"] = "1"
-    base["MOZ_DISABLE_CONTENT_SANDBOX"] = "1"
-    base["MOZ_DISABLE_GMP_SANDBOX"] = "1"
-    base["MOZ_DISABLE_GPU_SANDBOX"] = "1"
-    base["MOZ_DISABLE_RDD_SANDBOX"] = "1"
-    base["MOZ_DISABLE_SOCKET_PROCESS_SANDBOX"] = "1"
-    base["MOZ_DISABLE_UTILITY_SANDBOX"] = "1"
-    base["MOZ_DISABLE_VR_SANDBOX"] = "1"
+    for sandbox_var in SANDBOX_ENV_VARS:
+        base[sandbox_var] = "1" if disable_sandboxing else None
     base["MOZ_GDB_SLEEP"] = "0"
     # https://bugzilla.mozilla.org/show_bug.cgi?id=1305151
     # skia assertions are easily hit and mostly due to precision, disable them.

@@ -125,6 +125,13 @@ def parse_args(argv: list[str] | None = None) -> Namespace:
         help="Display mode.",
     )
     cfg_group.add_argument(
+        "--enable-browser-sandboxing",
+        action="store_true",
+        help="Do not disable the browser sandbox. WARNING: Enabling the browser "
+        "sandbox can interfere with crash log creation and as a result crashes can be "
+        "missed. (default: sandboxing is disabled)",
+    )
+    cfg_group.add_argument(
         "-e",
         "--extension",
         action="append",
@@ -297,6 +304,7 @@ def main(argv: list[str] | None = None) -> None:
 
     ffp = FFPuppet(
         debugger=args.debugger,
+        disable_sandboxing=not args.enable_browser_sandboxing,
         display_mode=DisplayMode[args.display.upper()],
         use_profile=args.profile,
     )

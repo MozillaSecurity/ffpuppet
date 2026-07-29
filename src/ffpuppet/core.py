@@ -100,6 +100,7 @@ class FFPuppet:
         "_bin_path",
         "_checks",
         "_dbg",
+        "_disable_sandboxing",
         "_display",
         "_launches",
         "_logs",
@@ -114,6 +115,7 @@ class FFPuppet:
     def __init__(
         self,
         debugger: Debugger = Debugger.NONE,
+        disable_sandboxing: bool = True,
         display_mode: DisplayMode = DisplayMode.DEFAULT,
         use_profile: Path | None = None,
         working_path: str | None = None,
@@ -121,6 +123,7 @@ class FFPuppet:
         """
         Args:
             debugger: Debugger to use.
+            disable_sandboxing: Disable the browser sandbox.
             display_mode: Display mode to use.
             use_profile: Path to existing profile to use.
             working_path: Path to use as base directory for temporary files.
@@ -131,6 +134,7 @@ class FFPuppet:
         self._checks: list[CheckLogContents | CheckLogSize | CheckMemoryUsage] = []
         self._dbg = debugger
         self._dbg_sanity_check(self._dbg)
+        self._disable_sandboxing = disable_sandboxing
         self._display = DISPLAYS[display_mode]()
         # number of successful browser launches
         self._launches = 0
@@ -844,6 +848,7 @@ class FFPuppet:
                     env_mod=env_mod,
                     sanitizer=detected_sanitizer,
                     llvm_symbolizer=llvm_sym,
+                    disable_sandboxing=self._disable_sandboxing,
                 ),
                 shell=False,
                 stderr=stderr,
