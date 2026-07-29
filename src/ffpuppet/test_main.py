@@ -20,6 +20,8 @@ from .profile import Profile
         (Reason.EXITED, None, (False,), ["-d", "--save-all"]),
         # browser exit - more flags
         (Reason.EXITED, None, (False,), ["-a", "token", "--log-level", "DEBUG"]),
+        # browser exit - enable sandboxing
+        (Reason.EXITED, None, (False,), ["--enable-browser-sandboxing"]),
         # cannot launch browser binary
         (Reason.CLOSED, (BrowserExecutionError(),), None, []),
         # browser crash
@@ -51,6 +53,10 @@ def test_main_01(mocker, tmp_path, reason, launch, is_healthy, extra_args):
         assert fake_ffp.return_value.add_abort_token.call_count == 1
     else:
         assert fake_ffp.return_value.add_abort_token.call_count == 0
+    if "--enable-browser-sandboxing" in extra_args:
+        assert fake_ffp.call_args.kwargs["disable_sandboxing"] is False
+    else:
+        assert fake_ffp.call_args.kwargs["disable_sandboxing"] is True
     assert fake_ffp.return_value.close.call_count == 1
     assert fake_ffp.return_value.save_logs.call_count == 1
     assert fake_ffp.return_value.clean_up.call_count == 1

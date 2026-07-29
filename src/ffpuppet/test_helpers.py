@@ -11,6 +11,7 @@ from pytest import mark, raises
 
 from .helpers import (
     CERTUTIL,
+    SANDBOX_ENV_VARS,
     _configure_sanitizers,
     certutil_available,
     certutil_find,
@@ -169,6 +170,18 @@ def test_helpers_03(mocker, tmp_path):
     pre = {"MOZ_CRASHREPORTER_DISABLE": "1"}
     env = prepare_environment(tmp_path, pre)
     assert "MOZ_CRASHREPORTER" not in env
+
+
+def test_helpers_sandboxing(mocker, tmp_path):
+    """test prepare_environment() sandboxing"""
+    mocker.patch.dict("ffpuppet.helpers.environ", {"MOZ_DISABLE_CONTENT_SANDBOX": "1"})
+    # sandboxing is disabled by default
+    env = prepare_environment(tmp_path)
+    assert all(x in env for x in SANDBOX_ENV_VARS)
+    # allow sandboxing, existing entries must be removed since the browser
+    # only checks if these are set, not their value
+    env = prepare_environment(tmp_path, disable_sandboxing=False)
+    assert not any(x in env for x in SANDBOX_ENV_VARS)
 
 
 def test_helpers_04(mocker, tmp_path):
