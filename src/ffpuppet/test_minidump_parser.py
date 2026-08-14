@@ -104,26 +104,48 @@ def test_minidump_parser_01(mocker, tmp_path, symbols):
 
 
 @mark.parametrize(
-    "code, token, timeout",
+    "code, token, timeout, append_pid, expected_name",
     [
-        # success
-        (f"print('{dumps(MD_UNSYMBOLIZED_AMD64_WIN)}')", "xul.dll", 60),
+        # success - the pid of the process that crashed is appended
+        (
+            f"print('{dumps(MD_UNSYMBOLIZED_AMD64_WIN)}')",
+            "xul.dll",
+            60,
+            True,
+            "minidump_00.1337",
+        ),
+        # success - the pid is available but not appended
+        (
+            f"print('{dumps(MD_UNSYMBOLIZED_AMD64_WIN)}')",
+            "xul.dll",
+            60,
+            False,
+            "minidump_00",
+        ),
         # mdsw failed
-        ("exit(1)", "minidump-stackwalk failed", 60),
+        ("exit(1)", "minidump-stackwalk failed", 60, True, "minidump_00"),
         # invalid json
-        ("print('bad,json')", "json decode error", 60),
+        ("print('bad,json')", "json decode error", 60, True, "minidump_00"),
         # mdsw hang
-        ("import time;time.sleep(10)", "minidump-stackwalk timeout", 0),
+        (
+            "import time;time.sleep(10)",
+            "minidump-stackwalk timeout",
+            0,
+            True,
+            "minidump_00",
+        ),
     ],
 )
-def test_minidump_parser_02(mocker, code, token, timeout):
+def test_minidump_parser_02(mocker, code, token, timeout, append_pid, expected_name):
     """test MinidumpParser.create_log()"""
     mocker.patch.object(MinidumpParser, "_cmd", return_value=[executable, "-c", code])
     with MinidumpParser() as parser:
         assert parser._storage.is_dir()
-        output = parser.create_log(Path("foo.dmp"), "minidump_00.txt", timeout=timeout)
+        output = parser.create_log(
+            Path("foo.dmp"), "minidump_00", timeout=timeout, append_pid=append_pid
+        )
         assert output
-        assert output.name == "minidump_00.txt"
+        assert output.name == expected_name
         assert output.is_file()
         assert token in output.read_text()
     assert not output.is_file()

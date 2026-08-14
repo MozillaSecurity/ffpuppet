@@ -8,7 +8,7 @@ from collections import namedtuple
 from itertools import chain, count, repeat
 from pathlib import Path
 from subprocess import Popen
-from time import sleep
+from time import perf_counter, sleep
 from unittest import mock
 
 from psutil import STATUS_ZOMBIE, AccessDenied, NoSuchProcess, Process, TimeoutExpired
@@ -24,6 +24,16 @@ from .process_tree import (
 )
 
 TREE = Path(__file__).parent / "resources" / "tree.py"
+
+
+def _wait_for(condition, msg, timeout=30.0):
+    """wait for a condition to become true or raise AssertionError"""
+    deadline = perf_counter() + timeout
+    while perf_counter() < deadline:
+        if condition():
+            return
+        sleep(0.1)
+    raise AssertionError(msg)
 
 
 @mark.parametrize(
@@ -77,7 +87,17 @@ def test_process_tree_01(tmp_path, enable_launcher, launcher_is_parent):
             assert tree.parent.pid == proc.pid
         assert ProcessTree._poll(tree.parent) is None
         assert tree.is_running()
-        assert len(tree.processes()) == expected_procs
+        # the scanner thread should find the processes without any help
+        _wait_for(
+            lambda: len(tree._procs) == expected_procs,
+            f"scanner did not find {expected_procs} process(es)",
+        )
+        procs = tree.processes()
+        assert len(procs) == expected_procs
+        # only the content processes have a detectable process type
+        assert sum(ProcessTree._lookup_proc_type(x) == "tab" for x in procs) == (
+            content_procs
+        )
         assert tree.wait_procs() == expected_procs
         usage = tuple(tree.cpu_usage())
         assert len(usage) == expected_procs
@@ -94,6 +114,13 @@ def test_process_tree_01(tmp_path, enable_launcher, launcher_is_parent):
     assert not tree.processes()
     assert tree.wait() is not None
     assert tree.wait_procs() == 0
+    # the type of each process that was running should still be available
+    types = tree.process_types()
+    assert len(types) == expected_procs
+    assert sum(x == "tab" for x in types.values()) == content_procs
+    assert types[tree.parent.pid] == "parent"
+    if tree.launcher is not None:
+        assert types[tree.launcher.pid] == "launcher"
 
 
 @mark.parametrize(
@@ -124,7 +151,7 @@ def test_process_tree_03(mocker):
 
     # no processes to terminate
     mocker.patch.object(ProcessTree, "processes", side_effect=([],))
-    tree = ProcessTree(1234)
+    tree = ProcessTree(1234, scan_interval=0)
     tree.parent = mocker.Mock(spec_set=Process)
     tree.terminate()
     assert tree.processes.call_count == 1  # pylint: disable=no-member
@@ -137,7 +164,7 @@ def test_process_tree_03(mocker):
     wait_procs.return_value = ([proc], [])
     proc.wait.side_effect = (TimeoutExpired(1), None)
     mocker.patch.object(ProcessTree, "processes", side_effect=([proc], []))
-    tree = ProcessTree(1234)
+    tree = ProcessTree(1234, scan_interval=0)
     tree.parent = proc
     tree.terminate()
     assert tree.processes.call_count == 2  # pylint: disable=no-member
@@ -157,7 +184,7 @@ def test_process_tree_03(mocker):
     mocker.patch.object(
         ProcessTree, "processes", side_effect=([proc], [proc], [proc], [proc])
     )
-    tree = ProcessTree(1234)
+    tree = ProcessTree(1234, scan_interval=0)
     tree.parent = proc
     with raises(TerminateError, match="Failed to terminate processes"):
         tree.terminate()
@@ -173,7 +200,7 @@ def test_process_tree_04(mocker):
     proc = mocker.Mock(spec_set=Process, pid=1234)
     proc.cpu_percent.return_value = 2.3
     mocker.patch.object(ProcessTree, "processes", side_effect=([proc],))
-    tree = ProcessTree(1234)
+    tree = ProcessTree(1234, scan_interval=0)
     stats = tuple(tree.cpu_usage())
     assert stats
     assert stats[0][0] == 1234
@@ -208,50 +235,8 @@ def test_process_tree_05(mocker, procs, last_mod, writing, is_running, success):
     proc_list = [] if not procs else [mocker.Mock(spec_set=Process)]
     mocker.patch.object(ProcessTree, "is_running", return_value=is_running)
     mocker.patch.object(ProcessTree, "processes", return_value=proc_list)
-    tree = ProcessTree(1234)
+    tree = ProcessTree(1234, scan_interval=0)
     assert tree.dump_coverage() == success
-
-
-def test_process_tree_06(mocker):
-    """test ProcessTree._full_system_scan()"""
-    mocker.patch("ffpuppet.process_tree.Process", autospec=True)
-    parent_pid = 1234
-
-    # no matching processes
-    unrelated = mocker.Mock(spec_set=Process, pid=100)
-    unrelated.cmdline.return_value = ["some_app", "--flag"]
-    mocker.patch("ffpuppet.process_tree.process_iter", return_value=[unrelated])
-    tree = ProcessTree(parent_pid)
-    tree.parent = mocker.Mock(spec_set=Process, pid=parent_pid)
-    # pylint: disable=protected-access
-    assert not list(tree._full_system_scan())
-
-    # matching content process
-    content = mocker.Mock(spec_set=Process, pid=200)
-    content.cmdline.return_value = [
-        "firefox",
-        "-contentproc",
-        "-parentPid",
-        str(parent_pid),
-    ]
-    mocker.patch("ffpuppet.process_tree.process_iter", return_value=[content])
-    result = list(tree._full_system_scan())
-    assert len(result) == 1
-
-    # mixed: one match, one wrong parent pid, one unrelated
-    wrong_parent = mocker.Mock(spec_set=Process, pid=300)
-    wrong_parent.cmdline.return_value = [
-        "firefox",
-        "-contentproc",
-        "-parentPid",
-        "9999",
-    ]
-    mocker.patch(
-        "ffpuppet.process_tree.process_iter",
-        return_value=[unrelated, content, wrong_parent],
-    )
-    result = list(tree._full_system_scan())
-    assert len(result) == 1
 
 
 @mark.parametrize(
@@ -283,12 +268,50 @@ def test_browser_parent_pid_02(mocker):
     assert ProcessTree._browser_parent_pid(proc) is None
 
 
+@mark.parametrize(
+    "cmdline, expected",
+    [
+        # content (tab) process
+        (["firefox", "-contentproc", "-parentPid", "1234", "4321", "tab"], "tab"),
+        # gpu process
+        (["firefox", "-contentproc", "-parentPid", "1234", "4321", "gpu"], "gpu"),
+        # utility process
+        (["firefox", "-contentproc", "-sandboxingKind", "1", "utility"], "utility"),
+        # fork server process
+        (["firefox", "-contentproc", "forkserver"], "forkserver"),
+        # unknown process type
+        (["firefox", "-contentproc", "-parentPid", "1234", "new-type"], "unknown"),
+        # process type is not the last argument
+        (["firefox", "-contentproc", "tab", "-parentPid", "1234"], "unknown"),
+        # process type without -contentproc flag
+        (["firefox", "tab"], "unknown"),
+        # parent process
+        (["firefox", "-no-remote"], "unknown"),
+        # empty cmdline
+        ([], "unknown"),
+    ],
+)
+def test_lookup_proc_type_01(mocker, cmdline, expected):
+    """test ProcessTree._lookup_proc_type()"""
+    proc = mocker.Mock(spec_set=Process)
+    proc.cmdline.return_value = cmdline
+    assert ProcessTree._lookup_proc_type(proc) == expected
+
+
+@mark.parametrize("side_effect", [AccessDenied(1), NoSuchProcess(1)])
+def test_lookup_proc_type_02(mocker, side_effect):
+    """test ProcessTree._lookup_proc_type() with inaccessible process"""
+    proc = mocker.Mock(spec_set=Process)
+    proc.cmdline.side_effect = side_effect
+    assert ProcessTree._lookup_proc_type(proc) == "unknown"
+
+
 def test_detect_launcher_01(mocker):
     """test ProcessTree.detect_launcher()"""
     fake_process = mocker.patch("ffpuppet.process_tree.Process", autospec=True)
 
     # no children - launcher stays None
-    tree = ProcessTree(100)
+    tree = ProcessTree(100, scan_interval=0)
     tree.parent = mocker.Mock(spec_set=Process, pid=100)
     tree.parent.children.return_value = []
     tree.detect_launcher()
@@ -303,7 +326,7 @@ def test_detect_launcher_01(mocker):
         "-parentPid",
         "100",
     ]
-    tree = ProcessTree(100)
+    tree = ProcessTree(100, scan_interval=0)
     tree.parent = mocker.Mock(spec_set=Process, pid=100)
     tree.parent.children.return_value = [child]
     # Process(100) must return something with pid=100 to match self.parent.pid
@@ -320,7 +343,7 @@ def test_detect_launcher_01(mocker):
         "-parentPid",
         "150",
     ]
-    tree = ProcessTree(100)
+    tree = ProcessTree(100, scan_interval=0)
     original_parent = mocker.Mock(spec_set=Process, pid=100)
     tree.parent = original_parent
     tree.parent.children.return_value = [child]
@@ -329,7 +352,7 @@ def test_detect_launcher_01(mocker):
     assert tree.parent.pid == 150
 
     # already has launcher - no-op
-    tree = ProcessTree(100)
+    tree = ProcessTree(100, scan_interval=0)
     tree.parent = mocker.Mock(spec_set=Process, pid=150)
     tree.launcher = mocker.Mock(spec_set=Process, pid=100)
     tree.parent.children.return_value = []
@@ -342,9 +365,10 @@ def test_processes_01(mocker):
     """test ProcessTree.processes()"""
     mocker.patch("ffpuppet.process_tree.Process", autospec=True)
     child = mocker.Mock(spec_set=Process, pid=300)
+    child.cmdline.return_value = ["firefox", "-contentproc", "-parentPid", "100", "tab"]
 
     # parent alive, no launcher
-    tree = ProcessTree(100)
+    tree = ProcessTree(100, scan_interval=0)
     tree.parent = mocker.Mock(spec_set=Process, pid=100)
     mocker.patch.object(
         ProcessTree, "_poll", side_effect=lambda p: None if p.pid in (100,) else 0
@@ -356,7 +380,7 @@ def test_processes_01(mocker):
     assert procs[1].pid == 300
 
     # parent alive, with launcher alive
-    tree = ProcessTree(100)
+    tree = ProcessTree(100, scan_interval=0)
     tree.parent = mocker.Mock(spec_set=Process, pid=150)
     tree.launcher = mocker.Mock(spec_set=Process, pid=100)
     mocker.patch.object(
@@ -369,8 +393,8 @@ def test_processes_01(mocker):
     assert procs[1].pid == 150
     assert procs[2].pid == 300
 
-    # parent dead - falls back to _full_system_scan
-    tree = ProcessTree(100)
+    # parent dead - lingering processes are found with a full system scan
+    tree = ProcessTree(100, scan_interval=0)
     tree.parent = mocker.Mock(spec_set=Process, pid=100)
     mocker.patch.object(ProcessTree, "_poll", return_value=0)
     mocker.patch.object(ProcessTree, "_full_system_scan", return_value=[child])
@@ -378,18 +402,227 @@ def test_processes_01(mocker):
     assert len(procs) == 1
     assert procs[0].pid == 300
 
-    # _recursive_process_scan returns None - falls back to _full_system_scan
-    tree = ProcessTree(100)
+    # _recursive_process_scan finds nothing - only the parent is found
+    tree = ProcessTree(100, scan_interval=0)
     tree.parent = mocker.Mock(spec_set=Process, pid=100)
     mocker.patch.object(
         ProcessTree, "_poll", side_effect=lambda p: None if p.pid == 100 else 0
     )
-    mocker.patch.object(ProcessTree, "_recursive_process_scan", return_value=None)
-    mocker.patch.object(ProcessTree, "_full_system_scan", return_value=[child])
+    mocker.patch.object(ProcessTree, "_recursive_process_scan", return_value=[])
     procs = tree.processes()
-    assert len(procs) == 2
+    assert len(procs) == 1
     assert procs[0].pid == 100
-    assert procs[1].pid == 300
+
+
+def test_processes_02(mocker):
+    """test ProcessTree.processes() with a recycled pid"""
+    mocker.patch("ffpuppet.process_tree.Process", autospec=True)
+    mocker.patch.object(
+        ProcessTree, "_poll", side_effect=lambda p: None if p.pid == 100 else 0
+    )
+    tree = ProcessTree(100, scan_interval=0)
+    tree.parent = mocker.Mock(spec_set=Process, pid=100)
+
+    # scan with a content process
+    original = mocker.Mock(spec_set=Process, pid=300)
+    original.cmdline.return_value = ["firefox", "-contentproc", "-childID", "1", "tab"]
+    mocker.patch.object(ProcessTree, "_recursive_process_scan", return_value=[original])
+    assert original in tree.processes()
+    assert tree._types[300] == "tab"
+
+    # original process exits and the pid is reused by a new process
+    original.is_running.return_value = False
+    recycled = mocker.Mock(spec_set=Process, pid=300)
+    recycled.cmdline.return_value = ["firefox", "-contentproc", "-childID", "2", "gpu"]
+    mocker.patch.object(ProcessTree, "_recursive_process_scan", return_value=[recycled])
+    procs = tree.processes()
+    assert original not in procs
+    assert recycled in procs
+    assert tree._types[300] == "gpu"
+
+
+def test_processes_03(mocker):
+    """test ProcessTree.processes() removing processes that are no longer running"""
+    mocker.patch("ffpuppet.process_tree.Process", autospec=True)
+    mocker.patch.object(
+        ProcessTree, "_poll", side_effect=lambda p: None if p.pid == 100 else 0
+    )
+    scan = mocker.patch.object(ProcessTree, "_recursive_process_scan")
+
+    def _tree_with_content_proc():
+        """create a tree with a cached content process that the next scan won't find"""
+        tree = ProcessTree(100, scan_interval=0)
+        tree.parent = mocker.Mock(spec_set=Process, pid=100)
+        proc = mocker.Mock(spec_set=Process, pid=300)
+        proc.cmdline.return_value = ["firefox", "-contentproc", "-childID", "1", "tab"]
+        scan.return_value = [proc]
+        assert proc in tree.processes()
+        assert tree._types[300] == "tab"
+        scan.return_value = []
+        return tree, proc
+
+    # process exits
+    tree, content = _tree_with_content_proc()
+    content.is_running.return_value = False
+    assert tree.processes() == [tree.parent]
+    assert 300 not in tree._procs
+    # the process type is kept
+    assert tree._types[300] == "tab"
+
+    # process is gone
+    tree, content = _tree_with_content_proc()
+    content.is_running.side_effect = NoSuchProcess(300)
+    assert tree.processes() == [tree.parent]
+    assert 300 not in tree._procs
+    assert tree._types[300] == "tab"
+
+    # process cannot be checked, it must be kept
+    tree, content = _tree_with_content_proc()
+    content.is_running.side_effect = AccessDenied(300)
+    assert tree.processes() == [tree.parent]
+    assert 300 in tree._procs
+    assert tree._types[300] == "tab"
+
+
+def test_processes_04(mocker):
+    """test ProcessTree.processes() looking up an unknown process type again"""
+    mocker.patch("ffpuppet.process_tree.Process", autospec=True)
+    mocker.patch.object(
+        ProcessTree, "_poll", side_effect=lambda p: None if p.pid == 100 else 0
+    )
+    tree = ProcessTree(100, scan_interval=0)
+    tree.parent = mocker.Mock(spec_set=Process, pid=100)
+
+    # the command line is not available yet
+    content = mocker.Mock(spec_set=Process, pid=300)
+    content.cmdline.side_effect = AccessDenied(300)
+    mocker.patch.object(ProcessTree, "_recursive_process_scan", return_value=[content])
+    assert content in tree.processes()
+    assert tree._types[300] == "unknown"
+
+    # the command line is available on the next scan
+    content.cmdline.side_effect = None
+    content.cmdline.return_value = ["firefox", "-contentproc", "-childID", "1", "tab"]
+    assert content in tree.processes()
+    assert tree._types[300] == "tab"
+
+
+def test_process_types_01(mocker):
+    """test ProcessTree.process_types()"""
+    mocker.patch("ffpuppet.process_tree.Process", autospec=True)
+    tree = ProcessTree(100, scan_interval=0)
+    tree._types = {100: "parent", 200: "gpu", 300: "tab"}
+    types = tree.process_types()
+    assert types == {100: "parent", 200: "gpu", 300: "tab"}
+    # the mapping must be a copy
+    types.clear()
+    assert tree._types
+
+
+def test_full_system_scan_01(mocker):
+    """test ProcessTree._full_system_scan()"""
+    mocker.patch("ffpuppet.process_tree.Process", autospec=True)
+    parent_pid = 1234
+
+    # no matching processes
+    unrelated = mocker.Mock(spec_set=Process, pid=100)
+    unrelated.cmdline.return_value = ["some_app", "--flag"]
+    mocker.patch("ffpuppet.process_tree.process_iter", return_value=[unrelated])
+    tree = ProcessTree(parent_pid, scan_interval=0)
+    tree.parent = mocker.Mock(spec_set=Process, pid=parent_pid)
+    assert not list(tree._full_system_scan())
+
+    # matching content process
+    content = mocker.Mock(spec_set=Process, pid=200)
+    content.cmdline.return_value = [
+        "firefox",
+        "-contentproc",
+        "-parentPid",
+        str(parent_pid),
+    ]
+    mocker.patch("ffpuppet.process_tree.process_iter", return_value=[content])
+    assert len(list(tree._full_system_scan())) == 1
+
+    # mixed: one match, one wrong parent pid, one unrelated
+    wrong_parent = mocker.Mock(spec_set=Process, pid=300)
+    wrong_parent.cmdline.return_value = [
+        "firefox",
+        "-contentproc",
+        "-parentPid",
+        "9999",
+    ]
+    mocker.patch(
+        "ffpuppet.process_tree.process_iter",
+        return_value=[unrelated, content, wrong_parent],
+    )
+    assert len(list(tree._full_system_scan())) == 1
+
+
+def test_recursive_process_scan_01(mocker):
+    """test ProcessTree._recursive_process_scan() with an inaccessible parent"""
+    mocker.patch("ffpuppet.process_tree.Process", autospec=True)
+    tree = ProcessTree(100, scan_interval=0)
+    tree.parent = mocker.Mock(spec_set=Process, pid=100)
+    tree.parent.children.side_effect = AccessDenied(100)
+    assert not tree._recursive_process_scan()
+
+
+def test_scanner_01(mocker):
+    """test ProcessTree scanner thread updating the cache"""
+    fake_process = mocker.patch("ffpuppet.process_tree.Process", autospec=True)
+    fake_process.side_effect = lambda pid: mocker.Mock(spec_set=Process, pid=pid)
+    mocker.patch.object(
+        ProcessTree, "_poll", side_effect=lambda p: None if p.pid == 100 else 0
+    )
+    content = mocker.Mock(spec_set=Process, pid=300)
+    content.cmdline.return_value = ["firefox", "-contentproc", "-childID", "1", "tab"]
+    mocker.patch.object(ProcessTree, "_recursive_process_scan", return_value=[content])
+    tree = ProcessTree(100, scan_interval=0.01)
+    try:
+        # the cache is updated without calling processes()
+        _wait_for(lambda: 300 in tree._procs, "scanner did not update the cache")
+        assert tree._types[300] == "tab"
+    finally:
+        tree.stop_scanner()
+    assert tree._scan_thread is None
+    # calling this again should do nothing
+    tree.stop_scanner()
+
+
+def test_scanner_02(mocker):
+    """test ProcessTree scanner thread stopping when the parent is not running"""
+    mocker.patch("ffpuppet.process_tree.Process", autospec=True)
+    mocker.patch.object(ProcessTree, "_poll", return_value=0)
+    tree = ProcessTree(100, scan_interval=0.01)
+    try:
+        _wait_for(lambda: not tree._scan_thread.is_alive(), "scanner did not stop")
+        assert not tree._procs
+    finally:
+        tree.stop_scanner()
+
+
+def test_scanner_03(mocker):
+    """test ProcessTree with the scanner thread disabled"""
+    mocker.patch("ffpuppet.process_tree.Process", autospec=True)
+    tree = ProcessTree(100, scan_interval=0)
+    assert tree._scan_thread is None
+    tree.stop_scanner()
+
+
+def test_scanner_04(mocker):
+    """test ProcessTree scanner thread with a failing scan"""
+    fake_process = mocker.patch("ffpuppet.process_tree.Process", autospec=True)
+    fake_process.side_effect = lambda pid: mocker.Mock(spec_set=Process, pid=pid)
+    mocker.patch.object(
+        ProcessTree, "_poll", side_effect=lambda p: None if p.pid == 100 else 0
+    )
+    mocker.patch.object(ProcessTree, "_scan", side_effect=RuntimeError("boom"))
+    tree = ProcessTree(100, scan_interval=0.01)
+    try:
+        # the thread should exit instead of failing silently
+        _wait_for(lambda: not tree._scan_thread.is_alive(), "scanner did not stop")
+    finally:
+        tree.stop_scanner()
 
 
 def test_last_modified_01(tmp_path):

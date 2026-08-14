@@ -74,6 +74,8 @@ def main(args: Namespace) -> int:
                 cmd.append("-contentproc")
                 cmd.append("-parentPid")
                 cmd.append(str(getpid()))
+                # the process type must be the last argument
+                cmd.append("tab")
                 # pylint: disable=consider-using-with
                 child_procs = tuple(Popen(cmd) for _ in range(args.procs))
                 # wait for processes to launch
@@ -113,6 +115,7 @@ if __name__ == "__main__":
     parser = ArgumentParser()
     parser.add_argument("procs", type=int, help="number of content processes")
     parser.add_argument("sync", type=Path, help="used to indicate tree readiness")
+    parser.add_argument("proc_type", nargs="?", help="fake browser arg")
     parser.add_argument("--duration", type=int, default=60)
     parser.add_argument("--launcher-is-parent", action="store_true")
     parser.add_argument("--parent-pid", type=int)
@@ -127,4 +130,5 @@ if __name__ == "__main__":
         level=DEBUG,
     )
 
-    raise SystemExit(main(parser.parse_args()))
+    # parse_intermixed_args() is required to handle the trailing process type
+    raise SystemExit(main(parser.parse_intermixed_args()))

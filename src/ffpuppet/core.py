@@ -23,6 +23,7 @@ from urllib.request import pathname2url
 
 from .bootstrapper import Bootstrapper
 from .checks import CheckLogContents, CheckLogSize, CheckMemoryUsage
+from .crash_reports import attribute_reports
 from .display import DISPLAYS, DisplayMode
 from .exceptions import BrowserExecutionError, InvalidPrefs, LaunchError
 from .helpers import detect_sanitizer, prepare_environment, wait_on_files
@@ -99,6 +100,7 @@ class FFPuppet:
         "_abort_tokens",
         "_bin_path",
         "_checks",
+        "_crashed",
         "_dbg",
         "_disable_sandboxing",
         "_display",
@@ -132,6 +134,8 @@ class FFPuppet:
         self._abort_tokens: set[Pattern[str]] = set()
         self._bin_path: Path | None = None
         self._checks: list[CheckLogContents | CheckLogSize | CheckMemoryUsage] = []
+        # processes that crashed, set by close()
+        self._crashed: list[tuple[int, str]] = []
         self._dbg = debugger
         self._dbg_sanity_check(self._dbg)
         self._disable_sandboxing = disable_sandboxing
@@ -538,7 +542,8 @@ class FFPuppet:
                         dst_fp=self._logs.add_log(f"ffp_worker_{check.name}")
                     )
             # collect logs (excluding minidumps)
-            for log_path in self._crashreports(skip_md=True):
+            reports = tuple(self._crashreports(skip_md=True))
+            for log_path in reports:
                 try:
                     self._logs.add_log(log_path.name, log_path.open("rb"))
                 except PermissionError:  # noqa: PERF203
@@ -546,6 +551,8 @@ class FFPuppet:
             assert self.profile is not None
             assert self.profile.path is not None
             assert self._bin_path is not None
+            # logs created from minidumps, collected below
+            md_logs: list[Path] = []
             dmp_files = MinidumpParser.dmp_files(self.profile.path / "minidumps")
             if dmp_files and not MinidumpParser.mdsw_available():
                 LOG.error(
@@ -576,9 +583,19 @@ class FFPuppet:
 
                 with MinidumpParser(symbols=sym_path) as parser:
                     for count, dmp_file in enumerate(dmp_files):
-                        md_txt = parser.create_log(dmp_file, f"minidump_{count:02}.txt")
-                        with md_txt.open("rb") as md_fp:
-                            copyfileobj(md_fp, self._logs.add_log(md_txt.stem))
+                        # the log is named with the pid of the process that crashed
+                        # when it is available, the counter keeps the name unique
+                        md_log = parser.create_log(
+                            dmp_file, f"minidump_{count:02}", append_pid=True
+                        )
+                        md_logs.append(md_log)
+                        with md_log.open("rb") as md_fp:
+                            copyfileobj(md_fp, self._logs.add_log(md_log.name))
+
+            # record which processes crashed
+            self._crashed = attribute_reports(
+                (*reports, *md_logs), self._proc_tree.process_types()
+            )
 
             # symbolize sanitizer logs
             if self._logs.path is not None:
@@ -617,6 +634,21 @@ class FFPuppet:
         finally:
             LOG.debug("reason code: %s", r_code.name)
             self.reason = r_code
+
+    def crashed_processes(self) -> tuple[tuple[int, str], ...]:
+        """Processes that crashed during the previous browser session. A process is
+        included if a crash report (minidump, sanitizer or Valgrind log) was created
+        by it. This is collected by close() and is empty before a browser session has
+        been closed. NOTE: Crash reports are not collected when close() is called with
+        force_close or after the logs have been closed.
+
+        Args:
+            None
+
+        Returns:
+            Pid and process type of each process that crashed.
+        """
+        return tuple(self._crashed)
 
     def cpu_usage(self) -> Generator[tuple[int, float]]:
         """Collect percentage of CPU usage per process.
@@ -854,6 +886,7 @@ class FFPuppet:
                 stderr=stderr,
                 stdout=self._logs.get_fp("stdout"),
             )
+            self._crashed = []
             self._proc_tree = ProcessTree(proc.pid)
             if sys.platform == "win32":
                 # pylint: disable=possibly-used-before-assignment
@@ -871,6 +904,8 @@ class FFPuppet:
             if self._proc_tree.launcher is not None:
                 LOG.debug("browser launcher pid %d", self._proc_tree.launcher.pid)
             LOG.debug("browser parent pid %d", self._proc_tree.parent.pid)
+            # force process tree to rescan for running processes
+            self._proc_tree.processes()
 
         except FileNotFoundError as exc:
             if Path(exc.filename).exists():

@@ -214,7 +214,9 @@ class MinidumpParser:
         if self._storage.is_dir():
             rmtree(self._storage)
 
-    def create_log(self, src: Path, filename: str, timeout: int = 300) -> Path:
+    def create_log(
+        self, src: Path, filename: str, timeout: int = 300, append_pid: bool = False
+    ) -> Path:
         """Create a human readable log from a minidump file.
 
         Args:
@@ -222,6 +224,8 @@ class MinidumpParser:
             filename: Name to use for output file.
             timeout: Maximum runtime of minidump-stackwalk. NOTE: Symbols may be
                 downloaded if not provided which can add overhead.
+            append_pid: Append the pid of the process that crashed to the file name
+                when it is available.
 
         Returns:
             Log file.
@@ -242,9 +246,15 @@ class MinidumpParser:
             try:
                 run(cmd, check=True, stderr=err_fp, stdout=out_fp, timeout=timeout)
                 out_fp.seek(0)
-                # load json, format data and write log
+                data = load(out_fp)
+                if append_pid:
+                    # the pid must be last in the name so it can be looked up
+                    pid = data.get("pid")
+                    if pid is not None:
+                        dst = self._storage / f"{filename}.{pid}"
+                # format data and write log
                 with dst.open("wb") as log_fp:
-                    self._fmt_output(load(out_fp), log_fp, metadata)
+                    self._fmt_output(data, log_fp, metadata)
             except (CalledProcessError, JSONDecodeError, TimeoutExpired) as exc:
                 if isinstance(exc, CalledProcessError):
                     msg = f"minidump-stackwalk failed ({exc.returncode})"
