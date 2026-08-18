@@ -459,12 +459,15 @@ def test_ffpuppet_19(tmp_path):
         )
 
 
-def test_ffpuppet_20(mocker, tmp_path):
+def test_ffpuppet_20(mocker, request, tmp_path):
     """test collecting and cleaning up ASan logs"""
     # return False to increase test coverage, does not affect the test otherwise
     fake_symbolize = mocker.patch("ffpuppet.core.symbolize_log", return_value=False)
-    # add fake llvm-symbolizer for test coverage
-    (TESTFF_BIN.parent / LLVM_SYMBOLIZER).touch()
+    # add fake llvm-symbolizer for test coverage, it must be removed to avoid
+    # leaving it behind in the source tree
+    fake_symbolizer = TESTFF_BIN.parent / LLVM_SYMBOLIZER
+    fake_symbolizer.touch()
+    request.addfinalizer(lambda: fake_symbolizer.unlink(missing_ok=True))
     with FFPuppet() as ffp:
         ffp.launch(TESTFF_BIN)
         assert ffp._logs.path is not None
@@ -518,11 +521,18 @@ def test_ffpuppet_20(mocker, tmp_path):
 def test_ffpuppet_21(mocker, tmp_path, mdsw_available):
     """test multiple minidumps"""
 
-    def _fake_create_log(src, filename, _timeout: int = 90):
+    # pid of the process that crashed, "test3.dmp" covers the case where the
+    # pid is not available
+    dmp_pids = {"test1.dmp": 1001, "test2.dmp": 1002}
+
+    def _fake_create_log(src, filename, _timeout: int = 90, append_pid: bool = False):
         dst = tmp_path / "md_parser_working_path"
         dst.mkdir(exist_ok=True)
-        (dst / filename).write_text(src.read_text())
-        return dst / filename
+        # mimic appending the pid of the process that crashed to the log name
+        pid = dmp_pids.get(src.name)
+        name = f"{filename}.{pid}" if append_pid and pid is not None else filename
+        (dst / name).write_text(src.read_text())
+        return dst / name
 
     debug_dmps = tmp_path / "debug_dmps"
     debug_dmps.mkdir()
@@ -548,9 +558,12 @@ def test_ffpuppet_21(mocker, tmp_path, mdsw_available):
         logs = tmp_path / "logs"
         ffp.save_logs(logs)
         if mdsw_available:
-            assert any(logs.glob("log_minidump_00.txt"))
-            assert any(logs.glob("log_minidump_01.txt"))
+            assert any(logs.glob("log_minidump_00.1001.txt"))
+            assert any(logs.glob("log_minidump_01.1002.txt"))
+            # the pid was not available for this minidump
             assert any(logs.glob("log_minidump_02.txt"))
+            # minidumps with a pid are attributed to a process
+            assert dict(ffp.crashed_processes()) == {1001: "unknown", 1002: "unknown"}
             assert (logs / "minidumps").is_dir()
             assert len(tuple((logs / "minidumps").glob("*"))) == 3
         else:
@@ -960,3 +973,25 @@ def test_ffpuppet_34(mocker, tmp_path):
         ffp.save_logs(tmp_path)
         # only stderr and stdout should exist
         assert len(tuple(tmp_path.iterdir())) == 2
+
+
+def test_ffpuppet_35():
+    """test FFPuppet.crashed_processes()"""
+    with FFPuppet() as ffp:
+        # nothing has been launched
+        assert not ffp.crashed_processes()
+        ffp.launch(TESTFF_BIN)
+        assert ffp._logs.path is not None
+        assert ffp._proc_tree is not None
+        # a sanitizer log created by a process in the process tree
+        parent_pid = ffp._proc_tree.parent.pid
+        (ffp._logs.path / f"{ffp._logs.PREFIX_SAN}.{parent_pid}").write_text("LOG")
+        # a sanitizer log created by a process that was never seen
+        (ffp._logs.path / f"{ffp._logs.PREFIX_SAN}.999999").write_text("LOG")
+        # close fake browser process before calling close to avoid hang
+        ffp._proc_tree.terminate()
+        ffp.close()
+        assert dict(ffp.crashed_processes()) == {
+            parent_pid: "parent",
+            999999: "unknown",
+        }
