@@ -13,6 +13,7 @@ from .display import (
     Display,
     DisplayMode,
     HeadlessDisplay,
+    XvfbLaunchError,
 )
 
 if sys.platform == "linux":
@@ -23,10 +24,11 @@ if sys.platform == "linux":
 def test_displays(mocker, mode):
     """test Displays()"""
     if sys.platform == "linux":
-        mocker.patch("ffpuppet.display.Xvfb", autospec=True)
-        mocker.patch("ffpuppet.display.which", return_value="/usr/bin/weston")
+        mocker.patch("ffpuppet.display.which", return_value="/usr/bin/foo")
         mocker.patch("ffpuppet.display.Popen", autospec=True)
         mocker.patch("ffpuppet.display.Path.exists", return_value=True)
+        mocker.patch("ffpuppet.display.poll")
+        mocker.patch("ffpuppet.display.os_read", return_value=b"5\n")
     display = DISPLAYS[mode]()
     assert display
     try:
@@ -47,10 +49,10 @@ def test_displays(mocker, mode):
 
 
 @mark.skipif(sys.platform != "linux", reason="Only supported on Linux")
-def test_xvfb_missing_deps(mocker):
-    """test XvfbDisplay() missing deps"""
-    mocker.patch("ffpuppet.display.Xvfb", side_effect=NameError("test"))
-    with raises(NameError):
+def test_xvfb_missing_binary(mocker):
+    """test XvfbDisplay() with missing Xvfb binary"""
+    mocker.patch("ffpuppet.display.which", return_value=None)
+    with raises(RuntimeError, match="Xvfb not found"):
         XvfbDisplay()
 
 
@@ -65,24 +67,138 @@ def test_xvfb_missing_deps(mocker):
 )
 def test_xvfb_resolution(mocker, resolution, expected_width, expected_height):
     """test XvfbDisplay() XVFB_RESOLUTION"""
-    xvfb = mocker.patch("ffpuppet.display.Xvfb", autospec=True)
+    mocker.patch("ffpuppet.display.which", return_value="/usr/bin/Xvfb")
+    popen = mocker.patch("ffpuppet.display.Popen", autospec=True)
+    mocker.patch("ffpuppet.display.poll")
+    mocker.patch("ffpuppet.display.os_read", return_value=b"1\n")
     mocker.patch.dict(
         "ffpuppet.display.environ",
         {} if resolution is None else {"XVFB_RESOLUTION": resolution},
     )
-    XvfbDisplay()
-    assert xvfb.return_value.start.call_count == 1
-    xvfb.assert_called_with(width=expected_width, height=expected_height, timeout=60)
+    display = XvfbDisplay()
+    try:
+        assert popen.call_count == 1
+        args = popen.call_args[0][0]
+        assert args[0] == "/usr/bin/Xvfb"
+        assert "-displayfd" in args
+        assert f"{expected_width}x{expected_height}x24" in args
+        # Xvfb must share the caller's process group so killpg() cleans it up
+        assert "start_new_session" not in popen.call_args.kwargs
+        assert display.env["DISPLAY"] == ":1"
+        assert display.env["MOZ_ENABLE_WAYLAND"] == "0"
+    finally:
+        display.close()
+    assert popen.return_value.terminate.call_count == 1
+
+
+@mark.skipif(sys.platform != "linux", reason="Only supported on Linux")
+def test_xvfb_partial_read(mocker):
+    """test XvfbDisplay() display number split across multiple reads"""
+    mocker.patch("ffpuppet.display.which", return_value="/usr/bin/Xvfb")
+    mocker.patch("ffpuppet.display.Popen", autospec=True)
+    mocker.patch("ffpuppet.display.poll")
+    mocker.patch("ffpuppet.display.os_read", side_effect=(b"1", b"23\n"))
+    display = XvfbDisplay()
+    try:
+        assert display.env["DISPLAY"] == ":123"
+    finally:
+        display.close()
+
+
+@mark.skipif(sys.platform != "linux", reason="Only supported on Linux")
+def test_xvfb_early_exit(mocker):
+    """test XvfbDisplay() when Xvfb exits before reporting a display"""
+    mocker.patch("ffpuppet.display.which", return_value="/usr/bin/Xvfb")
+    popen = mocker.patch("ffpuppet.display.Popen", autospec=True)
+    popen.return_value.poll.return_value = 1
+    mocker.patch("ffpuppet.display.poll")
+    mocker.patch("ffpuppet.display.os_read", return_value=b"")
+    fake_sleep = mocker.patch("ffpuppet.display.sleep")
+    with raises(RuntimeError, match=r"Xvfb exited early \(exit code: 1\)"):
+        XvfbDisplay()
+    assert popen.call_count == XvfbDisplay.LAUNCH_ATTEMPTS
+    assert fake_sleep.call_count == XvfbDisplay.LAUNCH_ATTEMPTS - 1
+
+
+@mark.skipif(sys.platform != "linux", reason="Only supported on Linux")
+def test_xvfb_retry_success(mocker):
+    """test XvfbDisplay() succeeds after a failed launch attempt"""
+    mocker.patch("ffpuppet.display.which", return_value="/usr/bin/Xvfb")
+    popen = mocker.patch("ffpuppet.display.Popen", autospec=True)
+    mocker.patch("ffpuppet.display.poll")
+    popen.return_value.poll.return_value = None
+    # first attempt: Xvfb closes displayfd but does not exit
+    popen.return_value.wait.side_effect = (TimeoutExpired(["Xvfb"], 5), None, None)
+    mocker.patch("ffpuppet.display.os_read", side_effect=(b"", b"7\n"))
+    mocker.patch("ffpuppet.display.sleep")
+    display = XvfbDisplay()
+    try:
+        assert popen.call_count == 2
+        assert display.env["DISPLAY"] == ":7"
+    finally:
+        display.close()
+
+
+@mark.skipif(sys.platform != "linux", reason="Only supported on Linux")
+def test_xvfb_invalid_display(mocker):
+    """test XvfbDisplay() when Xvfb reports an invalid display"""
+    mocker.patch("ffpuppet.display.which", return_value="/usr/bin/Xvfb")
+    popen = mocker.patch("ffpuppet.display.Popen", autospec=True)
+    mocker.patch("ffpuppet.display.poll")
+    popen.return_value.poll.return_value = None
+    mocker.patch("ffpuppet.display.os_read", return_value=b"foo\n")
+    mocker.patch("ffpuppet.display.sleep")
+    with raises(XvfbLaunchError, match="Xvfb reported invalid display") as exc:
+        XvfbDisplay()
+    assert "exit code" not in str(exc.value)
+    assert popen.return_value.terminate.call_count == XvfbDisplay.LAUNCH_ATTEMPTS
+
+
+@mark.skipif(sys.platform != "linux", reason="Only supported on Linux")
+def test_xvfb_timeout(mocker):
+    """test XvfbDisplay() when Xvfb never reports a display"""
+    mocker.patch("ffpuppet.display.which", return_value="/usr/bin/Xvfb")
+    popen = mocker.patch("ffpuppet.display.Popen", autospec=True)
+    popen.return_value.poll.return_value = None
+    mocker.patch("ffpuppet.display.poll").return_value.poll.return_value = []
+    # deadline calc, not expired (poll times out), expired
+    mocker.patch("ffpuppet.display.perf_counter", side_effect=(0, 1, 61))
+    with raises(RuntimeError, match="Timed out waiting for Xvfb") as exc:
+        XvfbDisplay()
+    assert "exit code" not in str(exc.value)
+    assert not isinstance(exc.value, XvfbLaunchError)
+    # timeouts are not retried
+    assert popen.call_count == 1
+    assert popen.return_value.terminate.call_count == 1
+
+
+@mark.skipif(sys.platform != "linux", reason="Only supported on Linux")
+def test_xvfb_interrupted(mocker):
+    """test XvfbDisplay() stops Xvfb when launch is interrupted"""
+    mocker.patch("ffpuppet.display.which", return_value="/usr/bin/Xvfb")
+    popen = mocker.patch("ffpuppet.display.Popen", autospec=True)
+    mocker.patch(
+        "ffpuppet.display.poll"
+    ).return_value.poll.side_effect = KeyboardInterrupt
+    with raises(KeyboardInterrupt):
+        XvfbDisplay()
+    assert popen.call_count == 1
+    assert popen.return_value.terminate.call_count == 1
 
 
 @mark.skipif(sys.platform != "linux", reason="Only supported on Linux")
 def test_xvfb_stop_hang(mocker):
-    """test XvfbDisplay.stop hang"""
-    xvfb = mocker.patch("ffpuppet.display.Xvfb")
-    xvfb.return_value.stop.side_effect = TimeoutExpired(["foo"], 1)
+    """test XvfbDisplay.close() when process hangs"""
+    mocker.patch("ffpuppet.display.which", return_value="/usr/bin/Xvfb")
+    popen = mocker.patch("ffpuppet.display.Popen", autospec=True)
+    mocker.patch("ffpuppet.display.poll")
+    mocker.patch("ffpuppet.display.os_read", return_value=b"1\n")
+    proc = popen.return_value
+    proc.wait.side_effect = [TimeoutExpired(["Xvfb"], 10), None]
     display = XvfbDisplay()
     display.close()
-    assert xvfb.return_value.proc.kill.call_count == 1
+    assert proc.terminate.call_count == 1
+    assert proc.kill.call_count == 1
 
 
 @mark.skipif(sys.platform != "linux", reason="Only supported on Linux")
